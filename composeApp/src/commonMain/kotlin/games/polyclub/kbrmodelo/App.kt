@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import games.polyclub.kbrmodelo.domain.ConceptualSchema
+import games.polyclub.kbrmodelo.domain.serialization.ConceptualSchemaBrmParser
 import games.polyclub.kbrmodelo.domain.serialization.ConceptualSchemaXmlParser
 import games.polyclub.kbrmodelo.ui.BrModeloScreen
 import games.polyclub.kbrmodelo.ui.MainMenuType
@@ -81,13 +82,13 @@ fun App() {
     val openFile: () -> Unit = {
         scope.launch {
             val bytes = showNativeFilePicker() ?: return@launch
-            runCatching { ConceptualSchemaXmlParser.parse(bytes) }
+            runCatching { parseModelBytes(bytes) }
                 .onSuccess { schema = it }
         }
     }
 
     val loadFileBytes: (ByteArray) -> Unit = { bytes ->
-        runCatching { ConceptualSchemaXmlParser.parse(bytes) }
+        runCatching { parseModelBytes(bytes) }
             .onSuccess { schema = it }
     }
 
@@ -117,9 +118,25 @@ fun App() {
     }
 }
 
+/**
+ * Detects the model format from the byte content and routes to the correct parser.
+ *
+ * Delphi binary DFM files start with a ShortString version prefix (e.g. `\x05 "2.0.0"`)
+ * immediately followed by the 4-byte magic `"TPF0"`. All other content is treated as XML.
+ */
+internal fun parseModelBytes(bytes: ByteArray): ConceptualSchema {
+    val isBrm = bytes.size > 10 &&
+        bytes[6] == 'T'.code.toByte() &&
+        bytes[7] == 'P'.code.toByte() &&
+        bytes[8] == 'F'.code.toByte() &&
+        bytes[9] == '0'.code.toByte()
+    return if (isBrm) ConceptualSchemaBrmParser.parse(bytes)
+    else ConceptualSchemaXmlParser.parse(bytes)
+}
+
 @OptIn(ExperimentalEncodingApi::class)
 private fun loadFromDataUrl(dataUrl: String): ConceptualSchema? =
     runCatching {
         val bytes = Base64.Default.decode(dataUrl.substringAfter(","))
-        ConceptualSchemaXmlParser.parse(bytes)
+        parseModelBytes(bytes)
     }.getOrNull()
