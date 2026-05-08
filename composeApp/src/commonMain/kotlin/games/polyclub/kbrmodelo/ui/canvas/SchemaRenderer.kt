@@ -930,14 +930,33 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                     // Faithfully replicates TBase.OrganizeAtributos (mer.pas 1894):
                     //   P=1 (entity LEFT)  → OrientacaoD → attr RIGHT edge = divida_x
                     //   P=2,3,4            → OrientacaoE → attr LEFT  edge = divida_x
+                    //
+                    // For diamond owners (Relationship, SelfRelationship), all attributes
+                    // connect to the same vertex regardless of how many there are — no
+                    // Divida distribution, just enc[ponto] directly (the vertex point).
+                    // This matches the observed VCL behaviour where multiple attrs placed
+                    // on a Relacao all fan out from the same diamond vertex.
                     val ponto = attrPontoByPosition(elem.position, otherElem.position)
                     val ap = otherElem.position
-                    val attrCy      = ap.y + ap.height / 2f
-                    val attrActiveX = if (ponto == 1) (ap.x + ap.width).toFloat() else ap.x.toFloat()
                     val enc = connectionEncaixes(elem, otherElem, schema)
-                    elemResult[conn.id] = when (ponto) {
-                        2, 4 -> Offset(attrActiveX, enc[ponto].y)
-                        else -> Offset(enc[ponto].x, attrCy)
+                    val isDiamond = elem is SchemaElement.Relationship ||
+                                    elem is SchemaElement.SelfRelationship
+                    elemResult[conn.id] = when {
+                        // Diamond snap: all attrs share a single point at (cx, top + 75% height).
+                        // Every attribute on a relationship fans out from this fixed vertex.
+                        isDiamond -> {
+                            val ep = elem.position
+                            Offset(ep.x + ep.width / 2f, ep.y + ep.height * 0.75f)
+                        }
+                        ponto == 2 || ponto == 4 -> {
+                            val attrActiveX = if (ponto == 1) (ap.x + ap.width).toFloat()
+                                              else ap.x.toFloat()
+                            Offset(attrActiveX, enc[ponto].y)
+                        }
+                        else -> {
+                            val attrCy = ap.y + ap.height / 2f
+                            Offset(enc[ponto].x, attrCy)  // preserve Divida-baked stored Y
+                        }
                     }
                 }
             } else if (elem is SchemaElement.Attribute) {
@@ -1084,7 +1103,7 @@ private fun DrawScope.drawCenteredLabel(
 
     val style = CANVAS_TEXT_STYLE.copy(
         textAlign = TextAlign.Center,
-        fontWeight = if (bold) FontWeight.ExtraBold else null,
+        fontWeight = if (bold) FontWeight.Black else null,
         fontStyle = if (italic) FontStyle.Italic else null,
     )
     val maxW = (w - 4f).toInt().coerceAtLeast(1)
