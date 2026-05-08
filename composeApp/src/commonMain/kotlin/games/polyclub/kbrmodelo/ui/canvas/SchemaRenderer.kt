@@ -838,14 +838,20 @@ private fun angleBasedPonto(pos: ElementPosition, attrPos: ElementPosition): Int
 
 /**
  * Computes the 1-based encaixe ponto for a non-attribute element in a connection,
- * following the exact case selection from [TLigacao.Ative] in mer.pas (lines 7099–7174).
+ * following the exact case selection from [TLigacao.Ative] in mer.pas (lines 7035–7174).
  *
  * [isE1] = true if [elemPos] corresponds to E1 (elementIdA = the element owning the
  * `<Ligacao>` XML node), false if it is E2 (elementIdB = Destino_ID).
  *
- * Cases:
- * – 3 (vertical separation > 4 px): E1-above → pE1=4, pE2=2.
- * – 4 (horizontal separation > 4 px): E1-left → pE1=3, pE2=1.
+ * Cases (checked in priority order, matching Pascal):
+ * – 1 (diagonal top-left → bottom-right, ≥ 20 px gap in BOTH dims):
+ *     orientation V → pE1=4 (bottom), pE2=1 (left)
+ *     orientation H → pE1=3 (right),  pE2=2 (top)
+ * – 2 (cross-diagonal bottom-left ↔ top-right, ≥ 20 px gap in BOTH dims):
+ *     orientation H → pE1=2 (top),    pE2=1 (left)
+ *     orientation V → pE1=3 (right),  pE2=4 (bottom)
+ * – 3 (pure vertical separation > 4 px): E1-above → pE1=4, pE2=2.
+ * – 4 (pure horizontal separation > 4 px): E1-left → pE1=3, pE2=1.
  * – 5 (fallback): orientation-based selection derived from relative Left/Top.
  */
 private fun computeNonAttrPonto(
@@ -863,6 +869,41 @@ private fun computeNonAttrPonto(
     val e2r = e2Pos.x + e2Pos.width
     val e2b = e2Pos.y + e2Pos.height
 
+    val isH = orientation == games.polyclub.kbrmodelo.domain.LineOrientation.HORIZONTAL
+    val DIST = 20
+
+    // Case 1: E1 is to the top-left of E2 by ≥ DIST in BOTH dimensions, or vice-versa.
+    // Pascal: checks E1.Encaixe[3].X (=right) and E1.Encaixe[4].Y (=bottom) vs E2.Left/Top.
+    // When the reverse is true (E2 top-left of E1), Pascal swaps E1↔E2 before Mapa.
+    val c1fwd = e1r < e2Pos.x - DIST && e1b < e2Pos.y - DIST  // E1 top-left of E2
+    val c1rev = e2r < e1Pos.x - DIST && e2b < e1Pos.y - DIST  // E2 top-left of E1
+    if (c1fwd || c1rev) {
+        // After potential swap: "actualE1" = the top-left element.
+        val swapped = c1rev
+        val actualIsE1 = if (swapped) !isE1 else isE1
+        return if (!isH) {
+            if (actualIsE1) 4 else 1   // OrientacaoV: top-left elem uses BOTTOM, bottom-right uses LEFT
+        } else {
+            if (actualIsE1) 3 else 2   // OrientacaoH: top-left uses RIGHT, bottom-right uses TOP
+        }
+    }
+
+    // Case 2: E1 bottom-left ↔ E2 top-right (or reversed) by ≥ DIST in BOTH dimensions.
+    // Pascal: E1.right < E2.left-DIST AND E2.bottom < E1.top-DIST (E1 bottom, E2 top)
+    // OR E2.right < E1.left-DIST AND E1.bottom < E2.top-DIST (reversed).
+    val c2fwd = e1r < e2Pos.x - DIST && e2b < e1Pos.y - DIST  // E1 bottom-left, E2 top-right
+    val c2rev = e2r < e1Pos.x - DIST && e1b < e2Pos.y - DIST  // E2 bottom-left, E1 top-right
+    if (c2fwd || c2rev) {
+        // After potential swap: "actualE1" = the bottom-left element.
+        val swapped = c2rev
+        val actualIsE1 = if (swapped) !isE1 else isE1
+        return if (isH) {
+            if (actualIsE1) 2 else 1   // OrientacaoH: bottom-left uses TOP, top-right uses LEFT
+        } else {
+            if (actualIsE1) 3 else 4   // OrientacaoV: bottom-left uses RIGHT, top-right uses BOTTOM
+        }
+    }
+
     // Case 3: pure vertical separation (> 4 px gap)
     if (e1b < e2Pos.y - 4) return if (isE1) 4 else 2   // E1 above E2 — no swap
     if (e2b < e1Pos.y - 4) return if (isE1) 2 else 4   // E2 above E1 — swap in original
@@ -872,7 +913,6 @@ private fun computeNonAttrPonto(
     if (e2r < e1Pos.x - 4) return if (isE1) 1 else 3   // E2 left of E1 — swap in original
 
     // Case 5 fallback — relative-position selection from mer.pas lines 7139–7174
-    val isH = orientation == games.polyclub.kbrmodelo.domain.LineOrientation.HORIZONTAL
     return if (isH) {
         if (isE1) { if (e1Pos.x <= e2Pos.x) 3 else 1 }
         else      { if (e1Pos.y <= e2Pos.y) 2 else 4 }
