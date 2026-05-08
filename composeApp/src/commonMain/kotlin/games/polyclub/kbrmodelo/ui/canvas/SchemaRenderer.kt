@@ -337,12 +337,16 @@ private fun DrawScope.drawAttribute(
         drawOval(ellipseFill, topLeft = ellipseTopLeft, size = Size(diameter, diameter))
         drawOval(Color.Black, topLeft = ellipseTopLeft, size = Size(diameter, diameter), style = ellipseStroke)
 
-        // Composite marker: small 4x8 rectangle at right edge
+        // Composite marker: 4x4 outline rectangle at right edge, matching Pascal's
+        // Rectangle(Width-4, (Height-4)/2, Width, (Height+4)/2) with bsClear brush.
         if (attr.isComposite) {
-            drawRect(Color.Black, topLeft = Offset(x + w - 4f, (h - 4f) / 2f + y), size = Size(4f, 8f))
+            val markerTop = (h - 4f) / 2f + y
+            if (attr.isIdentifier) drawRect(IDENTIFIER_FILL, topLeft = Offset(x + w - 4f, markerTop), size = Size(4f, 4f))
+            drawRect(Color.Black, topLeft = Offset(x + w - 4f, markerTop), size = Size(4f, 4f), style = Stroke(1f))
         }
 
-        // Text to the right of the ellipse
+        // Text to the right of the ellipse — single line, matching Pascal's single-line-height
+        // DrawText rect (Bottom := Top + TextHeight('W') prevents actual wrapping).
         val textX = x + h + 5f
         val textMaxW = (w - h - 5f).toInt().coerceAtLeast(1)
         if (textLabel.isNotBlank() && textMaxW > 0) {
@@ -350,6 +354,7 @@ private fun DrawScope.drawAttribute(
                 textLabel,
                 style = CANVAS_TEXT_STYLE,
                 constraints = Constraints(maxWidth = textMaxW),
+                softWrap = false,
             )
             val textY = y + (h - layout.size.height) / 2f - 1f
             drawText(layout, topLeft = Offset(textX, textY))
@@ -378,18 +383,21 @@ private fun DrawScope.drawAttribute(
         drawOval(ellipseFill, topLeft = ellipseTopLeft, size = Size(diameter, diameter))
         drawOval(Color.Black, topLeft = ellipseTopLeft, size = Size(diameter, diameter), style = ellipseStroke)
 
-        // Composite marker: small rectangle at left edge
+        // Composite marker: 4x4 outline rectangle at left edge (same Pascal logic, OrientacaoD side).
         if (attr.isComposite) {
-            drawRect(Color.Black, topLeft = Offset(x, (h - 4f) / 2f + y), size = Size(4f, 8f))
+            val markerTop = (h - 4f) / 2f + y
+            if (attr.isIdentifier) drawRect(IDENTIFIER_FILL, topLeft = Offset(x, markerTop), size = Size(4f, 4f))
+            drawRect(Color.Black, topLeft = Offset(x, markerTop), size = Size(4f, 4f), style = Stroke(1f))
         }
 
-        // Text to the left of the ellipse
+        // Text to the left of the ellipse — single line (same Pascal single-line-height rect logic).
         val textMaxW = (w - diameter - 10f).toInt().coerceAtLeast(1)
         if (textLabel.isNotBlank() && textMaxW > 0) {
             val layout = textMeasurer.measure(
                 textLabel,
                 style = CANVAS_TEXT_STYLE.copy(textAlign = TextAlign.Right),
                 constraints = Constraints(maxWidth = textMaxW),
+                softWrap = false,
             )
             val textY = y + (h - layout.size.height) / 2f - 1f
             drawText(layout, topLeft = Offset(x, textY))
