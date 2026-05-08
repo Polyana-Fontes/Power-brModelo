@@ -57,7 +57,7 @@ private val SPEC_LABEL_COLOR = Color(0xFF008080)
 private val TEXT_BOX_DARK = Color(0xFF363636)
 
 private val CANVAS_TEXT_STYLE = TextStyle(fontSize = 11.sp, color = Color.Black)
-private val MULTIVALUE_CARD_STYLE = TextStyle(fontSize = 9.sp, color = Color.Black)
+private val MULTIVALUE_CARD_STYLE = TextStyle(fontSize = 11.sp, color = Color.Black)
 
 // ── Main entry point ──────────────────────────────────────────────────────────
 
@@ -134,15 +134,15 @@ internal fun DrawScope.drawEntityRectangle(p: ElementPosition, isWeak: Boolean =
     // White background fill
     drawRect(Color.White, topLeft = Offset(x, y), size = Size(w, h))
 
-    // Main border: lines from (0,0) to (width-3, height-3), colour TColor(-5) ≈ near-white
+    // Main border: black rectangle inset by 3px on right/bottom for relief effect
     val stroke1 = Stroke(1f)
     val rectInner = Rect(x, y, x + w - 3f, y + h - 3f)
-    drawRect(BORDER_NEAR_WHITE, topLeft = rectInner.topLeft, size = rectInner.size, style = stroke1)
+    drawRect(Color.Black, topLeft = rectInner.topLeft, size = rectInner.size, style = stroke1)
 
     // Double border for weak entity (inner rect inset 3px more)
     if (isWeak) {
         val inner2 = Rect(x + 3f, y + 3f, x + w - 6f, y + h - 6f)
-        drawRect(BORDER_NEAR_WHITE, topLeft = inner2.topLeft, size = inner2.size, style = stroke1)
+        drawRect(Color.Black, topLeft = inner2.topLeft, size = inner2.size, style = stroke1)
     }
 
     // Shadow at -2 (right and bottom edges only)
@@ -506,11 +506,11 @@ private fun DrawScope.drawConnection(
     // Use Divida-distributed point when available; compute on demand as fallback
     val ptA = dividedPoints[conn.elementIdA]?.get(conn.id) ?: run {
         val enc = connectionEncaixes(elemA, elemB, schema)
-        enc[connectionPonto(elemA, elemB, schema)]
+        enc[connectionPonto(elemA, elemB, schema, conn)]
     }
     val ptB = dividedPoints[conn.elementIdB]?.get(conn.id) ?: run {
         val enc = connectionEncaixes(elemB, elemA, schema)
-        enc[connectionPonto(elemB, elemA, schema)]
+        enc[connectionPonto(elemB, elemA, schema, conn)]
     }
 
     val waypoints = computeConnectionPath(ptA, elemA.position, ptB, elemB.position, conn.orientation)
@@ -672,11 +672,15 @@ private fun pointToEdgeIndex(pt: Offset, pos: ElementPosition): Int {
  * encaixes correctly: for normal attributes ponto = 1 (OrientacaoE) or 3
  * (OrientacaoD); for composite → child connections the bar side is used
  * (opposite of the normal connection side).
+ *
+ * For non-attribute elements, delegates to [computeNonAttrPonto] which
+ * faithfully mirrors the [TLigacao.Ative] case selection from mer.pas.
  */
 private fun connectionPonto(
     elem: SchemaElement,
     otherElem: SchemaElement,
     schema: ConceptualSchema,
+    conn: Connection? = null,
 ): Int {
     if (elem is SchemaElement.Attribute) {
         val cx = elem.position.x + elem.position.width / 2f
@@ -690,7 +694,59 @@ private fun connectionPonto(
             if (ellipseOnLeft) 1 else 3  // normal side (left for OrientacaoE)
         }
     }
+    // For non-attribute elements, use the routing-aware ponto that matches Ative's
+    // case conditions. isE1 = whether this element is elementIdA (the "source" in the XML).
+    if (conn != null) {
+        val isE1 = conn.elementIdA == elem.id
+        return computeNonAttrPonto(elem.position, otherElem.position, conn.orientation, isE1)
+    }
     return nearestEncaixeIndex(connectionEncaixes(elem, otherElem, schema), otherElem.position)
+}
+
+/**
+ * Computes the 1-based encaixe ponto for a non-attribute element in a connection,
+ * following the exact case selection from [TLigacao.Ative] in mer.pas (lines 7099–7174).
+ *
+ * [isE1] = true if [elemPos] corresponds to E1 (elementIdA = the element owning the
+ * `<Ligacao>` XML node), false if it is E2 (elementIdB = Destino_ID).
+ *
+ * Cases:
+ * – 3 (vertical separation > 4 px): E1-above → pE1=4, pE2=2.
+ * – 4 (horizontal separation > 4 px): E1-left → pE1=3, pE2=1.
+ * – 5 (fallback): orientation-based selection derived from relative Left/Top.
+ */
+private fun computeNonAttrPonto(
+    elemPos: ElementPosition,
+    otherPos: ElementPosition,
+    orientation: games.polyclub.kbrmodelo.domain.LineOrientation,
+    isE1: Boolean,
+): Int {
+    // Always view from the E1 perspective for consistent comparisons.
+    val e1Pos = if (isE1) elemPos else otherPos
+    val e2Pos = if (isE1) otherPos else elemPos
+
+    val e1r = e1Pos.x + e1Pos.width
+    val e1b = e1Pos.y + e1Pos.height
+    val e2r = e2Pos.x + e2Pos.width
+    val e2b = e2Pos.y + e2Pos.height
+
+    // Case 3: pure vertical separation (> 4 px gap)
+    if (e1b < e2Pos.y - 4) return if (isE1) 4 else 2   // E1 above E2 — no swap
+    if (e2b < e1Pos.y - 4) return if (isE1) 2 else 4   // E2 above E1 — swap in original
+
+    // Case 4: pure horizontal separation (> 4 px gap)
+    if (e1r < e2Pos.x - 4) return if (isE1) 3 else 1   // E1 left of E2 — no swap
+    if (e2r < e1Pos.x - 4) return if (isE1) 1 else 3   // E2 left of E1 — swap in original
+
+    // Case 5 fallback — relative-position selection from mer.pas lines 7139–7174
+    val isH = orientation == games.polyclub.kbrmodelo.domain.LineOrientation.HORIZONTAL
+    return if (isH) {
+        if (isE1) { if (e1Pos.x <= e2Pos.x) 3 else 1 }
+        else      { if (e1Pos.y <= e2Pos.y) 2 else 4 }
+    } else {
+        if (isE1) { if (e1Pos.y <= e2Pos.y) 4 else 2 }
+        else      { if (e1Pos.x <= e2Pos.x) 1 else 3 }
+    }
 }
 
 // ── Helper: Divida pre-computation ───────────────────────────────────────────
@@ -745,7 +801,7 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                 elemResult[conn.id] = enc[ponto]
             } else {
                 // Non-attribute → non-attribute: accumulate for Divida
-                val ponto = connectionPonto(elem, otherElem, schema)
+                val ponto = connectionPonto(elem, otherElem, schema, conn)
                 nonAttrByPonto.getOrPut(ponto) { mutableListOf() }.add(conn.id to otherElem)
             }
         }
