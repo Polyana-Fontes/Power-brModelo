@@ -68,9 +68,14 @@ private val MULTIVALUE_CARD_STYLE = TextStyle(fontSize = 9.sp, color = Color.Bla
  * original Pascal layering where TLigacao components sit behind TBase elements.
  */
 fun DrawScope.drawSchema(schema: ConceptualSchema, textMeasurer: TextMeasurer) {
+    // Pre-compute Divida-distributed attachment points for all connections.
+    // This mirrors TBase.Divida in mer.pas: multiple connections on the same edge
+    // are spread evenly along that edge so their lines do not overlap.
+    val dividedPoints = computeDividedPoints(schema)
+
     // 1. Connections (lines and cardinality labels)
     schema.connections.forEach { conn ->
-        drawConnection(conn, schema, textMeasurer)
+        drawConnection(conn, schema, dividedPoints, textMeasurer)
     }
     // 2. Elements (entities, relationships, attributes, etc.)
     schema.elements.values.forEach { element ->
@@ -318,6 +323,15 @@ private fun DrawScope.drawAttribute(
             val asterisk = textMeasurer.measure("*", style = CANVAS_TEXT_STYLE.copy(color = Color.Blue))
             drawText(asterisk, topLeft = Offset(x, y))
         }
+
+        // TBarraDeAtributos: vertical bar at the right edge connecting child attachment pts
+        if (attr.isComposite && attr.childAttributeIds.size >= 2) {
+            val childCount = attr.childAttributeIds.size
+            val barH = (h * childCount + childCount * 2 - h).coerceAtLeast(2f)
+            val barTop = y + h / 2f - barH / 2f
+            val barX = x + w - 2f  // bar centre X = attr.right - 2
+            drawLine(Color.Black, Offset(barX, barTop), Offset(barX, barTop + barH))
+        }
     } else {
         // Ellipse on right side (OrientacaoD): stub goes right, text to the left
         val ellipseLeft = x + w - 5f - diameter
@@ -349,6 +363,15 @@ private fun DrawScope.drawAttribute(
             val asterisk = textMeasurer.measure("*", style = CANVAS_TEXT_STYLE.copy(color = Color.Blue))
             val asteriskX = x + w - asterisk.size.width
             drawText(asterisk, topLeft = Offset(asteriskX, y))
+        }
+
+        // TBarraDeAtributos: vertical bar at the left edge (OrientacaoD)
+        if (attr.isComposite && attr.childAttributeIds.size >= 2) {
+            val childCount = attr.childAttributeIds.size
+            val barH = (h * childCount + childCount * 2 - h).coerceAtLeast(2f)
+            val barTop = y + h / 2f - barH / 2f
+            val barX = x + 2f  // bar centre X = attr.left + 2
+            drawLine(Color.Black, Offset(barX, barTop), Offset(barX, barTop + barH))
         }
     }
 }
@@ -459,29 +482,44 @@ private fun DrawScope.drawAnnotation(ann: SchemaElement.Annotation, textMeasurer
 /**
  * Draws the connection line between two elements using orthogonal routing.
  *
- * Implements [TLigacao.Ative] from mer.pas faithfully:
+ * Uses pre-computed Divida-distributed attachment points ([dividedPoints]) so that
+ * multiple connections on the same element edge are spread evenly, matching
+ * [TBase.Divida] from mer.pas.
+ *
+ * Implements [TLigacao.Ative] routing cases:
  * – Cases 1 & 2: diagonal separation → 2-segment L-shape
  * – Case 3: pure vertical separation → 3-segment V→H→V (Z-shape)
  * – Case 4: pure horizontal separation → 3-segment H→V→H (Z-shape)
- * – Case 5: fallback (overlapping/close) → 2-segment L-shape
+ * – Case 5: fallback → 2-segment L-shape
  *
  * Weak connections ([Connection.isWeak]) are drawn with a parallel double line.
  */
-private fun DrawScope.drawConnection(conn: Connection, schema: ConceptualSchema, textMeasurer: TextMeasurer) {
+private fun DrawScope.drawConnection(
+    conn: Connection,
+    schema: ConceptualSchema,
+    dividedPoints: Map<Int, Map<Int, Offset>>,
+    textMeasurer: TextMeasurer,
+) {
     val elemA = schema.elements[conn.elementIdA] ?: return
     val elemB = schema.elements[conn.elementIdB] ?: return
 
-    val encA = elementEncaixes(elemA, schema)
-    val encB = elementEncaixes(elemB, schema)
+    // Use Divida-distributed point when available; compute on demand as fallback
+    val ptA = dividedPoints[conn.elementIdA]?.get(conn.id) ?: run {
+        val enc = connectionEncaixes(elemA, elemB, schema)
+        enc[connectionPonto(elemA, elemB, schema)]
+    }
+    val ptB = dividedPoints[conn.elementIdB]?.get(conn.id) ?: run {
+        val enc = connectionEncaixes(elemB, elemA, schema)
+        enc[connectionPonto(elemB, elemA, schema)]
+    }
 
-    val waypoints = computeConnectionPath(elemA.position, encA, elemB.position, encB, conn.orientation)
+    val waypoints = computeConnectionPath(ptA, elemA.position, ptB, elemB.position, conn.orientation)
     if (waypoints.size < 2) return
 
     for (i in 0 until waypoints.size - 1) {
         val from = waypoints[i]
         val to = waypoints[i + 1]
         if (conn.isWeak) {
-            // Double line: parallel offset perpendicular to segment direction
             val isHoriz = abs(to.x - from.x) >= abs(to.y - from.y)
             val offX = if (isHoriz) 0f else 2f
             val offY = if (isHoriz) 2f else 0f
@@ -492,56 +530,72 @@ private fun DrawScope.drawConnection(conn: Connection, schema: ConceptualSchema,
         }
     }
 
-    // Cardinality label — anchored to the entity/relationship end (PosicioneCardinalidade logic)
+    // Cardinality — PosicioneCardinalidade anchored to the entity end.
+    // The stored XML position was sized for original 8pt Tahoma (FCard.Width ≈ 36px).
+    // We always re-compute using our actual text metrics so the label aligns correctly
+    // regardless of font rendering differences. For user-pinned labels (Fixa=true) the
+    // stored position is honoured as-is.
     if (conn.showCardinality && conn.cardinality != null) {
         val cardStr = conn.cardinality.label
         if (cardStr.isBlank()) return
 
-        val labelPos = conn.cardinalityPosition
-        if (labelPos != null) {
+        if (conn.cardinalityFixed && conn.cardinalityPosition != null) {
+            val lp = conn.cardinalityPosition
             val layout = textMeasurer.measure(cardStr, style = MULTIVALUE_CARD_STYLE)
-            drawText(layout, topLeft = Offset(labelPos.x.toFloat(), labelPos.y.toFloat()))
-        } else {
-            // Auto-position near the entity/relationship end of the connection
-            val entityElem = listOf(elemA, elemB).firstOrNull {
-                it is SchemaElement.Entity || it is SchemaElement.Relationship ||
-                        it is SchemaElement.AssociativeEntity
-            } ?: elemB
-            val entityEnc = if (entityElem == elemA) encA else encB
-            val otherEnc  = if (entityElem == elemA) encB else encA
-            val otherPos  = if (entityElem == elemA) elemB.position else elemA.position
-
-            // Determine which encaixe index faces the other element
-            val p = nearestEncaixeIndex(entityEnc, otherPos)
-            val anchor = entityEnc[p]
-            val layout = textMeasurer.measure(cardStr, style = MULTIVALUE_CARD_STYLE)
-            val lw = layout.size.width.toFloat()
-            val lh = layout.size.height.toFloat()
-
-            // Mirrors TLigacao.PosicioneCardinalidade offsets
-            var aLeft = anchor.x
-            var aTop  = anchor.y - lh + 5f
-            when (p) {
-                1 -> aLeft = aLeft - lw + 2f
-                4 -> aTop  = aTop  + lh - 4f
-            }
-            drawText(layout, topLeft = Offset(aLeft, aTop))
+            drawText(layout, topLeft = Offset(lp.x.toFloat(), lp.y.toFloat()))
+            return
         }
+
+        // Choose entity end: prefer elemB (Destino_ID = entity), else elemA
+        val entityElem = when {
+            elemB is SchemaElement.Entity || elemB is SchemaElement.AssociativeEntity -> elemB
+            elemA is SchemaElement.Entity || elemA is SchemaElement.AssociativeEntity -> elemA
+            else -> elemB
+        }
+        val otherForEntity = if (entityElem == elemA) elemB else elemA
+        val anchor = dividedPoints[entityElem.id]?.get(conn.id) ?: run {
+            val enc = connectionEncaixes(entityElem, otherForEntity, schema)
+            enc[connectionPonto(entityElem, otherForEntity, schema)]
+        }
+        val p = pointToEdgeIndex(anchor, entityElem.position)
+        val layout = textMeasurer.measure(cardStr, style = MULTIVALUE_CARD_STYLE)
+        val lw = layout.size.width.toFloat()
+        val lh = layout.size.height.toFloat()
+
+        // Replicates TLigacao.PosicioneCardinalidade offsets exactly (mer.pas lines 7337–7344)
+        var aLeft = anchor.x
+        var aTop  = anchor.y - lh + 5f
+        when (p) {
+            1 -> aLeft = aLeft - lw + 2f   // label ends 2 px inside entity left edge
+            4 -> aTop  = aTop  + lh - 4f   // label top = entity.bottom + 1
+        }
+        drawText(layout, topLeft = Offset(aLeft, aTop))
     }
 }
 
-// ── Helper: encaixe points ────────────────────────────────────────────────────
+// ── Helper: per-connection encaixe points ─────────────────────────────────────
 
 /**
- * Computes the four encaixe (attachment) points for an element, applying
- * the attribute override from [TAtributo.AtualizaEncaixes]:
- * all four slots collapse to the "active" side (left for [OrientacaoE], right for [OrientacaoD]).
+ * Returns the connection-specific attachment encaixe array for [elem] given
+ * that it is connected to [otherElem].
  *
- * Index mapping (1-based, matching the original Pascal):
- * [1] = left center, [2] = top center, [3] = right center, [4] = bottom center
+ * Differences from a plain 4-edge array:
+ * - **Attribute (normal)**: all four slots collapse to the "active" side —
+ *   left for OrientacaoE (attribute to the right of owner), right for OrientacaoD.
+ *   Matches [TAtributo.AtualizaEncaixes] from mer.pas.
+ * - **Composite attribute (bar side)**: when [otherElem] is a child attribute of
+ *   [elem], the four slots collapse to the opposite (bar) side instead.
+ *   Mirrors [TBarraDeAtributos.PrepareToAtive] behaviour.
+ * - **All other elements**: standard four edge midpoints [1..4].
+ *
+ * Index mapping: [1]=left, [2]=top, [3]=right, [4]=bottom (1-based, Pascal compatible).
  */
-private fun elementEncaixes(element: SchemaElement, schema: ConceptualSchema): Array<Offset> {
-    val p = element.position
+private fun connectionEncaixes(
+    elem: SchemaElement,
+    otherElem: SchemaElement,
+    schema: ConceptualSchema,
+): Array<Offset> {
+    val p = elem.position
     val left   = p.x.toFloat()
     val top    = p.y.toFloat()
     val right  = left + p.width
@@ -549,27 +603,30 @@ private fun elementEncaixes(element: SchemaElement, schema: ConceptualSchema): A
     val cx     = left + p.width  / 2f
     val cy     = top  + p.height / 2f
 
-    val base = arrayOf(
-        Offset.Zero,           // [0] unused
+    if (elem is SchemaElement.Attribute) {
+        val ownerCx = schema.elements[elem.ownerId]?.let {
+            it.position.x + it.position.width / 2f
+        } ?: (cx - 1f)
+        val ellipseOnLeft = cx > ownerCx  // OrientacaoE
+
+        return if (otherElem is SchemaElement.Attribute && otherElem.ownerId == elem.id) {
+            // Connection toward a child attribute → use bar side (opposite of normal)
+            val bar = if (ellipseOnLeft) Offset(right, cy) else Offset(left, cy)
+            arrayOf(Offset.Zero, bar, bar, bar, bar)
+        } else {
+            // Normal attribute connection toward its owner
+            val c = if (ellipseOnLeft) Offset(left, cy) else Offset(right, cy)
+            arrayOf(Offset.Zero, c, c, c, c)
+        }
+    }
+
+    return arrayOf(
+        Offset.Zero,
         Offset(left,  cy),     // [1] left center
         Offset(cx,    top),    // [2] top center
         Offset(right, cy),     // [3] right center
         Offset(cx,    bottom), // [4] bottom center
     )
-
-    if (element is SchemaElement.Attribute) {
-        val attrCx  = cx
-        val ownerCx = schema.elements[element.ownerId]?.let {
-            it.position.x + it.position.width / 2f
-        } ?: (cx - 1f)  // fallback: treat attribute as to the right
-
-        // OrientacaoE (attribute to the right of owner) → all encaixes = left [1]
-        // OrientacaoD (attribute to the left of owner)  → all encaixes = right [3]
-        val connector = if (attrCx > ownerCx) base[1] else base[3]
-        return arrayOf(Offset.Zero, connector, connector, connector, connector)
-    }
-
-    return base
 }
 
 /** Returns the 1-based encaixe index (1..4) whose point is nearest to [other]'s center. */
@@ -587,84 +644,214 @@ private fun nearestEncaixeIndex(enc: Array<Offset>, other: ElementPosition): Int
     return best
 }
 
+/**
+ * Returns which edge index (1=left, 2=top, 3=right, 4=bottom) of [pos] the
+ * point [pt] is closest to. Used to determine [P] in PosicioneCardinalidade.
+ */
+private fun pointToEdgeIndex(pt: Offset, pos: ElementPosition): Int {
+    val dLeft   = abs(pt.x - pos.x.toFloat())
+    val dTop    = abs(pt.y - pos.y.toFloat())
+    val dRight  = abs(pt.x - (pos.x + pos.width).toFloat())
+    val dBottom = abs(pt.y - (pos.y + pos.height).toFloat())
+    val minD = minOf(dLeft, dTop, dRight, dBottom)
+    return when (minD) {
+        dLeft   -> 1
+        dTop    -> 2
+        dRight  -> 3
+        else    -> 4
+    }
+}
+
+// ── Helper: connection ponto ──────────────────────────────────────────────────
+
+/**
+ * Returns the 1-based encaixe index (1=left, 2=top, 3=right, 4=bottom) that
+ * [elem] uses to connect to [otherElem].
+ *
+ * Unlike [nearestEncaixeIndex], this function handles collapsed attribute
+ * encaixes correctly: for normal attributes ponto = 1 (OrientacaoE) or 3
+ * (OrientacaoD); for composite → child connections the bar side is used
+ * (opposite of the normal connection side).
+ */
+private fun connectionPonto(
+    elem: SchemaElement,
+    otherElem: SchemaElement,
+    schema: ConceptualSchema,
+): Int {
+    if (elem is SchemaElement.Attribute) {
+        val cx = elem.position.x + elem.position.width / 2f
+        val ownerCx = schema.elements[elem.ownerId]?.let {
+            it.position.x + it.position.width / 2f
+        } ?: (cx - 1f)
+        val ellipseOnLeft = cx > ownerCx  // OrientacaoE
+        return if (otherElem is SchemaElement.Attribute && otherElem.ownerId == elem.id) {
+            if (ellipseOnLeft) 3 else 1  // bar side (right for OrientacaoE)
+        } else {
+            if (ellipseOnLeft) 1 else 3  // normal side (left for OrientacaoE)
+        }
+    }
+    return nearestEncaixeIndex(connectionEncaixes(elem, otherElem, schema), otherElem.position)
+}
+
+// ── Helper: Divida pre-computation ───────────────────────────────────────────
+
+/**
+ * Pre-computes per-element, per-connection attachment points.
+ *
+ * **Attribute connections** — The attachment Y is derived directly from the
+ * attribute's stored `cy` (centre-Y), which is already the exact value that
+ * [TBase.OrganizeAtributos] would produce. Using `cy` avoids the floating-point
+ * drift that arises when replicating the integer-arithmetic Divida algorithm.
+ *
+ * For the child–composite-attribute case, the child's `cy` is used for both
+ * ends so that the connecting line stays perfectly horizontal.
+ *
+ * **Non-attribute connections** — [TBase.Divida] is applied: when N > 1
+ * connections share the same edge, the attachment points are evenly spaced:
+ * `tam = edgeLength / (N + 1)`, position[i] = anchorStart + tam * (i+1).
+ *
+ * Returns `Map<elemId, Map<connId, Offset>>`.
+ */
+private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Offset>> {
+    val result = mutableMapOf<Int, MutableMap<Int, Offset>>()
+
+    for ((elemId, elem) in schema.elements) {
+        val elemResult = result.getOrPut(elemId) { mutableMapOf() }
+        val nonAttrByPonto = mutableMapOf<Int, MutableList<Pair<Int, SchemaElement>>>()
+
+        for (conn in schema.connections) {
+            val isA = conn.elementIdA == elemId
+            val isB = conn.elementIdB == elemId
+            if (!isA && !isB) continue
+            val otherId = if (isA) conn.elementIdB else conn.elementIdA
+            val otherElem = schema.elements[otherId] ?: continue
+
+            if (otherElem is SchemaElement.Attribute) {
+                // This element connects TO an attribute.
+                // For child→composite connections (both are Attribute and elem is the child),
+                // use elem's own cy; otherwise use the attribute (otherElem) cy.
+                val attrCy = if (elem is SchemaElement.Attribute && elem.ownerId == otherId) {
+                    elem.position.y + elem.position.height / 2f  // child's cy
+                } else {
+                    otherElem.position.y + otherElem.position.height / 2f  // attribute cy
+                }
+                val ponto = connectionPonto(elem, otherElem, schema)
+                val enc   = connectionEncaixes(elem, otherElem, schema)
+                elemResult[conn.id] = Offset(enc[ponto].x, attrCy)
+            } else if (elem is SchemaElement.Attribute) {
+                // This IS an attribute connecting to a non-attribute owner.
+                val ponto = connectionPonto(elem, otherElem, schema)
+                val enc   = connectionEncaixes(elem, otherElem, schema)
+                elemResult[conn.id] = enc[ponto]
+            } else {
+                // Non-attribute → non-attribute: accumulate for Divida
+                val ponto = connectionPonto(elem, otherElem, schema)
+                nonAttrByPonto.getOrPut(ponto) { mutableListOf() }.add(conn.id to otherElem)
+            }
+        }
+
+        // Divida distribution for entity/relationship connections
+        for ((ponto, pairs) in nonAttrByPonto) {
+            val enc = connectionEncaixes(elem, pairs.first().second, schema)
+            if (pairs.size == 1) {
+                elemResult[pairs[0].first] = enc[ponto]
+            } else {
+                val pos = elem.position
+                val sorted = when (ponto) {
+                    1, 3 -> pairs.sortedBy { it.second.position.y + it.second.position.height / 2f }
+                    else -> pairs.sortedBy { it.second.position.x + it.second.position.width / 2f }
+                }
+                val n = sorted.size
+                val (anchorStart, edgeLen) = if (ponto == 1 || ponto == 3) {
+                    pos.y.toFloat() to pos.height.toFloat()
+                } else {
+                    pos.x.toFloat() to pos.width.toFloat()
+                }
+                val tam = edgeLen / (n + 1)
+                for ((idx, pair) in sorted.withIndex()) {
+                    val pt = when (ponto) {
+                        1, 3 -> {
+                            val y = anchorStart + tam * (idx + 1)
+                            if (ponto == 1) Offset(pos.x.toFloat(), y)
+                            else            Offset((pos.x + pos.width).toFloat(), y)
+                        }
+                        else -> {
+                            val x = anchorStart + tam * (idx + 1)
+                            if (ponto == 2) Offset(x, pos.y.toFloat())
+                            else            Offset(x, (pos.y + pos.height).toFloat())
+                        }
+                    }
+                    elemResult[pair.first] = pt
+                }
+            }
+        }
+    }
+    return result
+}
+
 // ── Helper: orthogonal routing (TLigacao.Ative) ───────────────────────────────
 
 /**
- * Computes a list of waypoints for drawing an orthogonal (axis-aligned) connection.
+ * Computes waypoints for an orthogonal connection between pre-computed attachment
+ * points [ptA] and [ptB] (already Divida-adjusted).
  *
- * Faithfully implements [function TLigacao.Ative] from mer.pas, including:
- * - Diagonal cases (2 segments / L-shape)
- * - Pure vertical / horizontal separation (3 segments / Z-shape)
- * - Fallback L-shape using [orientation]
+ * Uses element bounding boxes [posA]/[posB] for the case checks, faithfully
+ * matching [TLigacao.Ative] from mer.pas:
+ * - Cases 1 & 2: diagonal 20 px separation → L-shape
+ * - Case 3: pure vertical separation (> 4 px) → Z-shape V→H→V
+ * - Case 4: pure horizontal separation (> 4 px) → Z-shape H→V→H
+ * - Case 5: fallback → L-shape
  */
 private fun computeConnectionPath(
-    pos1: ElementPosition, enc1: Array<Offset>,
-    pos2: ElementPosition, enc2: Array<Offset>,
+    ptA: Offset, posA: ElementPosition,
+    ptB: Offset, posB: ElementPosition,
     orientation: games.polyclub.kbrmodelo.domain.LineOrientation,
 ): List<Offset> {
-    var e1 = pos1; var a1 = enc1
-    var e2 = pos2; var a2 = enc2
+    var pt1 = ptA; var e1 = posA
+    var pt2 = ptB; var e2 = posB
 
     val DIST = 20f
     val isH = orientation == games.polyclub.kbrmodelo.domain.LineOrientation.HORIZONTAL
 
-    // ── Case 1: E1 top-left of E2 diagonally ────────────────────────────────
-    val c1fwd = a1[3].x < e2.x - DIST && a1[4].y < e2.y - DIST
-    val c1rev = a2[3].x < e1.x - DIST && a2[4].y < e1.y - DIST
+    val e1r = (e1.x + e1.width).toFloat()
+    val e2r = (e2.x + e2.width).toFloat()
+    val e1b = (e1.y + e1.height).toFloat()
+    val e2b = (e2.y + e2.height).toFloat()
+
+    // ── Case 1: E1 top-left of E2 (both dims separated by ≥ DIST) ───────────
+    val c1fwd = e1r < e2.x - DIST && e1b < e2.y - DIST
+    val c1rev = e2r < e1.x - DIST && e2b < e1.y - DIST
     if (c1fwd || c1rev) {
-        if (c1rev) { val te = e1; e1 = e2; e2 = te; val ta = a1; a1 = a2; a2 = ta }
-        return if (!isH) {
-            val turn = Offset(a1[4].x, a2[1].y)
-            listOf(a1[4], turn, a2[1])
-        } else {
-            val turn = Offset(a2[2].x, a1[3].y)
-            listOf(a1[3], turn, a2[2])
-        }
+        if (c1rev) { val tp = pt1; pt1 = pt2; pt2 = tp; val te = e1; e1 = e2; e2 = te }
+        return if (!isH) listOf(pt1, Offset(pt1.x, pt2.y), pt2)
+               else      listOf(pt1, Offset(pt2.x, pt1.y), pt2)
     }
 
-    // ── Case 2: E1 bottom-left of E2 diagonally ─────────────────────────────
-    val c2fwd = a1[3].x < e2.x - DIST && a2[4].y < e1.y - DIST
-    val c2rev = a2[3].x < e1.x - DIST && a1[4].y < e2.y - DIST
+    // ── Case 2: E1 bottom-left of E2 diagonally ──────────────────────────────
+    val c2fwd = e1r < e2.x - DIST && e2b < e1.y - DIST
+    val c2rev = e2r < e1.x - DIST && e1b < e2.y - DIST
     if (c2fwd || c2rev) {
-        if (c2rev) { val te = e1; e1 = e2; e2 = te; val ta = a1; a1 = a2; a2 = ta }
-        return if (isH) {
-            val turn = Offset(a1[2].x, a2[1].y)
-            listOf(a1[2], turn, a2[1])
-        } else {
-            val turn = Offset(a2[4].x, a1[3].y)
-            listOf(a1[3], turn, a2[4])
-        }
+        if (c2rev) { val tp = pt1; pt1 = pt2; pt2 = tp; val te = e1; e1 = e2; e2 = te }
+        return if (isH) listOf(pt1, Offset(pt1.x, pt2.y), pt2)
+               else     listOf(pt1, Offset(pt2.x, pt1.y), pt2)
     }
 
-    // ── Case 3: Pure vertical separation (e1.bottom < e2.top - 4) ───────────
-    val e1b = e1.y + e1.height
-    val e2b = e2.y + e2.height
+    // ── Case 3: Pure vertical separation (> 4 px gap) ────────────────────────
     if (e1b < e2.y - 4 || e2b < e1.y - 4) {
-        if (e2b < e1.y - 4) { val te = e1; e1 = e2; e2 = te; val ta = a1; a1 = a2; a2 = ta }
-        val midY = e2.y.toFloat() - (e2.y - a1[4].y) / 2f
-        return listOf(a1[4], Offset(a1[4].x, midY), Offset(a2[2].x, midY), a2[2])
+        if (e2b < e1.y - 4) { val tp = pt1; pt1 = pt2; pt2 = tp }
+        val midY = pt2.y - (pt2.y - pt1.y) / 2f
+        return listOf(pt1, Offset(pt1.x, midY), Offset(pt2.x, midY), pt2)
     }
 
-    // ── Case 4: Pure horizontal separation (e1.right < e2.left - 4) ─────────
-    val e1r = e1.x + e1.width
-    val e2r = e2.x + e2.width
+    // ── Case 4: Pure horizontal separation (> 4 px gap) ──────────────────────
     if (e1r < e2.x - 4 || e2r < e1.x - 4) {
-        if (e2r < e1.x - 4) { val te = e1; e1 = e2; e2 = te; val ta = a1; a1 = a2; a2 = ta }
-        val midX = e2.x.toFloat() - (e2.x - a1[3].x) / 2f
-        return listOf(a1[3], Offset(midX, a1[3].y), Offset(midX, a2[1].y), a2[1])
+        if (e2r < e1.x - 4) { val tp = pt1; pt1 = pt2; pt2 = tp }
+        val midX = pt2.x - (pt2.x - pt1.x) / 2f
+        return listOf(pt1, Offset(midX, pt1.y), Offset(midX, pt2.y), pt2)
     }
 
-    // ── Case 5: Fallback L-shape (elements overlap or are very close) ─────────
-    val pE1: Int; val pE2: Int
-    if (isH) {
-        pE1 = if (e1.x <= e2.x) 3 else 1
-        pE2 = if (e1.y <= e2.y) 2 else 4
-    } else {
-        pE2 = if (e1.x <= e2.x) 1 else 3
-        pE1 = if (e1.y <= e2.y) 4 else 2
-    }
-    val turn = Offset(a2[pE2].x, a1[pE1].y)
-    return listOf(a1[pE1], turn, a2[pE2])
+    // ── Case 5: Fallback L-shape ──────────────────────────────────────────────
+    return listOf(pt1, Offset(pt2.x, pt1.y), pt2)
 }
 
 // ── Helper: centred label ─────────────────────────────────────────────────────
