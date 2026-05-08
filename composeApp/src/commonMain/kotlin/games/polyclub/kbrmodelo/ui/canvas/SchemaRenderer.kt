@@ -41,6 +41,8 @@ import games.polyclub.kbrmodelo.domain.ConceptualSchema
 import games.polyclub.kbrmodelo.domain.ElementPosition
 import games.polyclub.kbrmodelo.domain.SchemaElement
 import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.PI
 
 // ── Colors translated from the original Pascal source ─────────────────────────
 // Pen.Color := TColor(-5) → COLORREF $FFFFFFFB → R=251, G=255, B=255 (near-white outline)
@@ -64,24 +66,51 @@ private val MULTIVALUE_CARD_STYLE = TextStyle(fontSize = 11.sp, color = Color.Bl
 /**
  * Draws the full [ConceptualSchema] into this [DrawScope].
  *
- * Rendering order (back → front):
- * 1. Connection lines — behind everything.
- * 2. Elements (entities, relationships, attributes, …) — on top of lines.
- * 3. Cardinality labels — on top of elements, matching the original Pascal
- *    z-order where [TCardinalidade] is a floating component above the canvas.
+ * Rendering order mirrors VCL z-order (back → front):
+ * 1. Non-assoc connection lines — behind all elements.
+ * 2. All elements (entities, relationships, attributes, AssociativeEntity outer+inner).
+ * 3. AssociativeEntity connection lines — redrawn on top of outer rect white fill,
+ *    faithfully replicating the VCL behaviour where [TLinha] components have a
+ *    higher z-order than [TEntidadeAssoss]/[TChildRelacao].
+ * 4. Inner diamonds of AssociativeEntity — redrawn on top of those connection lines.
+ * 5. Cardinality labels — floating on top of everything.
  */
 fun DrawScope.drawSchema(schema: ConceptualSchema, textMeasurer: TextMeasurer) {
     val dividedPoints = computeDividedPoints(schema)
 
-    // 1. Connection lines only (no labels yet)
+    // 1. Connection lines that do NOT involve an AssociativeEntity
     schema.connections.forEach { conn ->
-        drawConnectionLine(conn, schema, dividedPoints)
+        val a = schema.elements[conn.elementIdA]
+        val b = schema.elements[conn.elementIdB]
+        if (a !is SchemaElement.AssociativeEntity && b !is SchemaElement.AssociativeEntity) {
+            drawConnectionLine(conn, schema, dividedPoints)
+        }
     }
-    // 2. Elements
+    // 2. All elements (including AssociativeEntity outer rect + inner diamond)
     schema.elements.values.forEach { element ->
         drawElement(element, schema, textMeasurer)
     }
-    // 3. Cardinality labels on top
+    // 3. Re-draw connection lines that involve an AssociativeEntity, now on top of the
+    //    outer rect white fill — only entity/relationship connections (not attributes),
+    //    since attribute stubs are handled visually by the attribute's own rendering.
+    schema.connections.forEach { conn ->
+        val a = schema.elements[conn.elementIdA]
+        val b = schema.elements[conn.elementIdB]
+        if (a is SchemaElement.AssociativeEntity || b is SchemaElement.AssociativeEntity) {
+            drawConnectionLine(conn, schema, dividedPoints)
+        }
+    }
+    // 4. Re-draw the inner diamonds on top of the connection lines so that the diamond
+    //    outline remains visible above lines that enter the outer rect area.
+    schema.elements.values.filterIsInstance<SchemaElement.AssociativeEntity>().forEach { assoc ->
+        drawRelationshipDiamond(
+            assocInnerDiamondPos(assoc.position),
+            assoc.relationshipName,
+            showName = true,
+            textMeasurer,
+        )
+    }
+    // 5. Cardinality labels on top
     schema.connections.forEach { conn ->
         drawCardinalityLabel(conn, schema, dividedPoints, textMeasurer)
     }
@@ -272,15 +301,12 @@ private fun DrawScope.drawAttribute(
     val meio = (diameter - 1f) / 2f + 2f  // vertical centre of ellipse, matches Pascal
 
     // Orientation follows TBase.OrganizeAtributos from mer.pas:
-    //   P=1 (owner left side)  → attribute placed LEFT  of owner → OrientacaoD → ellipse on RIGHT
-    //   P=3 (owner right side) → attribute placed RIGHT of owner → OrientacaoE → ellipse on LEFT
-    // We approximate: attribute center to the RIGHT of owner center → OrientacaoE (ellipse left)
+    //   P=1 (owner LEFT side) → OrientacaoD → ellipse on RIGHT
+    //   P≠1 (TOP/RIGHT/BOTTOM) → OrientacaoE → ellipse on LEFT
     val owner = schema.elements[attr.ownerId]
     val ellipseOnLeft = if (owner != null) {
-        val attrCx = p.x + p.width / 2f
-        val ownerCx = owner.position.x + owner.position.width / 2f
-        attrCx > ownerCx  // attribute is to the right → ellipse on left facing owner
-    } else false  // default: ellipse on right (attribute to the left of owner)
+        attrPontoByPosition(owner.position, p) != 1
+    } else false  // default: ellipse on right
 
     val textLabel = buildString {
         append(attr.name)
@@ -511,18 +537,23 @@ private fun DrawScope.drawConnectionLine(
         enc[connectionPonto(elemB, elemA, schema, conn)]
     }
 
-    val waypoints = computeConnectionPath(ptA, elemA.position, ptB, elemB.position, conn.orientation)
+    // Use inner-diamond position for AssociativeEntity routing so lines go to/from
+    // TChildRelacao's actual visual boundary, not the outer rect.
+    val posA = if (elemA is SchemaElement.AssociativeEntity && elemB !is SchemaElement.Attribute)
+        assocInnerDiamondPos(elemA.position) else elemA.position
+    val posB = if (elemB is SchemaElement.AssociativeEntity && elemA !is SchemaElement.Attribute)
+        assocInnerDiamondPos(elemB.position) else elemB.position
+
+    val waypoints = computeConnectionPath(ptA, posA, ptB, posB, conn.orientation)
     if (waypoints.size < 2) return
 
     for (i in 0 until waypoints.size - 1) {
         val from = waypoints[i]
-        val to = waypoints[i + 1]
+        val to   = waypoints[i + 1]
         if (conn.isWeak) {
-            val isHoriz = abs(to.x - from.x) >= abs(to.y - from.y)
-            val offX = if (isHoriz) 0f else 2f
-            val offY = if (isHoriz) 2f else 0f
-            drawLine(Color.Black, Offset(from.x - offX, from.y - offY), Offset(to.x - offX, to.y - offY))
-            drawLine(Color.Black, Offset(from.x + offX, from.y + offY), Offset(to.x + offX, to.y + offY))
+            // Weak connection = 3-pixel-wide solid line, matching TLinha.Paint isWeak:
+            //   pixels x=2,3,4 (or y=2,3,4) all black, with a 1-px white gap on one side.
+            drawLine(Color.Black, from, to, strokeWidth = 3f)
         } else {
             drawLine(Color.Black, from, to)
         }
@@ -533,13 +564,12 @@ private fun DrawScope.drawConnectionLine(
  * Draws the cardinality label for a connection ON TOP of elements.
  *
  * Must be called after elements are drawn so the label appears above them —
- * matching the original Pascal z-order where [TCardinalidade] is a floating
- * component that sits above the canvas.
+ * matching the original Pascal z-order where [TCardinalidade] floats above the canvas.
  *
- * Replicates [TLigacao.PosicioneCardinalidade] from mer.pas lines 7310–7348.
- * Uses the original fixed component height (20 px matching [TCardinalidade]
- * default at 8pt Tahoma) for the vertical formula so [aTop] matches the stored
- * XML positions regardless of our local font rendering differences.
+ * When a stored position is available ([Connection.cardinalityPosition]), it is used
+ * directly — these coordinates were produced by [TLigacao.PosicioneCardinalidade] and
+ * saved in the XML. A small X adjustment (lw/4) compensates for the width difference
+ * between the original 8pt Tahoma and our rendered font.
  */
 private fun DrawScope.drawCardinalityLabel(
     conn: Connection,
@@ -554,14 +584,17 @@ private fun DrawScope.drawCardinalityLabel(
     val elemA = schema.elements[conn.elementIdA] ?: return
     val elemB = schema.elements[conn.elementIdB] ?: return
 
-    if (conn.cardinalityFixed && conn.cardinalityPosition != null) {
+    val layout = textMeasurer.measure(cardStr, style = MULTIVALUE_CARD_STYLE)
+
+    // Use stored position when available; apply X correction for font-width difference.
+    if (conn.cardinalityPosition != null) {
         val lp = conn.cardinalityPosition
-        val layout = textMeasurer.measure(cardStr, style = MULTIVALUE_CARD_STYLE)
-        drawText(layout, topLeft = Offset(lp.x.toFloat(), lp.y.toFloat()))
+        val xAdjustment = layout.size.width / 4f
+        drawText(layout, topLeft = Offset(lp.x.toFloat() + xAdjustment, lp.y.toFloat()))
         return
     }
 
-    // Choose entity end: prefer elemB (Destino_ID = entity), else elemA
+    // Fallback: compute position from the entity-end anchor when no stored coordinates.
     val entityElem = when {
         elemB is SchemaElement.Entity || elemB is SchemaElement.AssociativeEntity -> elemB
         elemA is SchemaElement.Entity || elemA is SchemaElement.AssociativeEntity -> elemA
@@ -573,20 +606,29 @@ private fun DrawScope.drawCardinalityLabel(
         enc[connectionPonto(entityElem, otherForEntity, schema)]
     }
     val p = pointToEdgeIndex(anchor, entityElem.position)
-    val layout = textMeasurer.measure(cardStr, style = MULTIVALUE_CARD_STYLE)
     val lw = layout.size.width.toFloat()
-
-    // Use the original TCardinalidade fixed height (20 px) so aTop matches
-    // PosicioneCardinalidade regardless of our actual text metrics.
     val CARD_H = 20f
     var aLeft = anchor.x
-    var aTop  = anchor.y - CARD_H + 5f   // = anchor.y - 15
+    var aTop  = anchor.y - CARD_H + 5f
     when (p) {
-        1 -> aLeft = aLeft - lw + 2f     // right edge 2 px inside entity left border
-        4 -> aTop  = aTop + CARD_H - 4f  // = anchor.y + 1  (just below entity bottom)
+        1 -> aLeft = aLeft - lw + 2f
+        4 -> aTop  = aTop + CARD_H - 4f
     }
     drawText(layout, topLeft = Offset(aLeft, aTop))
 }
+
+// ── Helper: assoc entity inner diamond ───────────────────────────────────────
+
+/**
+ * Returns the position of the inner diamond of an [AssociativeEntity], inset 15 px
+ * on all sides — mirrors [TEntidadeAssoss.SetBounds] (`InflateRect -15`).
+ */
+private fun assocInnerDiamondPos(p: ElementPosition) = ElementPosition(
+    x      = p.x + 15,
+    y      = p.y + 15,
+    width  = (p.width  - 30).coerceAtLeast(10),
+    height = (p.height - 30).coerceAtLeast(10),
+)
 
 // ── Helper: per-connection encaixe points ─────────────────────────────────────
 
@@ -601,6 +643,8 @@ private fun DrawScope.drawCardinalityLabel(
  * - **Composite attribute (bar side)**: when [otherElem] is a child attribute of
  *   [elem], the four slots collapse to the opposite (bar) side instead.
  *   Mirrors [TBarraDeAtributos.PrepareToAtive] behaviour.
+ * - **AssociativeEntity → non-Attribute**: uses the inner diamond's edge midpoints,
+ *   matching [TChildRelacao]'s actual connection points in mer.pas.
  * - **All other elements**: standard four edge midpoints [1..4].
  *
  * Index mapping: [1]=left, [2]=top, [3]=right, [4]=bottom (1-based, Pascal compatible).
@@ -619,10 +663,9 @@ private fun connectionEncaixes(
     val cy     = top  + p.height / 2f
 
     if (elem is SchemaElement.Attribute) {
-        val ownerCx = schema.elements[elem.ownerId]?.let {
-            it.position.x + it.position.width / 2f
-        } ?: (cx - 1f)
-        val ellipseOnLeft = cx > ownerCx  // OrientacaoE
+        val ownerPos = schema.elements[elem.ownerId]?.position
+        // P≠1 → OrientacaoE → ellipse on LEFT (active left edge connects to owner)
+        val ellipseOnLeft = ownerPos?.let { attrPontoByPosition(it, p) != 1 } ?: false
 
         return if (otherElem is SchemaElement.Attribute && otherElem.ownerId == elem.id) {
             // Connection toward a child attribute → use bar side (opposite of normal)
@@ -633,6 +676,16 @@ private fun connectionEncaixes(
             val c = if (ellipseOnLeft) Offset(left, cy) else Offset(right, cy)
             arrayOf(Offset.Zero, c, c, c, c)
         }
+    }
+
+    // AssociativeEntity connecting to a non-Attribute uses the inner diamond's edge
+    // midpoints (TChildRelacao handles those connections in the original).
+    if (elem is SchemaElement.AssociativeEntity && otherElem !is SchemaElement.Attribute) {
+        val ip = assocInnerDiamondPos(p)
+        val il = ip.x.toFloat(); val it_ = ip.y.toFloat()
+        val ir = (ip.x + ip.width).toFloat(); val ib_ = (ip.y + ip.height).toFloat()
+        val icx = (il + ir) / 2f; val icy = (it_ + ib_) / 2f
+        return arrayOf(Offset.Zero, Offset(il, icy), Offset(icx, it_), Offset(ir, icy), Offset(icx, ib_))
     }
 
     return arrayOf(
@@ -698,24 +751,84 @@ private fun connectionPonto(
     conn: Connection? = null,
 ): Int {
     if (elem is SchemaElement.Attribute) {
-        val cx = elem.position.x + elem.position.width / 2f
-        val ownerCx = schema.elements[elem.ownerId]?.let {
-            it.position.x + it.position.width / 2f
-        } ?: (cx - 1f)
-        val ellipseOnLeft = cx > ownerCx  // OrientacaoE
+        val ownerPos = schema.elements[elem.ownerId]?.position
+        // P≠1 → OrientacaoE → ellipse on LEFT (active left edge connects to owner)
+        val ellipseOnLeft = ownerPos?.let { attrPontoByPosition(it, elem.position) != 1 } ?: false
         return if (otherElem is SchemaElement.Attribute && otherElem.ownerId == elem.id) {
             if (ellipseOnLeft) 3 else 1  // bar side (right for OrientacaoE)
         } else {
             if (ellipseOnLeft) 1 else 3  // normal side (left for OrientacaoE)
         }
     }
+    // For a non-attribute element connecting TO an attribute: use position-based
+    // quadrant assignment matching TBase.OrganizeAtributos (stored positions).
+    if (otherElem is SchemaElement.Attribute) {
+        return attrPontoByPosition(elem.position, otherElem.position)
+    }
     // For non-attribute elements, use the routing-aware ponto that matches Ative's
     // case conditions. isE1 = whether this element is elementIdA (the "source" in the XML).
+    // AssociativeEntity uses the inner diamond position for ponto computation.
     if (conn != null) {
         val isE1 = conn.elementIdA == elem.id
-        return computeNonAttrPonto(elem.position, otherElem.position, conn.orientation, isE1)
+        val effectivePos = if (elem is SchemaElement.AssociativeEntity && otherElem !is SchemaElement.Attribute)
+            assocInnerDiamondPos(elem.position) else elem.position
+        val effectiveOtherPos = if (otherElem is SchemaElement.AssociativeEntity && elem !is SchemaElement.Attribute)
+            assocInnerDiamondPos(otherElem.position) else otherElem.position
+        return computeNonAttrPonto(effectivePos, effectiveOtherPos, conn.orientation, isE1)
     }
     return nearestEncaixeIndex(connectionEncaixes(elem, otherElem, schema), otherElem.position)
+}
+
+/**
+ * Determines which edge (1=LEFT, 2=TOP, 3=RIGHT, 4=BOTTOM) of [elemPos] connects
+ * to an attribute at [attrPos], using the **stored positions** that OrganizeAtributos
+ * already baked in:
+ * - attribute entirely to the left  → P=1
+ * - attribute entirely to the right → P=3
+ * - attribute entirely above        → P=2
+ * - attribute entirely below        → P=4
+ * - overlapping (unusual) → falls back to [angleBasedPonto]
+ *
+ * This is more reliable than pure angle-based classification for diagonal corners
+ * like a TOP attribute whose center X is slightly to the right of the entity's
+ * right edge (angle just above −45°).
+ */
+private fun attrPontoByPosition(elemPos: ElementPosition, attrPos: ElementPosition): Int {
+    val eLeft   = elemPos.x.toFloat()
+    val eRight  = (elemPos.x + elemPos.width).toFloat()
+    val eTop    = elemPos.y.toFloat()
+    val eBottom = (elemPos.y + elemPos.height).toFloat()
+    val aLeft   = attrPos.x.toFloat()
+    val aRight  = (attrPos.x + attrPos.width).toFloat()
+    val aTop    = attrPos.y.toFloat()
+    val aBottom = (attrPos.y + attrPos.height).toFloat()
+    return when {
+        aRight <= eLeft   -> 1  // attribute entirely to the LEFT of entity
+        aLeft  >= eRight  -> 3  // attribute entirely to the RIGHT of entity
+        aBottom <= eTop   -> 2  // attribute entirely ABOVE entity
+        aTop   >= eBottom -> 4  // attribute entirely BELOW entity
+        else -> angleBasedPonto(elemPos, attrPos)  // overlapping – fallback
+    }
+}
+
+/**
+ * Angle-based quadrant fallback for [attrPontoByPosition]. Uses [atan2] from
+ * [pos] center to [attrPos] center:
+ * - [-135°, -45°) → 2 (TOP)
+ * - [-45°,   45°) → 3 (RIGHT)
+ * - [45°,   135°) → 4 (BOTTOM)
+ * - otherwise     → 1 (LEFT)
+ */
+private fun angleBasedPonto(pos: ElementPosition, attrPos: ElementPosition): Int {
+    val dx = (attrPos.x + attrPos.width  / 2.0) - (pos.x + pos.width  / 2.0)
+    val dy = (attrPos.y + attrPos.height / 2.0) - (pos.y + pos.height / 2.0)
+    val angle = atan2(dy, dx) * (180.0 / PI)
+    return when {
+        angle >= -135.0 && angle < -45.0 -> 2
+        angle >= -45.0  && angle <  45.0 -> 3
+        angle >=  45.0  && angle < 135.0 -> 4
+        else                             -> 1
+    }
 }
 
 /**
@@ -799,21 +912,43 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
 
             if (otherElem is SchemaElement.Attribute) {
                 // This element connects TO an attribute.
-                // For child→composite connections (both are Attribute and elem is the child),
-                // use elem's own cy; otherwise use the attribute (otherElem) cy.
-                val attrCy = if (elem is SchemaElement.Attribute && elem.ownerId == otherId) {
-                    elem.position.y + elem.position.height / 2f  // child's cy
+                if (elem is SchemaElement.Attribute && elem.ownerId == otherId) {
+                    // Child → composite bar connection.
+                    // The composite (otherElem) connects to its entity owner via some ponto;
+                    // its bar is on the OPPOSITE side. Children hang off the bar.
+                    val compositeOwnerPos = schema.elements[otherElem.ownerId]?.position
+                    val compPonto = if (compositeOwnerPos != null)
+                        attrPontoByPosition(compositeOwnerPos, otherElem.position) else 3
+                    // Bar side: RIGHT (3) for OrientacaoE (compPonto≠1), LEFT (1) for OrientacaoD
+                    val barIsOnRight = compPonto != 1
+                    // Child connects FROM the bar side: if bar on right → child is to the right → child LEFT
+                    val p = elem.position
+                    val childActiveX = if (barIsOnRight) p.x.toFloat() else (p.x + p.width).toFloat()
+                    elemResult[conn.id] = Offset(childActiveX, p.y + p.height / 2f)
                 } else {
-                    otherElem.position.y + otherElem.position.height / 2f  // attribute cy
+                    // Normal entity/relationship → attribute.
+                    // Faithfully replicates TBase.OrganizeAtributos (mer.pas 1894):
+                    //   P=1 (entity LEFT)  → OrientacaoD → attr RIGHT edge = divida_x
+                    //   P=2,3,4            → OrientacaoE → attr LEFT  edge = divida_x
+                    val ponto = attrPontoByPosition(elem.position, otherElem.position)
+                    val ap = otherElem.position
+                    val attrCy      = ap.y + ap.height / 2f
+                    val attrActiveX = if (ponto == 1) (ap.x + ap.width).toFloat() else ap.x.toFloat()
+                    val enc = connectionEncaixes(elem, otherElem, schema)
+                    elemResult[conn.id] = when (ponto) {
+                        2, 4 -> Offset(attrActiveX, enc[ponto].y)
+                        else -> Offset(enc[ponto].x, attrCy)
+                    }
                 }
-                val ponto = connectionPonto(elem, otherElem, schema)
-                val enc   = connectionEncaixes(elem, otherElem, schema)
-                elemResult[conn.id] = Offset(enc[ponto].x, attrCy)
             } else if (elem is SchemaElement.Attribute) {
                 // This IS an attribute connecting to a non-attribute owner.
-                val ponto = connectionPonto(elem, otherElem, schema)
-                val enc   = connectionEncaixes(elem, otherElem, schema)
-                elemResult[conn.id] = enc[ponto]
+                // OrganizeAtributos rule (same as above, from attribute's perspective):
+                //   owner P=1 → OrientacaoD → attr RIGHT active edge
+                //   owner P≠1 → OrientacaoE → attr LEFT  active edge
+                val entityPonto = attrPontoByPosition(otherElem.position, elem.position)
+                val p = elem.position
+                val attrActiveX = if (entityPonto == 1) (p.x + p.width).toFloat() else p.x.toFloat()
+                elemResult[conn.id] = Offset(attrActiveX, p.y + p.height / 2f)
             } else {
                 // Non-attribute → non-attribute: accumulate for Divida
                 val ponto = connectionPonto(elem, otherElem, schema, conn)
@@ -827,7 +962,10 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
             if (pairs.size == 1) {
                 elemResult[pairs[0].first] = enc[ponto]
             } else {
-                val pos = elem.position
+                // Use inner diamond dimensions for Divida distribution in AssociativeEntity.
+                val pos = if (elem is SchemaElement.AssociativeEntity &&
+                    pairs.first().second !is SchemaElement.Attribute)
+                    assocInnerDiamondPos(elem.position) else elem.position
                 val sorted = when (ponto) {
                     1, 3 -> pairs.sortedBy { it.second.position.y + it.second.position.height / 2f }
                     else -> pairs.sortedBy { it.second.position.x + it.second.position.width / 2f }
@@ -946,7 +1084,7 @@ private fun DrawScope.drawCenteredLabel(
 
     val style = CANVAS_TEXT_STYLE.copy(
         textAlign = TextAlign.Center,
-        fontWeight = if (bold) FontWeight.Bold else null,
+        fontWeight = if (bold) FontWeight.ExtraBold else null,
         fontStyle = if (italic) FontStyle.Italic else null,
     )
     val maxW = (w - 4f).toInt().coerceAtLeast(1)
