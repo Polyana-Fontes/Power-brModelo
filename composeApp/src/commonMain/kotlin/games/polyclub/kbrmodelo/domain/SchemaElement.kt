@@ -30,19 +30,32 @@ data class LabelStyle(
 )
 
 /**
- * Direction of the arrow drawn inside a [Relationship] or [AssociativeEntity].
+ * Direction of the optional directional arrow (TSeta) placed beside a relationship diamond.
  *
- * Corresponds to `SetaDirecao` on `TBaseRelacao` / `TEntidadeAssoss` and the
- * `TSeta` visual component. The integer values match the original Pascal constants.
+ * Corresponds to `SetaDirecao` on `TBaseRelacao` / `TEntidadeAssoss` and
+ * `TSeta.Posicao` in mer.pas. Integer values match Pascal's TSeta positions exactly:
  *
- * 0 = no arrow, 1–4 map to the four cardinal directions (up/right/down/left).
+ * | Code | Side   | Arrowhead |
+ * |------|--------|-----------|
+ * | 1    | LEFT   | UP        |
+ * | 2    | LEFT   | DOWN      |
+ * | 3    | TOP    | RIGHT     |
+ * | 4    | TOP    | LEFT      |
+ * | 5    | RIGHT  | DOWN      |
+ * | 6    | RIGHT  | UP        |
+ * | 7    | BOTTOM | LEFT      |
+ * | 8    | BOTTOM | RIGHT     |
  */
 enum class ArrowDirection(val code: Int) {
     NONE(0),
-    UP(1),
-    RIGHT(2),
-    DOWN(3),
-    LEFT(4);
+    LEFT_UP(1),
+    LEFT_DOWN(2),
+    TOP_RIGHT(3),
+    TOP_LEFT(4),
+    RIGHT_DOWN(5),
+    RIGHT_UP(6),
+    BOTTOM_LEFT(7),
+    BOTTOM_RIGHT(8);
 
     companion object {
         fun fromCode(code: Int): ArrowDirection =

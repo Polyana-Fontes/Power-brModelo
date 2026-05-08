@@ -208,6 +208,7 @@ internal fun DrawScope.drawEntityRectangle(p: ElementPosition, isWeak: Boolean =
 private fun DrawScope.drawRelationship(rel: SchemaElement.Relationship, textMeasurer: TextMeasurer) {
     drawRelationshipDiamond(rel.position, rel.name, showName = rel.showName, textMeasurer,
         rel.labelStyle.bold, rel.labelStyle.italic)
+    drawDirectionArrow(rel.arrowDirection, rel.position)
 }
 
 internal fun DrawScope.drawRelationshipDiamond(
@@ -244,6 +245,109 @@ internal fun DrawScope.drawRelationshipDiamond(
     }
 }
 
+/**
+ * Draws the direction-arrow indicator (TSeta) beside a relationship diamond.
+ *
+ * Reproduces [TSeta.Paint] and [TSeta.Alinhe] from mer.pas (lines 10887–10993).
+ *
+ * The indicator is a 9 px wide strip placed just outside one of the four diamond edges
+ * (2 px gap). It contains a full-length guide line through its centre and a small
+ * arrowhead (4 strokes) at one end, exactly as Pascal draws with MoveTo/LineTo.
+ *
+ * Pascal layout:
+ *  - posicao 1,2 → LEFT of diamond  (9 × h strip)
+ *  - posicao 3,4 → TOP of diamond   (w × 9 strip)
+ *  - posicao 5,6 → RIGHT of diamond (9 × h strip)
+ *  - posicao 7,8 → BOTTOM of diamond(w × 9 strip)
+ */
+private fun DrawScope.drawDirectionArrow(direction: ArrowDirection, pos: ElementPosition) {
+    if (direction == ArrowDirection.NONE) return
+    val x = pos.x.toFloat()
+    val y = pos.y.toFloat()
+    val w = pos.width.toFloat()
+    val h = pos.height.toFloat()
+    val STRIP = 9f        // Largura = 9 in Pascal
+    val GAP   = 2f        // gap between diamond edge and strip
+    val L     = 5f        // Largura div 2 + 1 = 5 (arrowhead offset from edge)
+
+    // The 4 arrowhead shapes translated directly from TSeta.Paint's MoveTo/LineTo sequences.
+    // All coordinates are in absolute canvas space. cl=component left, ct=component top.
+    // W=L=5 (Largura div 2 + 1) for 9px strips; STRIP=Largura=9.
+    //
+    // posicao 1,6: (W,1)→(1,L)→(L,L-2)→(Largura,L)→(W,1)  — UP arrowhead
+    fun arrowUp(lx: Float, cl: Float, y: Float) {
+        drawLine(Color.Black, Offset(lx,        y + 1f), Offset(cl + 1f,    y + L))
+        drawLine(Color.Black, Offset(cl + 1f,   y + L),  Offset(lx,         y + L - 2f))
+        drawLine(Color.Black, Offset(lx,        y + L - 2f), Offset(cl + STRIP, y + L))
+        drawLine(Color.Black, Offset(cl + STRIP, y + L), Offset(lx,          y + 1f))
+    }
+    // posicao 2,5: (W,H-1)→(1,H-L)→(L,H-L+3)→(Largura,H-L)→(W,H-1)  — DOWN arrowhead
+    // H = diamond height h; H-L = h-5; H-L+3 = h-2.
+    fun arrowDown(lx: Float, cl: Float, y: Float, h: Float) {
+        drawLine(Color.Black, Offset(lx,        y + h - 1f), Offset(cl + 1f,    y + h - L))
+        drawLine(Color.Black, Offset(cl + 1f,   y + h - L),  Offset(lx,         y + h - L + 3f))
+        drawLine(Color.Black, Offset(lx,        y + h - L + 3f), Offset(cl + STRIP, y + h - L))
+        drawLine(Color.Black, Offset(cl + STRIP, y + h - L), Offset(lx,           y + h - 1f))
+    }
+    // posicao 3,8: (W-1,H)→(W-L,1)→(W-L+3,H)→(W-L,Height)→(W-1,H)  — RIGHT arrowhead
+    // For horizontal strips W = diamond width, Height = STRIP = 9; H = 5.
+    fun arrowRight(x: Float, ct: Float, w: Float, ly: Float) {
+        val tipX  = x + w - 1f        // Width-1
+        val baseX = x + w - L         // Width-L = w-5
+        val notchX = x + w - L + 3f  // Width-L+3 = w-2
+        drawLine(Color.Black, Offset(tipX,   ly), Offset(baseX, ct + 1f))
+        drawLine(Color.Black, Offset(baseX,  ct + 1f), Offset(notchX, ly))
+        drawLine(Color.Black, Offset(notchX, ly), Offset(baseX, ct + STRIP))
+        drawLine(Color.Black, Offset(baseX,  ct + STRIP), Offset(tipX, ly))
+    }
+    // posicao 4,7: (1,H)→(L,1)→(L-2,H)→(L,Height)→(1,H)  — LEFT arrowhead
+    fun arrowLeft(x: Float, ct: Float, ly: Float) {
+        val tipX   = x + 1f       // 1
+        val baseX  = x + L        // L=5
+        val notchX = x + L - 2f  // L-2=3
+        drawLine(Color.Black, Offset(tipX,   ly), Offset(baseX, ct + 1f))
+        drawLine(Color.Black, Offset(baseX,  ct + 1f), Offset(notchX, ly))
+        drawLine(Color.Black, Offset(notchX, ly), Offset(baseX, ct + STRIP))
+        drawLine(Color.Black, Offset(baseX,  ct + STRIP), Offset(tipX, ly))
+    }
+
+    when (direction) {
+        // posicao 1, 2 — strip on the LEFT side (9 × h, spanning full diamond height)
+        ArrowDirection.LEFT_UP, ArrowDirection.LEFT_DOWN -> {
+            val cl = x - GAP - STRIP    // component left edge
+            val lx = cl + L             // guide line X  (W = Largura div 2 + 1 = 5)
+            drawLine(Color.Black, Offset(lx, y + 1f), Offset(lx, y + h - 1f))
+            if (direction == ArrowDirection.LEFT_UP) arrowUp(lx, cl, y)
+            else                                     arrowDown(lx, cl, y, h)
+        }
+        // posicao 3, 4 — strip on TOP (w × 9, spanning full diamond width)
+        ArrowDirection.TOP_RIGHT, ArrowDirection.TOP_LEFT -> {
+            val ct = y - GAP - STRIP    // component top edge
+            val ly = ct + L             // guide line Y
+            drawLine(Color.Black, Offset(x + 1f, ly), Offset(x + w - 1f, ly))
+            if (direction == ArrowDirection.TOP_RIGHT) arrowRight(x, ct, w, ly)
+            else                                       arrowLeft(x, ct, ly)
+        }
+        // posicao 5, 6 — strip on the RIGHT side
+        ArrowDirection.RIGHT_DOWN, ArrowDirection.RIGHT_UP -> {
+            val cl = x + w + GAP        // component left edge (right of diamond)
+            val lx = cl + L
+            drawLine(Color.Black, Offset(lx, y + 1f), Offset(lx, y + h - 1f))
+            if (direction == ArrowDirection.RIGHT_UP) arrowUp(lx, cl, y)
+            else                                      arrowDown(lx, cl, y, h)
+        }
+        // posicao 7, 8 — strip on the BOTTOM
+        ArrowDirection.BOTTOM_LEFT, ArrowDirection.BOTTOM_RIGHT -> {
+            val ct = y + h + GAP        // component top edge (below diamond)
+            val ly = ct + L
+            drawLine(Color.Black, Offset(x + 1f, ly), Offset(x + w - 1f, ly))
+            if (direction == ArrowDirection.BOTTOM_RIGHT) arrowRight(x, ct, w, ly)
+            else                                          arrowLeft(x, ct, ly)
+        }
+        ArrowDirection.NONE -> Unit
+    }
+}
+
 // ── Associative Entity ────────────────────────────────────────────────────────
 
 /**
@@ -264,6 +368,7 @@ private fun DrawScope.drawAssociativeEntity(assoc: SchemaElement.AssociativeEnti
         height = (p.height - 30).coerceAtLeast(10),
     )
     drawRelationshipDiamond(innerPos, assoc.relationshipName, showName = true, textMeasurer)
+    drawDirectionArrow(assoc.arrowDirection, innerPos)
 
     // Entity name is drawn right-aligned at top (DT_RIGHT | DT_WORDBREAK in original)
     if (assoc.name.isNotBlank()) {
@@ -995,9 +1100,6 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
         // Diamond owners (Relationship/SelfRelationship) use a fixed snap point for
         // attrs (no Divida participation), so we only track this for rect-like owners.
         val attrByPonto = mutableMapOf<Int, MutableList<Float>>() // ponto → list of other-center values
-        // Attribute connections buffered for post-processing: grouped by ponto so we can
-        // compute Divida rank and detect manually-moved attributes.
-        val attrConnByPonto = mutableMapOf<Int, MutableList<Pair<Int, SchemaElement>>>()
 
         for (conn in schema.connections) {
             val isA = conn.elementIdA == elemId
@@ -1030,18 +1132,46 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                     val isDiamond = elem is SchemaElement.Relationship ||
                                     elem is SchemaElement.SelfRelationship
                     if (isDiamond) {
-                        // Diamond snap: all attrs share a single point at (cx, top + 75% height).
+                        // Diamond snap: attribute connects to the appropriate vertex of the diamond.
+                        // Reproduces TRelacao/TBaseRelacao attribute attachment in TLigacao.Ative.
+                        //
+                        // Guard: if the attribute's bounding box overlaps the diamond's bounding box
+                        // horizontally (or vertically), attrPontoByPosition fell back to angle-based
+                        // detection, which may give a vertex that is on the wrong side of the attribute
+                        // (snap.x > attrLeft for a supposed right-side attr). Fall back to the safe
+                        // center-bottom point in that case, matching the old behaviour for overlapping attrs.
                         val ep = elem.position
-                        elemResult[conn.id] = Offset(ep.x + ep.width / 2f, ep.y + ep.height * 0.75f)
+                        val eLeft  = ep.x.toFloat()
+                        val eRight = (ep.x + ep.width).toFloat()
+                        val eTop   = ep.y.toFloat()
+                        val eBottom= (ep.y + ep.height).toFloat()
+                        val aLeft  = ap.x.toFloat()
+                        val aRight = (ap.x + ap.width).toFloat()
+                        val aTop   = ap.y.toFloat()
+                        val aBottom= (ap.y + ap.height).toFloat()
+                        val overlaps = aRight > eLeft && aLeft < eRight && aBottom > eTop && aTop < eBottom
+                        if (overlaps) {
+                            // Attribute overlaps diamond bounding box — use safe fallback
+                            elemResult[conn.id] = Offset(eLeft + ep.width / 2f, eTop + ep.height * 0.75f)
+                        } else {
+                            val enc = connectionEncaixes(elem, otherElem, schema)
+                            elemResult[conn.id] = enc[ponto]
+                        }
                     } else {
-                        // Track stored center so non-attr Divida accounts for this attr's slot.
+                        // Track attr center so non-attr Divida can account for this slot.
                         val attrCenter = when (ponto) {
                             1, 3 -> ap.y + ap.height / 2f
                             else -> ap.x + ap.width / 2f
                         }
                         attrByPonto.getOrPut(ponto) { mutableListOf() }.add(attrCenter)
-                        // Buffer for post-loop Divida-aware snap computation.
-                        attrConnByPonto.getOrPut(ponto) { mutableListOf() }.add(conn.id to otherElem)
+                        // Direct snap: entity edge + attribute's own stored center position.
+                        // Reproduces the Divida-baked positions that OrganizeAtributos saved into
+                        // the XML — stored center == Divida point → connection is a straight line.
+                        val enc = connectionEncaixes(elem, otherElem, schema)
+                        elemResult[conn.id] = when {
+                            ponto == 2 || ponto == 4 -> Offset(ap.x.toFloat(), enc[ponto].y)
+                            else -> Offset(enc[ponto].x, ap.y + ap.height / 2f)
+                        }
                     }
                 }
             } else if (elem is SchemaElement.Attribute) {
@@ -1057,51 +1187,6 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                 // Non-attribute → non-attribute: accumulate for Divida
                 val ponto = connectionPonto(elem, otherElem, schema, conn)
                 nonAttrByPonto.getOrPut(ponto) { mutableListOf() }.add(conn.id to otherElem)
-            }
-        }
-
-        // Entity→attribute snap computation.
-        //
-        // For each attribute we compare the stored center Y/X with the integer-Divida
-        // position that TBase.OrganizeAtributos would have computed:
-        //   tam = edgeLen div (N+1)  [Pascal integer division]
-        //   dividaAlong = anchorStart + tam * rank
-        //
-        // • Auto-placed attribute: stored center == dividaAlong (exact match, since Pascal
-        //   stored that value). Use storedCenter → entity snap equals attribute snap → straight line.
-        // • Manually moved/resized attribute: stored center ≠ dividaAlong (gap ≥ 2 px).
-        //   Use dividaAlong on the entity side → produces the correct Z-shape routing.
-        for ((ponto, attrConns) in attrConnByPonto) {
-            val firstAttr = attrConns.first().second
-            val enc = connectionEncaixes(elem, firstAttr, schema)
-            val pos = elem.position
-            val (anchorStart, edgeLen) = if (ponto == 1 || ponto == 3) {
-                pos.y.toFloat() to pos.height.toFloat()
-            } else {
-                pos.x.toFloat() to pos.width.toFloat()
-            }
-            val sorted = attrConns.sortedBy { (_, attr) ->
-                if (ponto == 1 || ponto == 3) attr.position.y + attr.position.height / 2f
-                else attr.position.x + attr.position.width / 2f
-            }
-            val N = sorted.size
-            val tam = (edgeLen.toInt() / (N + 1)).toFloat() // integer division, matches Pascal
-            for ((rank, pair) in sorted.withIndex()) {
-                val (connId, attr) = pair
-                val ap = attr.position
-                val storedCenter = if (ponto == 1 || ponto == 3) ap.y + ap.height / 2f
-                                   else ap.x + ap.width / 2f
-                val dividaAlong = anchorStart + tam * (rank + 1)
-                // Threshold 2f: auto-placed attrs match exactly (diff=0), manually moved
-                // attrs deviate by more, triggering Divida for correct Z-shape routing.
-                val snapAlong = if (abs(storedCenter - dividaAlong) < 2f) storedCenter
-                                else dividaAlong
-                elemResult[connId] = when (ponto) {
-                    1    -> Offset(enc[1].x, snapAlong)
-                    3    -> Offset(enc[3].x, snapAlong)
-                    2    -> Offset(snapAlong, enc[2].y)
-                    else -> Offset(snapAlong, enc[4].y)
-                }
             }
         }
 
