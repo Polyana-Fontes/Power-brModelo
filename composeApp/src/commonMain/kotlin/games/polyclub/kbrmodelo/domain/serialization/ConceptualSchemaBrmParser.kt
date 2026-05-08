@@ -358,18 +358,31 @@ object ConceptualSchemaBrmParser {
         // Skip connections involving visual-only TBarraDeAtributos components
         if (e1Oid in barraOids || e2Oid in barraOids) return null
 
-        // Skip connections where one endpoint is an attribute (implicit via ownerId)
         val e1 = elements[e1Oid]
         val e2 = elements[e2Oid]
-        if (e1 is SchemaElement.Attribute || e2 is SchemaElement.Attribute) return null
 
-        // The cardinality of the TCardinalidade component itself
+        // Attribute-to-owner connections: include them as Connection objects with no cardinality
+        // so that the renderer can draw the connecting lines (computeDividedPoints uses them).
+        if (e1 is SchemaElement.Attribute || e2 is SchemaElement.Attribute) {
+            return Connection(
+                id = connId,
+                elementIdA = e1Oid,
+                elementIdB = e2Oid,
+                cardinality = null,
+                showCardinality = false,
+                isWeak = false,
+                orientation = orientation,
+            )
+        }
+
+        // Entity/Relationship connection: full cardinality data
         val cardCode = node.intProp("Cardinalidade")
         val cardinality = Cardinality.fromCode(cardCode)
-
-        // Position of the cardinality label
         val fixa = node.boolProp("Fixa")
-        val labelPos = if (fixa) node.position() else null
+
+        // TCardinalidade's Left/Top is always the current label position (whether Fixa or auto).
+        // Use it unconditionally so that brM and XML produce the same positioned labels.
+        val labelPos = node.position()
 
         return Connection(
             id = connId,
@@ -380,6 +393,7 @@ object ConceptualSchemaBrmParser {
             cardinalityFixed = fixa,
             isWeak = node.boolProp("Fraca") || isWeak,
             orientation = orientation,
+            cardinalityRole = node.strProp("Nome"),
             cardinalityPosition = labelPos,
         )
     }
