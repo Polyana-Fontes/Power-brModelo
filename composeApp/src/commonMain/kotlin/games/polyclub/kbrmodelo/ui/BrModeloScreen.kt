@@ -41,6 +41,7 @@ internal fun BrModeloScreen(
     activeMenu: MainMenuType?,
     selectedTab: RibbonTab,
     schema: ConceptualSchema?,
+    isDragOver: Boolean = false,
     onMainMenuToggle: () -> Unit,
     onMainMenuHover: (MainMenuType) -> Unit,
     onTabSelect: (RibbonTab) -> Unit,
@@ -54,7 +55,7 @@ internal fun BrModeloScreen(
                 onMainMenuClick = onMainMenuToggle,
                 onTabSelect = onTabSelect
             )
-            WorkspaceArea(schema = schema)
+            WorkspaceArea(schema = schema, isDragOver = isDragOver)
         }
 
         // Dismiss overlay behind the menu

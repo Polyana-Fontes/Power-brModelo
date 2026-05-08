@@ -18,15 +18,15 @@
 
 package games.polyclub.kbrmodelo.ui
 
-import java.util.concurrent.CountDownLatch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import javax.swing.JFileChooser
-import javax.swing.SwingUtilities
 import javax.swing.filechooser.FileNameExtensionFilter
 
-internal actual fun showNativeFilePicker(): ByteArray? {
+internal actual suspend fun showNativeFilePicker(): ByteArray? = withContext(Dispatchers.IO) {
     var result: ByteArray? = null
-    val latch = CountDownLatch(1)
-    SwingUtilities.invokeLater {
+    val latch = java.util.concurrent.CountDownLatch(1)
+    javax.swing.SwingUtilities.invokeLater {
         val chooser = JFileChooser().apply {
             dialogTitle = "Abrir modelo brModelo"
             fileFilter = FileNameExtensionFilter("Arquivos brModelo (*.xml, *.brM)", "xml", "brM", "brm")
@@ -39,5 +39,5 @@ internal actual fun showNativeFilePicker(): ByteArray? {
         latch.countDown()
     }
     latch.await()
-    return result
+    result
 }

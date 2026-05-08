@@ -20,6 +20,7 @@ package games.polyclub.kbrmodelo.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -39,9 +40,13 @@ import androidx.compose.ui.unit.sp
 import games.polyclub.kbrmodelo.domain.ConceptualSchema
 import games.polyclub.kbrmodelo.ui.canvas.SchemaCanvas
 
+private val DRAG_OVERLAY_BG    = Color(0x882C7BE8)   // semi-transparent blue
+private val DRAG_OVERLAY_BORDER = Color(0xFF1E5CC7)
+
 @Composable
 internal fun MainCanvasPanel(
     schema: ConceptualSchema? = null,
+    isDragOver: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -70,12 +75,32 @@ internal fun MainCanvasPanel(
             Text("Localizar objeto", fontSize = 12.sp, color = Color(0xFF2D2D2D))
         }
 
-        SchemaCanvas(
-            schema = schema,
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(2.dp)
-                .border(1.dp, Color(0xFF7A7A7A)),
-        )
+                .border(
+                    width = if (isDragOver) 3.dp else 1.dp,
+                    color = if (isDragOver) DRAG_OVERLAY_BORDER else Color(0xFF7A7A7A),
+                ),
+        ) {
+            SchemaCanvas(schema = schema, modifier = Modifier.fillMaxSize())
+
+            // Drag-over overlay (visible only on WASM when dragging a file over the window)
+            if (isDragOver) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(DRAG_OVERLAY_BG),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "Solte o arquivo para abrir o modelo",
+                        fontSize = 16.sp,
+                        color = Color.White,
+                    )
+                }
+            }
+        }
     }
 }

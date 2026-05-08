@@ -18,4 +18,72 @@
 
 package games.polyclub.kbrmodelo.ui
 
-internal actual fun showNativeFilePicker(): ByteArray? = null
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
+
+/**
+ * Opens the browser's native file picker dialog by creating a hidden
+ * `<input type="file">` element and programmatically clicking it.
+ *
+ * The file is read as a data URL (base64) via FileReader, then decoded
+ * to a ByteArray in Kotlin. Suspends until the user selects a file or
+ * closes the dialog.
+ */
+internal actual suspend fun showNativeFilePicker(): ByteArray? =
+    suspendCancellableCoroutine { cont ->
+        triggerFileInput { dataUrl ->
+            if (dataUrl == null) {
+                cont.resume(null)
+            } else {
+                @OptIn(ExperimentalEncodingApi::class)
+                val bytes = runCatching {
+                    Base64.Default.decode(dataUrl.substringAfter(","))
+                }.getOrNull()
+                cont.resume(bytes)
+            }
+        }
+    }
+
+/**
+ * Creates a hidden `<input type="file">` in the DOM, triggers it, reads
+ * the selected file as a data URL and calls [callback] with the result.
+ *
+ * The [callback] parameter is a Kotlin lambda; Kotlin/Wasm JS exposes it
+ * as a callable JavaScript function inside the `js()` block.
+ */
+private fun triggerFileInput(callback: (String?) -> Unit): Unit = js(
+    """
+    (function(cb) {
+        var input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.xml,.brM,.brm';
+        input.style.display = 'none';
+        document.body.appendChild(input);
+        var cleanup = function() {
+            try { document.body.removeChild(input); } catch(e) {}
+        };
+        input.addEventListener('change', function() {
+            var file = input.files && input.files[0];
+            if (file) {
+                var reader = new FileReader();
+                reader.onload  = function(e) { cleanup(); cb(e.target.result); };
+                reader.onerror = function()  { cleanup(); cb(null); };
+                reader.readAsDataURL(file);
+            } else {
+                cleanup();
+                cb(null);
+            }
+        });
+        // If the user closes the dialog without picking (focus returns to window)
+        window.addEventListener('focus', function onFocus() {
+            window.removeEventListener('focus', onFocus);
+            setTimeout(function() {
+                if (input.files && input.files.length === 0) { cleanup(); cb(null); }
+            }, 500);
+        });
+        input.click();
+    })(callback)
+    """
+)

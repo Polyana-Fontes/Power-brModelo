@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,10 +35,14 @@ import games.polyclub.kbrmodelo.domain.serialization.ConceptualSchemaXmlParser
 import games.polyclub.kbrmodelo.ui.BrModeloScreen
 import games.polyclub.kbrmodelo.ui.MainMenuType
 import games.polyclub.kbrmodelo.ui.RibbonTab
+import games.polyclub.kbrmodelo.ui.consumeWindowDropDataUrl
+import games.polyclub.kbrmodelo.ui.isWindowDragActive
+import games.polyclub.kbrmodelo.ui.setupWindowDragDrop
 import games.polyclub.kbrmodelo.ui.showNativeFilePicker
-import kotlinx.coroutines.Dispatchers
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @Composable
 fun App() {
@@ -45,18 +50,31 @@ fun App() {
     var activeMenu by remember { mutableStateOf<MainMenuType?>(null) }
     var selectedTab by remember { mutableStateOf(RibbonTab.EsquemaConceitual) }
     var schema by remember { mutableStateOf<ConceptualSchema?>(null) }
+    var isDragOver by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    // Register window-level drag-and-drop once (no-op on Desktop)
+    LaunchedEffect(Unit) {
+        setupWindowDragDrop()
+    }
+
+    // Poll for drag-over state and dropped files (effective on WASM only)
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(120)
+            isDragOver = isWindowDragActive()
+            val dataUrl = consumeWindowDropDataUrl()
+            if (dataUrl != null) {
+                loadFromDataUrl(dataUrl)?.let { schema = it }
+            }
+        }
+    }
 
     val openFile: () -> Unit = {
         scope.launch {
-            val bytes = withContext(Dispatchers.Default) { showNativeFilePicker() }
-            if (bytes != null) {
-                runCatching {
-                    withContext(Dispatchers.Default) { ConceptualSchemaXmlParser.parse(bytes) }
-                }.onSuccess { loaded ->
-                    schema = loaded
-                }
-            }
+            val bytes = showNativeFilePicker() ?: return@launch
+            runCatching { ConceptualSchemaXmlParser.parse(bytes) }
+                .onSuccess { schema = it }
         }
     }
 
@@ -67,6 +85,7 @@ fun App() {
                 activeMenu = activeMenu,
                 selectedTab = selectedTab,
                 schema = schema,
+                isDragOver = isDragOver,
                 onMainMenuToggle = {
                     isMainMenuOpen = !isMainMenuOpen
                     if (!isMainMenuOpen) activeMenu = null
@@ -82,3 +101,10 @@ fun App() {
         }
     }
 }
+
+@OptIn(ExperimentalEncodingApi::class)
+private fun loadFromDataUrl(dataUrl: String): ConceptualSchema? =
+    runCatching {
+        val bytes = Base64.Default.decode(dataUrl.substringAfter(","))
+        ConceptualSchemaXmlParser.parse(bytes)
+    }.getOrNull()

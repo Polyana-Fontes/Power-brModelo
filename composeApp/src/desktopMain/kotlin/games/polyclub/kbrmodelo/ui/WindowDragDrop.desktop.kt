@@ -18,9 +18,9 @@
 
 package games.polyclub.kbrmodelo.ui
 
-/**
- * Opens a native file picker dialog to select a brModelo XML file.
- * Suspends until the user selects a file or cancels.
- * Returns the raw file bytes, or null if the user cancelled.
- */
-internal expect suspend fun showNativeFilePicker(): ByteArray?
+// Desktop drag-and-drop will be handled separately (Compose Desktop DnD API).
+// These stubs keep the expect/actual contract satisfied.
+
+internal actual fun setupWindowDragDrop(): Unit = Unit
+internal actual fun isWindowDragActive(): Boolean = false
+internal actual fun consumeWindowDropDataUrl(): String? = null

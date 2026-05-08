@@ -29,9 +29,9 @@ import androidx.compose.ui.unit.dp
 import games.polyclub.kbrmodelo.domain.ConceptualSchema
 
 @Composable
-internal fun WorkspaceArea(schema: ConceptualSchema? = null) {
+internal fun WorkspaceArea(schema: ConceptualSchema? = null, isDragOver: Boolean = false) {
     Row(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-        MainCanvasPanel(schema = schema, modifier = Modifier.weight(1f))
+        MainCanvasPanel(schema = schema, isDragOver = isDragOver, modifier = Modifier.weight(1f))
         Spacer(modifier = Modifier.width(8.dp))
         InspectorPanel()
     }

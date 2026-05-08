@@ -19,8 +19,18 @@
 package games.polyclub.kbrmodelo.ui
 
 /**
- * Opens a native file picker dialog to select a brModelo XML file.
- * Suspends until the user selects a file or cancels.
- * Returns the raw file bytes, or null if the user cancelled.
+ * Registers window-level drag-and-drop listeners.
+ * On WASM/JS this attaches native browser `dragover` / `drop` handlers that
+ * write to JS global variables polled by [isWindowDragActive] and
+ * [consumeWindowDropDataUrl]. On other platforms this is a no-op.
  */
-internal expect suspend fun showNativeFilePicker(): ByteArray?
+internal expect fun setupWindowDragDrop()
+
+/** Returns true while a file is being dragged over the browser window (WASM only). */
+internal expect fun isWindowDragActive(): Boolean
+
+/**
+ * Returns and clears the data URL of the last file dropped on the window,
+ * or null if nothing has been dropped since the last call (WASM only).
+ */
+internal expect fun consumeWindowDropDataUrl(): String?

@@ -35,6 +35,10 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -139,7 +143,12 @@ private fun MainMenuItem(
     onHover: () -> Unit = {},
     onClick: () -> Unit = {},
 ) {
-    val bg = if (selected) MENU_ACTIVE else Color.Transparent
+    var isHovered by remember { mutableStateOf(false) }
+    val bg = when {
+        selected  -> MENU_ACTIVE
+        isHovered -> MENU_ACTIVE.copy(alpha = 0.45f)
+        else      -> Color.Transparent
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -148,11 +157,13 @@ private fun MainMenuItem(
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent()
-                        if (event.type == PointerEventType.Enter && hasSubmenu) {
-                            onHover()
-                        }
-                        if (event.type == PointerEventType.Release && !hasSubmenu) {
-                            onClick()
+                        when (event.type) {
+                            PointerEventType.Enter -> {
+                                isHovered = true
+                                if (hasSubmenu) onHover()
+                            }
+                            PointerEventType.Exit  -> isHovered = false
+                            PointerEventType.Release -> if (!hasSubmenu) onClick()
                         }
                     }
                 }
