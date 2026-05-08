@@ -16,23 +16,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package games.polyclub.kbrmodelo.ui
+package games.polyclub.kbrmodelo.domain.xml
 
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import games.polyclub.kbrmodelo.domain.ConceptualSchema
-
-@Composable
-internal fun WorkspaceArea(schema: ConceptualSchema? = null) {
-    Row(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-        MainCanvasPanel(schema = schema, modifier = Modifier.weight(1f))
-        Spacer(modifier = Modifier.width(8.dp))
-        InspectorPanel()
-    }
+/** WasmJS stub — XML file I/O is not yet implemented for the browser target. */
+actual fun parseXmlBytes(bytes: ByteArray): XmlNode {
+    throw UnsupportedOperationException(
+        "XML parsing is not yet available on the WebAssembly target."
+    )
 }

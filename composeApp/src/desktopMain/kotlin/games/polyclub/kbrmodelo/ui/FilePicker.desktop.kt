@@ -18,21 +18,26 @@
 
 package games.polyclub.kbrmodelo.ui
 
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import games.polyclub.kbrmodelo.domain.ConceptualSchema
+import java.util.concurrent.CountDownLatch
+import javax.swing.JFileChooser
+import javax.swing.SwingUtilities
+import javax.swing.filechooser.FileNameExtensionFilter
 
-@Composable
-internal fun WorkspaceArea(schema: ConceptualSchema? = null) {
-    Row(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-        MainCanvasPanel(schema = schema, modifier = Modifier.weight(1f))
-        Spacer(modifier = Modifier.width(8.dp))
-        InspectorPanel()
+internal actual fun showNativeFilePicker(): ByteArray? {
+    var result: ByteArray? = null
+    val latch = CountDownLatch(1)
+    SwingUtilities.invokeLater {
+        val chooser = JFileChooser().apply {
+            dialogTitle = "Abrir modelo brModelo"
+            fileFilter = FileNameExtensionFilter("Arquivos brModelo (*.xml, *.brM)", "xml", "brM", "brm")
+            isMultiSelectionEnabled = false
+        }
+        val status = chooser.showOpenDialog(null)
+        if (status == JFileChooser.APPROVE_OPTION) {
+            result = chooser.selectedFile.readBytes()
+        }
+        latch.countDown()
     }
+    latch.await()
+    return result
 }

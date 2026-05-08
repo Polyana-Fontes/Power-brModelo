@@ -73,12 +73,13 @@ private val SEPARATOR   = Color(0xFFC0CAD4)
 internal fun FunctionalMainMenu(
     modifier: Modifier = Modifier,
     activeMenu: MainMenuType?,
-    onMenuHover: (MainMenuType) -> Unit
+    onMenuHover: (MainMenuType) -> Unit,
+    onOpenFile: () -> Unit = {},
 ) {
     Row(
         modifier = modifier.border(1.dp, MENU_BORDER)
     ) {
-        MainMenuItems(activeMenu = activeMenu, onMenuHover = onMenuHover)
+        MainMenuItems(activeMenu = activeMenu, onMenuHover = onMenuHover, onOpenFile = onOpenFile)
         // The right panel always shows; content varies by hovered item
         when (activeMenu) {
             MainMenuType.NewModel -> NewModelSubmenu()
@@ -89,7 +90,7 @@ internal fun FunctionalMainMenu(
 }
 
 @Composable
-private fun MainMenuItems(activeMenu: MainMenuType?, onMenuHover: (MainMenuType) -> Unit) {
+private fun MainMenuItems(activeMenu: MainMenuType?, onMenuHover: (MainMenuType) -> Unit, onOpenFile: () -> Unit) {
     Column(
         modifier = Modifier
             .width(170.dp)
@@ -103,7 +104,7 @@ private fun MainMenuItems(activeMenu: MainMenuType?, onMenuHover: (MainMenuType)
             selected = activeMenu == MainMenuType.NewModel,
             onHover = { onMenuHover(MainMenuType.NewModel) }
         )
-        MainMenuItem("Abrir", Res.drawable.abrir_2s)
+        MainMenuItem("Abrir", Res.drawable.abrir_2s, onClick = onOpenFile)
         MainMenuItem("Salvar", Res.drawable.salvar_s)
         MainMenuItem("Salvar Como...", Res.drawable.salvar_como_s)
         MainMenuItem("Fechar Modelo Atual", Res.drawable.fechar_2s)
@@ -135,7 +136,8 @@ private fun MainMenuItem(
     icon: DrawableResource,
     hasSubmenu: Boolean = false,
     selected: Boolean = false,
-    onHover: () -> Unit = {}
+    onHover: () -> Unit = {},
+    onClick: () -> Unit = {},
 ) {
     val bg = if (selected) MENU_ACTIVE else Color.Transparent
     Row(
@@ -148,6 +150,9 @@ private fun MainMenuItem(
                         val event = awaitPointerEvent()
                         if (event.type == PointerEventType.Enter && hasSubmenu) {
                             onHover()
+                        }
+                        if (event.type == PointerEventType.Release && !hasSubmenu) {
+                            onClick()
                         }
                     }
                 }

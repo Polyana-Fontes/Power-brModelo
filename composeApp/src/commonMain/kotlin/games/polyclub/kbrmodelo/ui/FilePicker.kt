@@ -18,21 +18,9 @@
 
 package games.polyclub.kbrmodelo.ui
 
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import games.polyclub.kbrmodelo.domain.ConceptualSchema
-
-@Composable
-internal fun WorkspaceArea(schema: ConceptualSchema? = null) {
-    Row(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-        MainCanvasPanel(schema = schema, modifier = Modifier.weight(1f))
-        Spacer(modifier = Modifier.width(8.dp))
-        InspectorPanel()
-    }
-}
+/**
+ * Opens a native file picker dialog to select a brModelo XML file.
+ * Blocking call — must be called from a background thread (e.g., Dispatchers.IO).
+ * Returns the file bytes, or null if the user cancelled.
+ */
+internal expect fun showNativeFilePicker(): ByteArray?

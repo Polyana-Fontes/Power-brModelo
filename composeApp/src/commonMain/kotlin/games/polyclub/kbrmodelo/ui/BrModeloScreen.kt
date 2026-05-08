@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import games.polyclub.kbrmodelo.domain.ConceptualSchema
 import games.polyclub.kbrmodelo.ui.components.ribbon.HeaderRibbon
 
 // TopBar height (30dp) + ribbon content (90dp) = 120dp to place menu just below the TopBar button
@@ -39,10 +40,12 @@ internal fun BrModeloScreen(
     isMainMenuOpen: Boolean,
     activeMenu: MainMenuType?,
     selectedTab: RibbonTab,
+    schema: ConceptualSchema?,
     onMainMenuToggle: () -> Unit,
     onMainMenuHover: (MainMenuType) -> Unit,
     onTabSelect: (RibbonTab) -> Unit,
-    onDismissMenu: () -> Unit
+    onDismissMenu: () -> Unit,
+    onOpenFile: () -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -51,7 +54,7 @@ internal fun BrModeloScreen(
                 onMainMenuClick = onMainMenuToggle,
                 onTabSelect = onTabSelect
             )
-            WorkspaceArea()
+            WorkspaceArea(schema = schema)
         }
 
         // Dismiss overlay behind the menu
@@ -70,7 +73,11 @@ internal fun BrModeloScreen(
                     .padding(start = 4.dp, top = MENU_TOP_OFFSET)
                     .height(340.dp),
                 activeMenu = activeMenu,
-                onMenuHover = onMainMenuHover
+                onMenuHover = onMainMenuHover,
+                onOpenFile = {
+                    onDismissMenu()
+                    onOpenFile()
+                },
             )
         }
     }

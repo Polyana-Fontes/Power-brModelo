@@ -25,19 +25,40 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import games.polyclub.kbrmodelo.domain.ConceptualSchema
+import games.polyclub.kbrmodelo.domain.serialization.ConceptualSchemaXmlParser
 import games.polyclub.kbrmodelo.ui.BrModeloScreen
 import games.polyclub.kbrmodelo.ui.MainMenuType
 import games.polyclub.kbrmodelo.ui.RibbonTab
+import games.polyclub.kbrmodelo.ui.showNativeFilePicker
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun App() {
     var isMainMenuOpen by remember { mutableStateOf(false) }
-    // null = no submenu shown yet; only opens on hover
     var activeMenu by remember { mutableStateOf<MainMenuType?>(null) }
     var selectedTab by remember { mutableStateOf(RibbonTab.EsquemaConceitual) }
+    var schema by remember { mutableStateOf<ConceptualSchema?>(null) }
+    val scope = rememberCoroutineScope()
+
+    val openFile: () -> Unit = {
+        scope.launch {
+            val bytes = withContext(Dispatchers.Default) { showNativeFilePicker() }
+            if (bytes != null) {
+                runCatching {
+                    withContext(Dispatchers.Default) { ConceptualSchemaXmlParser.parse(bytes) }
+                }.onSuccess { loaded ->
+                    schema = loaded
+                }
+            }
+        }
+    }
 
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFE3E3E3)) {
@@ -45,6 +66,7 @@ fun App() {
                 isMainMenuOpen = isMainMenuOpen,
                 activeMenu = activeMenu,
                 selectedTab = selectedTab,
+                schema = schema,
                 onMainMenuToggle = {
                     isMainMenuOpen = !isMainMenuOpen
                     if (!isMainMenuOpen) activeMenu = null
@@ -54,7 +76,8 @@ fun App() {
                 onDismissMenu = {
                     isMainMenuOpen = false
                     activeMenu = null
-                }
+                },
+                onOpenFile = openFile,
             )
         }
     }

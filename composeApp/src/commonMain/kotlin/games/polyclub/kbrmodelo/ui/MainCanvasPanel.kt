@@ -20,7 +20,6 @@ package games.polyclub.kbrmodelo.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -37,9 +36,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import games.polyclub.kbrmodelo.domain.ConceptualSchema
+import games.polyclub.kbrmodelo.ui.canvas.SchemaCanvas
 
 @Composable
-internal fun MainCanvasPanel(modifier: Modifier = Modifier) {
+internal fun MainCanvasPanel(
+    schema: ConceptualSchema? = null,
+    modifier: Modifier = Modifier,
+) {
     Column(
         modifier = modifier
             .fillMaxHeight()
@@ -55,21 +59,23 @@ internal fun MainCanvasPanel(modifier: Modifier = Modifier) {
                 .padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Modelos abertos", fontSize = 12.sp, color = Color(0xFF2D2D2D))
+            Text(
+                if (schema != null && schema.name.isNotBlank()) schema.name else "Modelos abertos",
+                fontSize = 12.sp,
+                color = Color(0xFF2D2D2D),
+            )
             Spacer(modifier = Modifier.width(14.dp))
             Text("▾", fontSize = 11.sp, color = Color(0xFF4D4D4D))
             Spacer(modifier = Modifier.width(20.dp))
             Text("Localizar objeto", fontSize = 12.sp, color = Color(0xFF2D2D2D))
         }
-        Box(
+
+        SchemaCanvas(
+            schema = schema,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(8.dp)
-                .border(1.dp, Color(0xFF7A7A7A))
-                .background(Color(0xFFEDEDED)),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("Área de modelagem (visual)", color = Color(0xFF444444))
-        }
+                .padding(2.dp)
+                .border(1.dp, Color(0xFF7A7A7A)),
+        )
     }
 }

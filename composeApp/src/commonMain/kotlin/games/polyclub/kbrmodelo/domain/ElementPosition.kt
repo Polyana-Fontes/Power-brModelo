@@ -16,23 +16,17 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package games.polyclub.kbrmodelo.ui
+package games.polyclub.kbrmodelo.domain
 
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import games.polyclub.kbrmodelo.domain.ConceptualSchema
-
-@Composable
-internal fun WorkspaceArea(schema: ConceptualSchema? = null) {
-    Row(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-        MainCanvasPanel(schema = schema, modifier = Modifier.weight(1f))
-        Spacer(modifier = Modifier.width(8.dp))
-        InspectorPanel()
-    }
-}
+/**
+ * Represents the position and size of an element on the canvas.
+ *
+ * Corresponds to the visual bounds inherited by all [TBase] subclasses
+ * (Left, Top, Width, Height) in the original Pascal source.
+ */
+data class ElementPosition(
+    val x: Int,
+    val y: Int,
+    val width: Int,
+    val height: Int,
+)
