@@ -323,6 +323,52 @@ class ConceptualSchemaBrmTest {
             "Pousada (${pousada.elements.size}) should have more elements than simples (${simples.elements.size})",
         )
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // MISC COMPONENTS brM — teste-varios-componentes
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `varios brM - parses without error`() {
+        // Act & Assert
+        assertDoesNotThrow { parseBrm("teste-varios-componentes.brM") }
+    }
+
+    @Test
+    fun `varios brM - annotation named outra cor has color matching XML`() {
+        // Arrange
+        val brm = parseBrm("teste-varios-componentes.brM")
+        val xml = parseXml("teste-varios-componentes.xml")
+
+        // Act
+        val brmAnnotation = brm.annotations.firstOrNull { it.name == "outra cor" }
+        val xmlAnnotation = xml.annotations.firstOrNull { it.name == "outra cor" }
+
+        // Assert
+        assertNotNull(brmAnnotation, "Annotation 'outra cor' not found in brM")
+        assertNotNull(xmlAnnotation, "Annotation 'outra cor' not found in XML")
+        assertEquals(xmlAnnotation.color, brmAnnotation.color,
+            "Color of 'outra cor' differs: XML=${xmlAnnotation.color}, brM=${brmAnnotation.color}")
+    }
+
+    @Test
+    fun `varios brM - annotation colors match XML for all annotations`() {
+        // Arrange
+        val brm = parseBrm("teste-varios-componentes.brM")
+        val xml = parseXml("teste-varios-componentes.xml")
+
+        val xmlByName = xml.annotations.associateBy { it.name }
+
+        // Act & Assert
+        for (brmAnnotation in brm.annotations) {
+            val xmlAnnotation = xmlByName[brmAnnotation.name] ?: continue
+            assertEquals(
+                xmlAnnotation.color, brmAnnotation.color,
+                "Color of annotation '${brmAnnotation.name}' differs: " +
+                    "XML=${xmlAnnotation.color}, brM=${brmAnnotation.color}"
+            )
+        }
+    }
 }
 
 // Convenience alias so the test class does not depend on JUnit 4 directly

@@ -483,14 +483,58 @@ object ConceptualSchemaBrmParser {
         )
     }
 
-    /** Parses a Delphi COLORREF integer or identifier string to an ARGB Int. */
+    /**
+     * Parses a Delphi COLORREF integer or identifier string to an Int.
+     *
+     * Delphi stores TColor values in DFM files as either a decimal integer or a named
+     * constant (vaIdent). Named constants fall into two categories:
+     *  - Absolute VCL colours (e.g. clRed, clSkyBlue) → fixed integer values, listed below.
+     *  - System colours (e.g. clBtnFace, clWindow) → runtime-resolved, platform-dependent;
+     *    these return null so callers fall back to a reasonable default.
+     */
     private fun parseColorRef(value: String): Int? {
         if (value.isBlank()) return null
         return when {
-            value.startsWith("cl", ignoreCase = true) -> null // system colour name → default
+            value.startsWith("cl", ignoreCase = true) -> DELPHI_VCL_COLORS[value.lowercase()]
             value.startsWith("#") -> value.drop(1).toIntOrNull(16)
             else -> value.toIntOrNull()
         }
+    }
+
+    /**
+     * Mapping of standard Delphi VCL colour identifiers to their COLORREF integer values
+     * (0x00BBGGRR — note: blue and red channels are swapped from standard RGB).
+     *
+     * Only absolute colours are listed; system colours (clBtnFace, clWindow, etc.) are
+     * omitted intentionally so callers receive null and apply a platform default.
+     *
+     * Keys are lowercased for case-insensitive lookup.
+     */
+    private val DELPHI_VCL_COLORS: Map<String, Int> = buildMap {
+        // Standard 16 VCL colours (from Delphi Graphics.pas)
+        put("clblack",   0x000000)
+        put("clmaroon",  0x000080)
+        put("clgreen",   0x008000)
+        put("clolive",   0x008080)
+        put("clnavy",    0x800000)
+        put("clpurple",  0x800080)
+        put("clteal",    0x808000)
+        put("clgray",    0x808080)
+        put("clsilver",  0xC0C0C0)
+        put("clred",     0x0000FF)   // COLORREF BGR: R=0xFF → pure red
+        put("cllime",    0x00FF00)
+        put("clyellow",  0x00FFFF)
+        put("clblue",    0xFF0000)
+        put("clfuchsia", 0xFF00FF)
+        put("claqua",    0xFFFF00)
+        put("clltgray",  0xC0C0C0)
+        put("cldkgray",  0x808080)
+        put("clwhite",   0xFFFFFF)
+        // Extended VCL palette (Delphi 7+)
+        put("clmoneygreen", 0xC0DCC0)
+        put("clskyblue",    0xF0CAA6) // 15780518 — Delphi VCL sky blue (not CSS sky blue)
+        put("clcream",      0xF0FBFF)
+        put("clmedgray",    0xA4A0A0)
     }
 
     /** Hidden-attribute parsing is not yet implemented; deferred to a future iteration. */
