@@ -42,7 +42,9 @@ import games.polyclub.kbrmodelo.domain.ElementPosition
 import games.polyclub.kbrmodelo.domain.SchemaElement
 import kotlin.math.abs
 import kotlin.math.atan2
+import kotlin.math.floor
 import kotlin.math.PI
+import kotlin.math.sqrt
 
 // ── Colors translated from the original Pascal source ─────────────────────────
 // Pen.Color := TColor(-5) → COLORREF $FFFFFFFB → R=251, G=255, B=255 (near-white outline)
@@ -582,7 +584,19 @@ private fun DrawScope.drawCardinalityLabel(
     if (!conn.showCardinality || conn.cardinality == null) return
     val baseLabel = conn.cardinality.label
     if (baseLabel.isBlank()) return
-    val cardStr = if (conn.cardinalityRole.isNotEmpty()) "$baseLabel ${conn.cardinalityRole}" else baseLabel
+
+    // Pascal TCardinalidade.Paint (mer.pas 9300-9302):
+    //   Default format: "role (card)"  e.g. "Responsável (1,1)"
+    //   Inverted format when Ponta.Left < label.Left: "(card) role"  e.g. "(1,1) Responsável"
+    // Ponta = elementIdB (the destination/entity end of the connection).
+    val cardStr = if (conn.cardinalityRole.isNotEmpty()) {
+        val pontaLeft = schema.elements[conn.elementIdB]?.position?.x ?: 0
+        val labelLeft = conn.cardinalityPosition?.x ?: 0
+        if (pontaLeft < labelLeft) "$baseLabel ${conn.cardinalityRole}"
+        else "${conn.cardinalityRole} $baseLabel"
+    } else {
+        baseLabel
+    }
 
     val elemA = schema.elements[conn.elementIdA] ?: return
     val elemB = schema.elements[conn.elementIdB] ?: return
@@ -1069,7 +1083,19 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
             val nTotal = combined.size
             if (nTotal == 0) continue
 
-            val sorted = combined.sortedBy { it.first }
+            // SelfRelationship with exactly 2 connections on the same ponto and no attrs:
+            // use Pascal's TAutoRelacao.PrepareToAtive / triagulo formula, which places
+            // snap points on the diamond's diagonal edge rather than at the central vertex.
+            if (elem is SchemaElement.SelfRelationship && pairs.size == 2 && attrCenters.isEmpty()) {
+                applyAutoRelacaoTriagulo(elem, ponto, pairs, elemResult)
+                continue
+            }
+
+            // Primary sort by other-element center; secondary by connId so that when two
+            // connections share the same other-element (e.g. both legs of an AutoRelacao),
+            // lower id = "Menor" (created first = left/top slot) matches the diamond-side
+            // triagulo ordering, keeping lines from crossing.
+            val sorted = combined.sortedWith(compareBy({ it.first }, { it.second ?: Int.MAX_VALUE }))
             val tam = edgeLen / (nTotal + 1)
 
             if (pairs.size == 1 && attrCenters.isEmpty()) {
@@ -1097,6 +1123,65 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
         }
     }
     return result
+}
+
+/**
+ * Computes the two snap points for a [SelfRelationship] diamond when it has exactly
+ * two connections to the same entity on the same [ponto].
+ *
+ * Ports [TAutoRelacao.PrepareToAtive] from `mer.pas` (line 7760): the snap point is
+ * shifted from the central vertex onto the diagonal edge of the rhombus using a
+ * right-triangle calculation ("triagulo"). Both connections receive symmetric offsets
+ * (±nVl), and the one with the lower connection id is treated as "Menor" (gets -nVl),
+ * matching the original `FLigacoes.IndexOf` ordering where lower-id connections were
+ * created/added first.
+ */
+private fun applyAutoRelacaoTriagulo(
+    selfRel: SchemaElement.SelfRelationship,
+    ponto: Int,
+    pairs: List<Pair<Int, SchemaElement>>,
+    elemResult: MutableMap<Int, Offset>,
+) {
+    if (pairs.size != 2) return
+
+    val dp = selfRel.position
+    val halfW = dp.width / 2f
+    val halfH = dp.height / 2f
+    val cx = dp.x + halfW
+    val cy = dp.y + halfH
+
+    val ep = pairs.first().second.position
+
+    // nVl = entity.width / 2, clamped to the diamond's perpendicular half-dimension.
+    var nVl = ep.width / 2f
+    nVl = when (ponto) {
+        1, 3 -> nVl.coerceAtMost(halfH)  // L/R pontos: clamp to diamond.height/2
+        else -> nVl.coerceAtMost(halfW)  // T/B pontos: clamp to diamond.width/2
+    }
+
+    // A and B depend on ponto (swapped for L/R vs T/B pontos).
+    val (A, B) = when (ponto) {
+        1, 3 -> Pair(halfW, halfH)  // A = Width/2, B = Height/2
+        else -> Pair(halfH, halfW)  // A = Height/2, B = Width/2
+    }
+
+    val C = sqrt(A * A + B * B)
+    val xVal = C * nVl / B
+    val T = floor(sqrt(xVal * xVal - nVl * nVl))
+
+    // Lower id = "Menor" (first in entity FLigacoes, created earlier) → gets -nVl offset.
+    val sorted = pairs.sortedBy { it.first }
+    for ((idx, pair) in sorted.withIndex()) {
+        val sign = if (idx == 0) -1f else 1f
+        val snap = when (ponto) {
+            4 -> Offset(cx + sign * nVl, dp.y + dp.height - T)
+            2 -> Offset(cx + sign * nVl, dp.y + T)
+            1 -> Offset(dp.x + T, cy + sign * nVl)
+            3 -> Offset(dp.x + dp.width - T, cy + sign * nVl)
+            else -> Offset(cx, cy)
+        }
+        elemResult[pair.first] = snap
+    }
 }
 
 // ── Helper: orthogonal routing (TLigacao.Ative) ───────────────────────────────
