@@ -947,6 +947,11 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
     for ((elemId, elem) in schema.elements) {
         val elemResult = result.getOrPut(elemId) { mutableMapOf() }
         val nonAttrByPonto = mutableMapOf<Int, MutableList<Pair<Int, SchemaElement>>>()
+        // Attribute connections per ponto, used to adjust non-attr Divida spacing.
+        // Diamond owners (Relationship/SelfRelationship) use a fixed snap point for
+        // attrs (no Divida participation), so we only track this for rect-like owners.
+        val isDiamondOwner = elem is SchemaElement.Relationship || elem is SchemaElement.SelfRelationship
+        val attrByPonto = mutableMapOf<Int, MutableList<Float>>() // ponto → list of other-center values
 
         for (conn in schema.connections) {
             val isA = conn.elementIdA == elemId
@@ -986,6 +991,14 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                     val enc = connectionEncaixes(elem, otherElem, schema)
                     val isDiamond = elem is SchemaElement.Relationship ||
                                     elem is SchemaElement.SelfRelationship
+                    // Track attr position so non-attr Divida accounts for it (rect owners only).
+                    if (!isDiamond) {
+                        val attrCenter = when (ponto) {
+                            1, 3 -> ap.y + ap.height / 2f
+                            else -> ap.x + ap.width / 2f
+                        }
+                        attrByPonto.getOrPut(ponto) { mutableListOf() }.add(attrCenter)
+                    }
                     elemResult[conn.id] = when {
                         // Diamond snap: all attrs share a single point at (cx, top + 75% height).
                         // Every attribute on a relationship fans out from this fixed vertex.
@@ -1020,42 +1033,61 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
             }
         }
 
-        // Divida distribution for entity/relationship connections
+        // Divida distribution for entity/relationship connections.
+        // For rect-like owners, attribute connections participate in spacing so that the
+        // total slot count (and therefore visual gap) matches TBase.Divida in Pascal.
         for ((ponto, pairs) in nonAttrByPonto) {
             val enc = connectionEncaixes(elem, pairs.first().second, schema)
-            if (pairs.size == 1) {
-                elemResult[pairs[0].first] = enc[ponto]
+            // Use inner diamond dimensions for Divida distribution in AssociativeEntity.
+            val pos = if (elem is SchemaElement.AssociativeEntity &&
+                pairs.first().second !is SchemaElement.Attribute)
+                assocInnerDiamondPos(elem.position) else elem.position
+            val (anchorStart, edgeLen) = if (ponto == 1 || ponto == 3) {
+                pos.y.toFloat() to pos.height.toFloat()
             } else {
-                // Use inner diamond dimensions for Divida distribution in AssociativeEntity.
-                val pos = if (elem is SchemaElement.AssociativeEntity &&
-                    pairs.first().second !is SchemaElement.Attribute)
-                    assocInnerDiamondPos(elem.position) else elem.position
-                val sorted = when (ponto) {
-                    1, 3 -> pairs.sortedBy { it.second.position.y + it.second.position.height / 2f }
-                    else -> pairs.sortedBy { it.second.position.x + it.second.position.width / 2f }
-                }
-                val n = sorted.size
-                val (anchorStart, edgeLen) = if (ponto == 1 || ponto == 3) {
-                    pos.y.toFloat() to pos.height.toFloat()
-                } else {
-                    pos.x.toFloat() to pos.width.toFloat()
-                }
-                val tam = edgeLen / (n + 1)
-                for ((idx, pair) in sorted.withIndex()) {
-                    val pt = when (ponto) {
-                        1, 3 -> {
-                            val y = anchorStart + tam * (idx + 1)
-                            if (ponto == 1) Offset(pos.x.toFloat(), y)
-                            else            Offset((pos.x + pos.width).toFloat(), y)
-                        }
-                        else -> {
-                            val x = anchorStart + tam * (idx + 1)
-                            if (ponto == 2) Offset(x, pos.y.toFloat())
-                            else            Offset(x, (pos.y + pos.height).toFloat())
-                        }
+                pos.x.toFloat() to pos.width.toFloat()
+            }
+
+            // Build a combined, sorted list of centers: non-attr pairs + attr centers.
+            // Attr centers come from the stored positions that OrganizeAtributos baked in.
+            val attrCenters = attrByPonto[ponto] ?: emptyList()
+            // Represent each entry as (center, connId?) — null connId for attr placeholders.
+            val combined: List<Pair<Float, Int?>> =
+                pairs.map { (id, other) ->
+                    val c = when (ponto) {
+                        1, 3 -> other.position.y + other.position.height / 2f
+                        else -> other.position.x + other.position.width / 2f
                     }
-                    elemResult[pair.first] = pt
+                    c to id
+                } + attrCenters.map { c -> c to null }
+
+            val nTotal = combined.size
+            if (nTotal == 0) continue
+
+            val sorted = combined.sortedBy { it.first }
+            val tam = edgeLen / (nTotal + 1)
+
+            if (pairs.size == 1 && attrCenters.isEmpty()) {
+                // Fast path: single connection, no attrs on this edge.
+                elemResult[pairs[0].first] = enc[ponto]
+                continue
+            }
+
+            for ((idx, entry) in sorted.withIndex()) {
+                val connId = entry.second ?: continue  // skip attr placeholder slots
+                val pt = when (ponto) {
+                    1, 3 -> {
+                        val y = anchorStart + tam * (idx + 1)
+                        if (ponto == 1) Offset(pos.x.toFloat(), y)
+                        else            Offset((pos.x + pos.width).toFloat(), y)
+                    }
+                    else -> {
+                        val x = anchorStart + tam * (idx + 1)
+                        if (ponto == 2) Offset(x, pos.y.toFloat())
+                        else            Offset(x, (pos.y + pos.height).toFloat())
+                    }
                 }
+                elemResult[connId] = pt
             }
         }
     }
