@@ -79,6 +79,8 @@ internal fun FunctionalMainMenu(
     activeMenu: MainMenuType?,
     onMenuHover: (MainMenuType) -> Unit,
     onOpenFile: () -> Unit = {},
+    onExportJpeg: () -> Unit = {},
+    onExportPng: () -> Unit = {},
 ) {
     Row(
         modifier = modifier.border(1.dp, MENU_BORDER)
@@ -87,7 +89,7 @@ internal fun FunctionalMainMenu(
         // The right panel always shows; content varies by hovered item
         when (activeMenu) {
             MainMenuType.NewModel -> NewModelSubmenu()
-            MainMenuType.Print    -> PrintSubmenu()
+            MainMenuType.Print    -> PrintSubmenu(onExportJpeg = onExportJpeg, onExportPng = onExportPng)
             null                  -> RecentModelsPanel()
         }
     }
@@ -259,7 +261,10 @@ private fun NewModelSubmenu() {
 // ─── Submenu: Imprimir ────────────────────────────────────────────────────────
 
 @Composable
-private fun PrintSubmenu() {
+private fun PrintSubmenu(
+    onExportJpeg: () -> Unit = {},
+    onExportPng: () -> Unit = {},
+) {
     Column(
         modifier = Modifier
             .width(260.dp)
@@ -278,22 +283,51 @@ private fun PrintSubmenu() {
             Res.drawable.dicionario_dados_3s
         )
         Spacer(modifier = Modifier.height(6.dp))
-        SubmenuCard("Exportar em JPEG", "Permite exportar o modelo atual no formato JPEG.", Res.drawable.exportar_jpeg_s)
+        SubmenuCard(
+            title = "Exportar em JPEG",
+            description = "Exporta o modelo atual como JPEG (com fundo).",
+            icon = Res.drawable.exportar_jpeg_s,
+            onClick = onExportJpeg,
+        )
         Spacer(modifier = Modifier.height(6.dp))
-        SubmenuCard("Exportar em BMP", "Permite exportar o modelo atual no formato BMP.", Res.drawable.exportar_bitmap_s)
+        SubmenuCard(
+            title = "Exportar em PNG",
+            description = "Exporta o modelo atual como PNG (fundo transparente).",
+            icon = Res.drawable.exportar_bitmap_s,
+            onClick = onExportPng,
+        )
     }
 }
 
 // ─── Componente compartilhado ─────────────────────────────────────────────────
 
 @Composable
-private fun SubmenuCard(title: String, description: String, icon: DrawableResource) {
+private fun SubmenuCard(
+    title: String,
+    description: String,
+    icon: DrawableResource,
+    onClick: () -> Unit = {},
+) {
+    var isHovered by remember { mutableStateOf(false) }
+    val bg = if (isHovered) Color(0xFFDDE6F4) else Color(0xFFF0F4FA)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .wrapContentHeight()
-            .background(Color(0xFFF0F4FA))
+            .background(bg)
             .border(1.dp, Color(0xFFCDD6E2))
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        when (event.type) {
+                            PointerEventType.Enter   -> isHovered = true
+                            PointerEventType.Exit    -> isHovered = false
+                            PointerEventType.Release -> onClick()
+                        }
+                    }
+                }
+            }
             .padding(6.dp),
         verticalAlignment = Alignment.Top
     ) {

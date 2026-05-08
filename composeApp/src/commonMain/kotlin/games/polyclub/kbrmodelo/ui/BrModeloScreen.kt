@@ -26,11 +26,21 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import games.polyclub.kbrmodelo.domain.ConceptualSchema
+import games.polyclub.kbrmodelo.ui.canvas.renderSchemaToImageBitmap
 import games.polyclub.kbrmodelo.ui.components.ribbon.HeaderRibbon
+import kotlinx.coroutines.launch
 
 // TopBar height (30dp) + ribbon content (90dp) = 120dp to place menu just below the TopBar button
 private val MENU_TOP_OFFSET = 30.dp
@@ -50,6 +60,26 @@ internal fun BrModeloScreen(
     onDragStateChange: (Boolean) -> Unit = {},
     onFileDrop: (ByteArray) -> Unit = {},
 ) {
+    // Export state: counter bumps every time a new export is requested.
+    var exportCounter by remember { mutableIntStateOf(0) }
+    var exportIsJpeg  by remember { mutableStateOf(true) }
+
+    val textMeasurer = rememberTextMeasurer()
+    val density      = LocalDensity.current
+    val scope        = rememberCoroutineScope()
+
+    // Perform off-screen render + platform save whenever exportCounter changes.
+    LaunchedEffect(exportCounter) {
+        if (exportCounter == 0 || schema == null) return@LaunchedEffect
+        val bitmap = renderSchemaToImageBitmap(
+            schema          = schema,
+            textMeasurer    = textMeasurer,
+            density         = density,
+            withBackground  = exportIsJpeg,
+        )
+        saveExportedImage(bitmap, exportIsJpeg, schema.name.ifBlank { "modelo" })
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             HeaderRibbon(
@@ -85,6 +115,16 @@ internal fun BrModeloScreen(
                 onOpenFile = {
                     onDismissMenu()
                     onOpenFile()
+                },
+                onExportJpeg = {
+                    onDismissMenu()
+                    exportIsJpeg = true
+                    exportCounter++
+                },
+                onExportPng = {
+                    onDismissMenu()
+                    exportIsJpeg = false
+                    exportCounter++
                 },
             )
         }
