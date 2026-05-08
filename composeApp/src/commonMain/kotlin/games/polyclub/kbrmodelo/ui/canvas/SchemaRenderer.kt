@@ -421,7 +421,9 @@ private fun DrawScope.drawAttribute(
  */
 private fun DrawScope.drawSpecialization(spec: SchemaElement.Specialization, textMeasurer: TextMeasurer) {
     val p = spec.position
-    val x = p.x.toFloat()
+    // Shift 2 px left to compensate for the off-by-one in the original Pascal coordinate
+    // system, which makes connection lines from parent/child entities perfectly straight.
+    val x = p.x.toFloat() - 1.5f
     val y = p.y.toFloat()
     val w = p.width.toFloat()
     val h = p.height.toFloat()
@@ -655,7 +657,10 @@ private fun connectionEncaixes(
     schema: ConceptualSchema,
 ): Array<Offset> {
     val p = elem.position
-    val left   = p.x.toFloat()
+    // Specialization is rendered 1 px to the left (see drawSpecialization), so its
+    // connection encaixe points must follow the same offset to keep lines straight.
+    val xOffset = if (elem is SchemaElement.Specialization) -1.5f else 0f
+    val left   = p.x.toFloat() + xOffset
     val top    = p.y.toFloat()
     val right  = left + p.width
     val bottom = top  + p.height
