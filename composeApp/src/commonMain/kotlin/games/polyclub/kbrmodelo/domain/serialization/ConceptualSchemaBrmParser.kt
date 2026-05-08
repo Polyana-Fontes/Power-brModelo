@@ -130,6 +130,56 @@ object ConceptualSchemaBrmParser {
             connections.add(conn)
         }
 
+        // Pass 3: ensure every sub-attribute of a composite attribute has an
+        // explicit connection to its composite parent.
+        //
+        // In brM files, TBarraDeAtributos is the intermediary between a composite
+        // TAtributo and its sub-attributes.  The TCardinalidade._Comando for these
+        // connections contains the TBarraDeAtributos OID instead of the composite
+        // attribute OID.  Pass 2 already resolves this via barraToOwner, but as
+        // a defensive measure (and for models where the TCardinalidade was not
+        // stored or could not be parsed) we synthesise any missing connections here.
+        val connectedPairs = connections
+            .map { it.elementIdA to it.elementIdB }
+            .toMutableSet()
+            .also { set -> connections.forEach { set.add(it.elementIdB to it.elementIdA) } }
+
+        // Populate childAttributeIds for composite attributes (derived from ownerId).
+        val childIdsByOwner = mutableMapOf<Int, MutableList<Int>>()
+        for (elem in elements.values) {
+            if (elem is SchemaElement.Attribute) {
+                val owner = elements[elem.ownerId]
+                if (owner is SchemaElement.Attribute) {
+                    childIdsByOwner.getOrPut(owner.id) { mutableListOf() }.add(elem.id)
+                }
+            }
+        }
+
+        // Replace composite attributes with updated childAttributeIds lists.
+        for ((compositeId, childIds) in childIdsByOwner) {
+            val composite = elements[compositeId] as? SchemaElement.Attribute ?: continue
+            elements[compositeId] = composite.copy(childAttributeIds = childIds)
+
+            // Add any missing sub-attribute connections.
+            for (childId in childIds) {
+                if ((compositeId to childId) !in connectedPairs &&
+                    (childId to compositeId) !in connectedPairs) {
+                    connections.add(
+                        Connection(
+                            id = connIdCounter++,
+                            elementIdA = childId,
+                            elementIdB = compositeId,
+                            cardinality = null,
+                            showCardinality = false,
+                            isWeak = false,
+                        ),
+                    )
+                    connectedPairs.add(childId to compositeId)
+                    connectedPairs.add(compositeId to childId)
+                }
+            }
+        }
+
         val maxId = maxOf(
             elements.keys.maxOrNull() ?: 0,
             connections.maxOfOrNull { it.id } ?: 0,
