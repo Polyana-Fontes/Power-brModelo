@@ -94,8 +94,6 @@ object ConceptualSchemaBrmParser {
                 val ownerOid = barra.intProp("_Dono")
                 barraOid to ownerOid
             }
-        val barraOids = barraToOwner.keys.toSet()
-
         // Build: childRelacaoOid → assossOid.
         // TEntidadeAssoss stores the OID of its inner relationship diamond via the
         // published property `_ChildRelacao`. TCardinalidade connections reference
@@ -126,7 +124,7 @@ object ConceptualSchemaBrmParser {
                 node = node,
                 connId = connIdCounter++,
                 elements = elements,
-                barraOids = barraOids,
+                barraToOwner = barraToOwner,
                 childRelacaoToAssoss = childRelacaoToAssoss,
             ) ?: continue
             connections.add(conn)
@@ -332,8 +330,15 @@ object ConceptualSchemaBrmParser {
      * the full ligação geometry and entity OID references (see [TLigacao.Get_Comando]
      * in `mer.pas`).
      *
-     * Connections where one endpoint is a TBarraDeAtributos (visual-only) are
-     * skipped — attribute ownership is encoded in [SchemaElement.Attribute.ownerId].
+     * `_Comando[1]` and `_Comando[2]` are E1/E2 OIDs; `_Comando[7]` is the OID of
+     * the **Ponta** element (the "arrowhead" end, per Pascal's `if Value[7]=Value[2]`
+     * logic). The renderer always reads `elementIdB` as Ponta for cardinality-label
+     * placement, so we swap A↔B when necessary.
+     *
+     * When E1 or E2 references a `TBarraDeAtributos` (the visual attribute-bar), we
+     * resolve it through [barraToOwner] to the actual parent attribute/entity instead
+     * of discarding the connection. This is how attribute-to-owner and sub-attribute
+     * connections are encoded in the brM format.
      *
      * @return null if the connection should not be included in the domain model.
      */
@@ -341,33 +346,50 @@ object ConceptualSchemaBrmParser {
         node: DfmNode,
         connId: Int,
         elements: Map<Int, SchemaElement>,
-        barraOids: Set<Int>,
+        barraToOwner: Map<Int, Int>,
         childRelacaoToAssoss: Map<Int, Int> = emptyMap(),
     ): Connection? {
         val comando = node.strProp("_Comando").ifBlank { return null }
         val parts = comando.split("|").mapNotNull { it.trim().toIntOrNull() }
         if (parts.size < 36) return null
 
-        // Resolve TChildRelacao OIDs to their parent TEntidadeAssoss
-        val e1Oid = childRelacaoToAssoss[parts[1]] ?: parts[1]
-        val e2Oid = childRelacaoToAssoss[parts[2]] ?: parts[2]
+        val rawE1 = parts[1]
+        val rawE2 = parts[2]
+        val rawPonta = parts[7]  // OID of the Ponta (arrowhead) end
+
+        // Resolve TBarraDeAtributos → actual parent attribute/entity, then
+        // resolve TChildRelacao → parent TEntidadeAssoss.
+        val resolvedE1 = barraToOwner[rawE1]?.let { childRelacaoToAssoss[it] ?: it }
+            ?: childRelacaoToAssoss[rawE1]
+            ?: rawE1
+        val resolvedE2 = barraToOwner[rawE2]?.let { childRelacaoToAssoss[it] ?: it }
+            ?: childRelacaoToAssoss[rawE2]
+            ?: rawE2
+
+        // Skip connections that still cannot be mapped to any domain element
+        // (e.g. purely visual TPonto or TLinha components).
+        if (resolvedE1 !in elements && resolvedE2 !in elements) return null
+
         val showCard = parts[3] != 0
         val isWeak = parts[4] != 0
         val orientation = LineOrientation.fromCode(parts[0])
 
-        // Skip connections involving visual-only TBarraDeAtributos components
-        if (e1Oid in barraOids || e2Oid in barraOids) return null
+        // Ensure elementIdB == Ponta.  Pascal: "if Value[7]=Value[2] then Ponta:=E2 else Ponta:=E1"
+        // The renderer uses conn.elementIdB as Ponta for cardinality-label side detection.
+        val pontaIsRawE2 = rawPonta == rawE2
+        val (elemIdA, elemIdB) = if (pontaIsRawE2) resolvedE1 to resolvedE2
+                                 else resolvedE2 to resolvedE1
 
-        val e1 = elements[e1Oid]
-        val e2 = elements[e2Oid]
+        val e1 = elements[elemIdA]
+        val e2 = elements[elemIdB]
 
         // Attribute-to-owner connections: include them as Connection objects with no cardinality
         // so that the renderer can draw the connecting lines (computeDividedPoints uses them).
         if (e1 is SchemaElement.Attribute || e2 is SchemaElement.Attribute) {
             return Connection(
                 id = connId,
-                elementIdA = e1Oid,
-                elementIdB = e2Oid,
+                elementIdA = elemIdA,
+                elementIdB = elemIdB,
                 cardinality = null,
                 showCardinality = false,
                 isWeak = false,
@@ -386,8 +408,8 @@ object ConceptualSchemaBrmParser {
 
         return Connection(
             id = connId,
-            elementIdA = e1Oid,
-            elementIdB = e2Oid,
+            elementIdA = elemIdA,
+            elementIdB = elemIdB,
             cardinality = cardinality,
             showCardinality = showCard,
             cardinalityFixed = fixa,
