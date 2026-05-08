@@ -75,6 +75,7 @@ private val MULTIVALUE_CARD_STYLE = TextStyle(fontSize = 11.sp, color = Color.Bl
  *    faithfully replicating the VCL behaviour where [TLinha] components have a
  *    higher z-order than [TEntidadeAssoss]/[TChildRelacao].
  * 4. Inner diamonds of AssociativeEntity — redrawn on top of those connection lines.
+ * 4b. Self-relationship diamonds — redrawn on top (same idea as the inner rhombus).
  * 5. Cardinality labels — floating on top of everything.
  */
 fun DrawScope.drawSchema(schema: ConceptualSchema, textMeasurer: TextMeasurer) {
@@ -112,6 +113,10 @@ fun DrawScope.drawSchema(schema: ConceptualSchema, textMeasurer: TextMeasurer) {
             textMeasurer,
         )
     }
+    // 4b. Self-relationship diamonds on top of lines (outline + fill), like VCL z-order.
+    schema.elements.values.filterIsInstance<SchemaElement.SelfRelationship>().forEach { selfRel ->
+        drawRelationshipDiamond(selfRel.position, selfRel.name, showName = true, textMeasurer)
+    }
     // 5. Cardinality labels on top
     schema.connections.forEach { conn ->
         drawCardinalityLabel(conn, schema, dividedPoints, textMeasurer)
@@ -131,7 +136,7 @@ private fun DrawScope.drawElement(
         is SchemaElement.AssociativeEntity -> drawAssociativeEntity(element, textMeasurer)
         is SchemaElement.Attribute -> drawAttribute(element, schema, textMeasurer)
         is SchemaElement.Specialization -> drawSpecialization(element, textMeasurer)
-        is SchemaElement.SelfRelationship -> drawRelationshipDiamond(element.position, element.name, showName = true, textMeasurer)
+        is SchemaElement.SelfRelationship -> Unit // drawn in drawSchema step 4b on top of lines
         is SchemaElement.Annotation -> drawAnnotation(element, textMeasurer)
     }
 }
@@ -1087,15 +1092,32 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
             // use Pascal's TAutoRelacao.PrepareToAtive / triagulo formula, which places
             // snap points on the diamond's diagonal edge rather than at the central vertex.
             if (elem is SchemaElement.SelfRelationship && pairs.size == 2 && attrCenters.isEmpty()) {
-                applyAutoRelacaoTriagulo(elem, ponto, pairs, elemResult)
+                applyAutoRelacaoTriagulo(schema, elem, ponto, pairs, elemResult)
                 continue
             }
 
-            // Primary sort by other-element center; secondary by connId so that when two
-            // connections share the same other-element (e.g. both legs of an AutoRelacao),
-            // lower id = "Menor" (created first = left/top slot) matches the diamond-side
-            // triagulo ordering, keeping lines from crossing.
-            val sorted = combined.sortedWith(compareBy({ it.first }, { it.second ?: Int.MAX_VALUE }))
+            // Primary sort by other-element center. Secondary: when two legs share the same
+            // SelfRelationship diamond, use Pascal Menor order — `Ponta.FLigacoes.IndexOf`
+            // (creation / XML order), not lexical Card_id — so diamond sides and entity Divida
+            // stay paired with the correct cardinality labels.
+            val sameSelfRelDiamond = pairs.size == 2 &&
+                pairs[0].second.id == pairs[1].second.id &&
+                pairs[0].second is SchemaElement.SelfRelationship
+            val diamondId = if (sameSelfRelDiamond) pairs[0].second.id else -1
+            val sorted = combined.sortedWith(
+                compareBy(
+                    { it.first },
+                    { entry ->
+                        val cid = entry.second
+                        when {
+                            cid == null -> Int.MAX_VALUE
+                            sameSelfRelDiamond ->
+                                autoRelLegRank(schema, diamondId, elem.id, cid)
+                            else -> cid
+                        }
+                    },
+                ),
+            )
             val tam = edgeLen / (nTotal + 1)
 
             if (pairs.size == 1 && attrCenters.isEmpty()) {
@@ -1126,17 +1148,35 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
 }
 
 /**
+ * Rank of [connId] among legs from [diamondId] to [entityId] in [ConceptualSchema.connections]
+ * order (XML / parse order). Matches `Ponta.FLigacoes.IndexOf` for `TLigacao` pairs that share
+ * the same entity end in `TAutoRelacao.PrepareToAtive`'s `Menor` logic (`mer.pas` ~7763–7766).
+ */
+private fun autoRelLegRank(schema: ConceptualSchema, diamondId: Int, entityId: Int, connId: Int): Int {
+    val legs = schema.connections.withIndex()
+        .filter { (_, c) -> c.elementIdA == diamondId && c.elementIdB == entityId }
+        .sortedBy { it.index }
+    val i = legs.indexOfFirst { it.value.id == connId }
+    return if (i >= 0) i else connId
+}
+
+/**
  * Computes the two snap points for a [SelfRelationship] diamond when it has exactly
  * two connections to the same entity on the same [ponto].
  *
- * Ports [TAutoRelacao.PrepareToAtive] from `mer.pas` (line 7760): the snap point is
- * shifted from the central vertex onto the diagonal edge of the rhombus using a
- * right-triangle calculation ("triagulo"). Both connections receive symmetric offsets
- * (±nVl), and the one with the lower connection id is treated as "Menor" (gets -nVl),
- * matching the original `FLigacoes.IndexOf` ordering where lower-id connections were
- * created/added first.
+ * Ports [TAutoRelacao.PrepareToAtive] from `mer.pas` (line 7760).
+ *
+ * Key insight: Pascal's `nVl = Lg.Ponta.LastTamanhoOrigem.X div 2` is **not** the entity's
+ * half-width — it is `tam div 2` where `tam = entityEdgeLength / (nConnections + 1)` (the
+ * Divida step for the entity's connecting edge, stored in `LastTamanhoOrigem.X` just before
+ * `PrepareToAtive` is called).  Using the entity edge step places the snap points on the
+ * diamond's lower-diagonal edges, matching the original visual.
+ *
+ * [Menor] = the leg that appears first in XML parse order (mirrors `Ponta.FLigacoes.IndexOf`),
+ * receives the negative offset (−nVl); the other leg gets +nVl.
  */
 private fun applyAutoRelacaoTriagulo(
+    schema: ConceptualSchema,
     selfRel: SchemaElement.SelfRelationship,
     ponto: Int,
     pairs: List<Pair<Int, SchemaElement>>,
@@ -1150,34 +1190,70 @@ private fun applyAutoRelacaoTriagulo(
     val cx = dp.x + halfW
     val cy = dp.y + halfH
 
-    val ep = pairs.first().second.position
+    val entity = pairs.first().second
 
-    // nVl = entity.width / 2, clamped to the diamond's perpendicular half-dimension.
-    var nVl = ep.width / 2f
-    nVl = when (ponto) {
-        1, 3 -> nVl.coerceAtMost(halfH)  // L/R pontos: clamp to diamond.height/2
-        else -> nVl.coerceAtMost(halfW)  // T/B pontos: clamp to diamond.width/2
+    // Determine entity's ponto for these connections (used for edge-length and P-flip below).
+    // Find it from the actual connection object to correctly handle all Cases.
+    val connForPonto = schema.connections.firstOrNull { it.id == pairs.first().first }
+    val entityPonto: Int = if (connForPonto != null)
+        connectionPonto(entity, selfRel, schema, connForPonto)
+    else when (ponto) { 4 -> 2; 2 -> 4; 1 -> 3; 3 -> 1; else -> 2 }
+
+    // Count non-attribute connections at the entity's edge to compute the Divida step tam.
+    // Pascal: LastTamanhoOrigem.X = tam = entityEdgeLen / (nConn + 1)
+    var nEntityConn = 0
+    for (conn in schema.connections) {
+        val invA = conn.elementIdA == entity.id
+        val invB = conn.elementIdB == entity.id
+        if (!invA && !invB) continue
+        val otherId = if (invA) conn.elementIdB else conn.elementIdA
+        val otherElem = schema.elements[otherId] ?: continue
+        if (otherElem is SchemaElement.Attribute) continue
+        if (connectionPonto(entity, otherElem, schema, conn) == entityPonto) nEntityConn++
+    }
+    if (nEntityConn == 0) return
+
+    val entityEdgeLen = if (entityPonto == 1 || entityPonto == 3) entity.position.height
+                        else entity.position.width
+    val tam = entityEdgeLen / (nEntityConn + 1)  // integer division, matches Pascal `div`
+    var nVl = tam / 2
+    if (nVl == 0) return
+
+    // Pascal: if (nVl * 2) > Width (for L/R) or Height (for T/B) then nVl := dim div 2
+    val diamondDim = if (ponto == 1 || ponto == 3) dp.height else dp.width
+    if (nVl * 2 > diamondDim) nVl = diamondDim / 2
+
+    // Pascal P-flip: for certain combos of AutoRelacao ponto and entity ponto, the sign
+    // is additionally reversed (e.g. ponto=4 "if p=1 then nVl:=-nVl").
+    val flipSign = when (ponto) {
+        4 -> entityPonto == 1
+        2 -> entityPonto == 3
+        1 -> entityPonto == 4
+        3 -> entityPonto == 2
+        else -> false
     }
 
-    // A and B depend on ponto (swapped for L/R vs T/B pontos).
-    val (A, B) = when (ponto) {
-        1, 3 -> Pair(halfW, halfH)  // A = Width/2, B = Height/2
-        else -> Pair(halfH, halfW)  // A = Height/2, B = Width/2
-    }
-
+    // Triagulo: right-triangle formula places the snap on the diagonal edge.
+    val A = if (ponto == 1 || ponto == 3) halfW else halfH
+    val B = if (ponto == 1 || ponto == 3) halfH else halfW
     val C = sqrt(A * A + B * B)
-    val xVal = C * nVl / B
-    val T = floor(sqrt(xVal * xVal - nVl * nVl))
+    val aa = nVl.toFloat()
+    val xVal = C * aa / B
+    val T = floor(sqrt(xVal * xVal - aa * aa))
 
-    // Lower id = "Menor" (first in entity FLigacoes, created earlier) → gets -nVl offset.
-    val sorted = pairs.sortedBy { it.first }
+    // Menor = first leg in XML/parse order (matches Ponta.FLigacoes.IndexOf in Pascal).
+    val entityId = entity.id
+    val sorted = pairs.sortedBy { autoRelLegRank(schema, selfRel.id, entityId, it.first) }
+
     for ((idx, pair) in sorted.withIndex()) {
-        val sign = if (idx == 0) -1f else 1f
+        var sign = if (idx == 0) -1f else 1f
+        if (flipSign) sign = -sign
+        val nVlF = nVl.toFloat()
         val snap = when (ponto) {
-            4 -> Offset(cx + sign * nVl, dp.y + dp.height - T)
-            2 -> Offset(cx + sign * nVl, dp.y + T)
-            1 -> Offset(dp.x + T, cy + sign * nVl)
-            3 -> Offset(dp.x + dp.width - T, cy + sign * nVl)
+            4 -> Offset(cx + sign * nVlF, dp.y + dp.height - T)
+            2 -> Offset(cx + sign * nVlF, dp.y + T)
+            1 -> Offset(dp.x + T, cy + sign * nVlF)
+            3 -> Offset(dp.x + dp.width - T, cy + sign * nVlF)
             else -> Offset(cx, cy)
         }
         elemResult[pair.first] = snap
