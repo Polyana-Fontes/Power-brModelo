@@ -64,22 +64,26 @@ private val MULTIVALUE_CARD_STYLE = TextStyle(fontSize = 11.sp, color = Color.Bl
 /**
  * Draws the full [ConceptualSchema] into this [DrawScope].
  *
- * Rendering order (back → front): connections, then elements. This replicates the
- * original Pascal layering where TLigacao components sit behind TBase elements.
+ * Rendering order (back → front):
+ * 1. Connection lines — behind everything.
+ * 2. Elements (entities, relationships, attributes, …) — on top of lines.
+ * 3. Cardinality labels — on top of elements, matching the original Pascal
+ *    z-order where [TCardinalidade] is a floating component above the canvas.
  */
 fun DrawScope.drawSchema(schema: ConceptualSchema, textMeasurer: TextMeasurer) {
-    // Pre-compute Divida-distributed attachment points for all connections.
-    // This mirrors TBase.Divida in mer.pas: multiple connections on the same edge
-    // are spread evenly along that edge so their lines do not overlap.
     val dividedPoints = computeDividedPoints(schema)
 
-    // 1. Connections (lines and cardinality labels)
+    // 1. Connection lines only (no labels yet)
     schema.connections.forEach { conn ->
-        drawConnection(conn, schema, dividedPoints, textMeasurer)
+        drawConnectionLine(conn, schema, dividedPoints)
     }
-    // 2. Elements (entities, relationships, attributes, etc.)
+    // 2. Elements
     schema.elements.values.forEach { element ->
         drawElement(element, schema, textMeasurer)
+    }
+    // 3. Cardinality labels on top
+    schema.connections.forEach { conn ->
+        drawCardinalityLabel(conn, schema, dividedPoints, textMeasurer)
     }
 }
 
@@ -480,11 +484,7 @@ private fun DrawScope.drawAnnotation(ann: SchemaElement.Annotation, textMeasurer
 // ── Connections ───────────────────────────────────────────────────────────────
 
 /**
- * Draws the connection line between two elements using orthogonal routing.
- *
- * Uses pre-computed Divida-distributed attachment points ([dividedPoints]) so that
- * multiple connections on the same element edge are spread evenly, matching
- * [TBase.Divida] from mer.pas.
+ * Draws only the orthogonal line segments for a connection (no cardinality label).
  *
  * Implements [TLigacao.Ative] routing cases:
  * – Cases 1 & 2: diagonal separation → 2-segment L-shape
@@ -494,16 +494,14 @@ private fun DrawScope.drawAnnotation(ann: SchemaElement.Annotation, textMeasurer
  *
  * Weak connections ([Connection.isWeak]) are drawn with a parallel double line.
  */
-private fun DrawScope.drawConnection(
+private fun DrawScope.drawConnectionLine(
     conn: Connection,
     schema: ConceptualSchema,
     dividedPoints: Map<Int, Map<Int, Offset>>,
-    textMeasurer: TextMeasurer,
 ) {
     val elemA = schema.elements[conn.elementIdA] ?: return
     val elemB = schema.elements[conn.elementIdB] ?: return
 
-    // Use Divida-distributed point when available; compute on demand as fallback
     val ptA = dividedPoints[conn.elementIdA]?.get(conn.id) ?: run {
         val enc = connectionEncaixes(elemA, elemB, schema)
         enc[connectionPonto(elemA, elemB, schema, conn)]
@@ -529,48 +527,65 @@ private fun DrawScope.drawConnection(
             drawLine(Color.Black, from, to)
         }
     }
+}
 
-    // Cardinality — PosicioneCardinalidade anchored to the entity end.
-    // The stored XML position was sized for original 8pt Tahoma (FCard.Width ≈ 36px).
-    // We always re-compute using our actual text metrics so the label aligns correctly
-    // regardless of font rendering differences. For user-pinned labels (Fixa=true) the
-    // stored position is honoured as-is.
-    if (conn.showCardinality && conn.cardinality != null) {
-        val cardStr = conn.cardinality.label
-        if (cardStr.isBlank()) return
+/**
+ * Draws the cardinality label for a connection ON TOP of elements.
+ *
+ * Must be called after elements are drawn so the label appears above them —
+ * matching the original Pascal z-order where [TCardinalidade] is a floating
+ * component that sits above the canvas.
+ *
+ * Replicates [TLigacao.PosicioneCardinalidade] from mer.pas lines 7310–7348.
+ * Uses the original fixed component height (20 px matching [TCardinalidade]
+ * default at 8pt Tahoma) for the vertical formula so [aTop] matches the stored
+ * XML positions regardless of our local font rendering differences.
+ */
+private fun DrawScope.drawCardinalityLabel(
+    conn: Connection,
+    schema: ConceptualSchema,
+    dividedPoints: Map<Int, Map<Int, Offset>>,
+    textMeasurer: TextMeasurer,
+) {
+    if (!conn.showCardinality || conn.cardinality == null) return
+    val cardStr = conn.cardinality.label
+    if (cardStr.isBlank()) return
 
-        if (conn.cardinalityFixed && conn.cardinalityPosition != null) {
-            val lp = conn.cardinalityPosition
-            val layout = textMeasurer.measure(cardStr, style = MULTIVALUE_CARD_STYLE)
-            drawText(layout, topLeft = Offset(lp.x.toFloat(), lp.y.toFloat()))
-            return
-        }
+    val elemA = schema.elements[conn.elementIdA] ?: return
+    val elemB = schema.elements[conn.elementIdB] ?: return
 
-        // Choose entity end: prefer elemB (Destino_ID = entity), else elemA
-        val entityElem = when {
-            elemB is SchemaElement.Entity || elemB is SchemaElement.AssociativeEntity -> elemB
-            elemA is SchemaElement.Entity || elemA is SchemaElement.AssociativeEntity -> elemA
-            else -> elemB
-        }
-        val otherForEntity = if (entityElem == elemA) elemB else elemA
-        val anchor = dividedPoints[entityElem.id]?.get(conn.id) ?: run {
-            val enc = connectionEncaixes(entityElem, otherForEntity, schema)
-            enc[connectionPonto(entityElem, otherForEntity, schema)]
-        }
-        val p = pointToEdgeIndex(anchor, entityElem.position)
+    if (conn.cardinalityFixed && conn.cardinalityPosition != null) {
+        val lp = conn.cardinalityPosition
         val layout = textMeasurer.measure(cardStr, style = MULTIVALUE_CARD_STYLE)
-        val lw = layout.size.width.toFloat()
-        val lh = layout.size.height.toFloat()
-
-        // Replicates TLigacao.PosicioneCardinalidade offsets exactly (mer.pas lines 7337–7344)
-        var aLeft = anchor.x
-        var aTop  = anchor.y - lh + 5f
-        when (p) {
-            1 -> aLeft = aLeft - lw + 2f   // label ends 2 px inside entity left edge
-            4 -> aTop  = aTop  + lh - 4f   // label top = entity.bottom + 1
-        }
-        drawText(layout, topLeft = Offset(aLeft, aTop))
+        drawText(layout, topLeft = Offset(lp.x.toFloat(), lp.y.toFloat()))
+        return
     }
+
+    // Choose entity end: prefer elemB (Destino_ID = entity), else elemA
+    val entityElem = when {
+        elemB is SchemaElement.Entity || elemB is SchemaElement.AssociativeEntity -> elemB
+        elemA is SchemaElement.Entity || elemA is SchemaElement.AssociativeEntity -> elemA
+        else -> elemB
+    }
+    val otherForEntity = if (entityElem == elemA) elemB else elemA
+    val anchor = dividedPoints[entityElem.id]?.get(conn.id) ?: run {
+        val enc = connectionEncaixes(entityElem, otherForEntity, schema)
+        enc[connectionPonto(entityElem, otherForEntity, schema)]
+    }
+    val p = pointToEdgeIndex(anchor, entityElem.position)
+    val layout = textMeasurer.measure(cardStr, style = MULTIVALUE_CARD_STYLE)
+    val lw = layout.size.width.toFloat()
+
+    // Use the original TCardinalidade fixed height (20 px) so aTop matches
+    // PosicioneCardinalidade regardless of our actual text metrics.
+    val CARD_H = 20f
+    var aLeft = anchor.x
+    var aTop  = anchor.y - CARD_H + 5f   // = anchor.y - 15
+    when (p) {
+        1 -> aLeft = aLeft - lw + 2f     // right edge 2 px inside entity left border
+        4 -> aTop  = aTop + CARD_H - 4f  // = anchor.y + 1  (just below entity bottom)
+    }
+    drawText(layout, topLeft = Offset(aLeft, aTop))
 }
 
 // ── Helper: per-connection encaixe points ─────────────────────────────────────
