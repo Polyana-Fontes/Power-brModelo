@@ -40,13 +40,15 @@ import androidx.compose.ui.unit.sp
 import games.polyclub.kbrmodelo.domain.ConceptualSchema
 import games.polyclub.kbrmodelo.ui.canvas.SchemaCanvas
 
-private val DRAG_OVERLAY_BG    = Color(0x882C7BE8)   // semi-transparent blue
+private val DRAG_OVERLAY_BG     = Color(0x882C7BE8)
 private val DRAG_OVERLAY_BORDER = Color(0xFF1E5CC7)
 
 @Composable
 internal fun MainCanvasPanel(
     schema: ConceptualSchema? = null,
     isDragOver: Boolean = false,
+    onDragStateChange: (Boolean) -> Unit = {},
+    onFileDrop: (ByteArray) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -75,6 +77,10 @@ internal fun MainCanvasPanel(
             Text("Localizar objeto", fontSize = 12.sp, color = Color(0xFF2D2D2D))
         }
 
+        // The fileDragDropTarget modifier must be on this outer Box — NOT on SchemaCanvas.
+        // If it were on SchemaCanvas, the overlay Box appearing on top of it would cause the
+        // Compose DnD system to report onExited (cursor is now over the overlay, not the canvas),
+        // collapsing isDragOver back to false immediately and creating an infinite flicker loop.
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -82,11 +88,17 @@ internal fun MainCanvasPanel(
                 .border(
                     width = if (isDragOver) 3.dp else 1.dp,
                     color = if (isDragOver) DRAG_OVERLAY_BORDER else Color(0xFF7A7A7A),
+                )
+                .fileDragDropTarget(
+                    onDragStateChange = onDragStateChange,
+                    onFileDrop = onFileDrop,
                 ),
         ) {
-            SchemaCanvas(schema = schema, modifier = Modifier.fillMaxSize())
+            SchemaCanvas(
+                schema = schema,
+                modifier = Modifier.fillMaxSize(),
+            )
 
-            // Drag-over overlay (visible only on WASM when dragging a file over the window)
             if (isDragOver) {
                 Box(
                     modifier = Modifier

@@ -18,9 +18,13 @@
 
 package games.polyclub.kbrmodelo.ui
 
-// Desktop drag-and-drop is handled by Modifier.fileDragDropTarget (onExternalDrag).
-// These stubs satisfy the expect/actual contract; the polling loop in App.kt
-// is effectively a no-op on Desktop.
-internal actual fun setupWindowDragDrop(): Unit = Unit
-internal actual fun isWindowDragActive(): Boolean = false
-internal actual fun consumeWindowDropDataUrl(): String? = null
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+
+// WASM: drag-and-drop is handled by the JS event listeners in WindowDragDrop.wasm.kt
+// and polled from App.kt's LaunchedEffect. No Compose modifier needed here.
+@Composable
+internal actual fun Modifier.fileDragDropTarget(
+    onDragStateChange: (Boolean) -> Unit,
+    onFileDrop: (ByteArray) -> Unit,
+): Modifier = this

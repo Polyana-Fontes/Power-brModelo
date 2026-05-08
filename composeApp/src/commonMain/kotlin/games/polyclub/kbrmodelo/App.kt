@@ -50,7 +50,12 @@ fun App() {
     var activeMenu by remember { mutableStateOf<MainMenuType?>(null) }
     var selectedTab by remember { mutableStateOf(RibbonTab.EsquemaConceitual) }
     var schema by remember { mutableStateOf<ConceptualSchema?>(null) }
-    var isDragOver by remember { mutableStateOf(false) }
+    // isDragOverFromPolling: set by the WASM JS polling loop (always false on Desktop).
+    // isDragOverFromCallback: set by Modifier.fileDragDropTarget on Desktop (always false on WASM).
+    // Keeping them separate prevents the polling from clearing the callback state and vice-versa.
+    var isDragOverFromPolling  by remember { mutableStateOf(false) }
+    var isDragOverFromCallback by remember { mutableStateOf(false) }
+    val isDragOver = isDragOverFromPolling || isDragOverFromCallback
     val scope = rememberCoroutineScope()
 
     // Register window-level drag-and-drop once (no-op on Desktop)
@@ -58,11 +63,14 @@ fun App() {
         setupWindowDragDrop()
     }
 
-    // Poll for drag-over state and dropped files (effective on WASM only)
+    // Poll for drag-over state and dropped files (effective on WASM only).
+    // On Desktop, isWindowDragActive() always returns false and consumeWindowDropDataUrl()
+    // always returns null, so this loop is a no-op and does NOT interfere with the
+    // callback-based drag state managed by Modifier.fileDragDropTarget.
     LaunchedEffect(Unit) {
         while (true) {
             delay(120)
-            isDragOver = isWindowDragActive()
+            isDragOverFromPolling = isWindowDragActive()
             val dataUrl = consumeWindowDropDataUrl()
             if (dataUrl != null) {
                 loadFromDataUrl(dataUrl)?.let { schema = it }
@@ -76,6 +84,11 @@ fun App() {
             runCatching { ConceptualSchemaXmlParser.parse(bytes) }
                 .onSuccess { schema = it }
         }
+    }
+
+    val loadFileBytes: (ByteArray) -> Unit = { bytes ->
+        runCatching { ConceptualSchemaXmlParser.parse(bytes) }
+            .onSuccess { schema = it }
     }
 
     MaterialTheme {
@@ -97,6 +110,8 @@ fun App() {
                     activeMenu = null
                 },
                 onOpenFile = openFile,
+                onDragStateChange = { isDragOverFromCallback = it },
+                onFileDrop = loadFileBytes,
             )
         }
     }

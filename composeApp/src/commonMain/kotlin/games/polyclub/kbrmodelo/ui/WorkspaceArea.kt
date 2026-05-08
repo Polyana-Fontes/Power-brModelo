@@ -29,9 +29,20 @@ import androidx.compose.ui.unit.dp
 import games.polyclub.kbrmodelo.domain.ConceptualSchema
 
 @Composable
-internal fun WorkspaceArea(schema: ConceptualSchema? = null, isDragOver: Boolean = false) {
+internal fun WorkspaceArea(
+    schema: ConceptualSchema? = null,
+    isDragOver: Boolean = false,
+    onDragStateChange: (Boolean) -> Unit = {},
+    onFileDrop: (ByteArray) -> Unit = {},
+) {
     Row(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-        MainCanvasPanel(schema = schema, isDragOver = isDragOver, modifier = Modifier.weight(1f))
+        MainCanvasPanel(
+            schema = schema,
+            isDragOver = isDragOver,
+            onDragStateChange = onDragStateChange,
+            onFileDrop = onFileDrop,
+            modifier = Modifier.weight(1f),
+        )
         Spacer(modifier = Modifier.width(8.dp))
         InspectorPanel()
     }

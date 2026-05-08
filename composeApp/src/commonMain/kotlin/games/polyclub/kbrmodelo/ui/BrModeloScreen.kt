@@ -47,6 +47,8 @@ internal fun BrModeloScreen(
     onTabSelect: (RibbonTab) -> Unit,
     onDismissMenu: () -> Unit,
     onOpenFile: () -> Unit,
+    onDragStateChange: (Boolean) -> Unit = {},
+    onFileDrop: (ByteArray) -> Unit = {},
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -55,7 +57,12 @@ internal fun BrModeloScreen(
                 onMainMenuClick = onMainMenuToggle,
                 onTabSelect = onTabSelect
             )
-            WorkspaceArea(schema = schema, isDragOver = isDragOver)
+            WorkspaceArea(
+                schema = schema,
+                isDragOver = isDragOver,
+                onDragStateChange = onDragStateChange,
+                onFileDrop = onFileDrop,
+            )
         }
 
         // Dismiss overlay behind the menu
