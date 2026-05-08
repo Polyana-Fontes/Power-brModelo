@@ -995,6 +995,9 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
         // Diamond owners (Relationship/SelfRelationship) use a fixed snap point for
         // attrs (no Divida participation), so we only track this for rect-like owners.
         val attrByPonto = mutableMapOf<Int, MutableList<Float>>() // ponto → list of other-center values
+        // Attribute connections buffered for post-processing: grouped by ponto so we can
+        // compute Divida rank and detect manually-moved attributes.
+        val attrConnByPonto = mutableMapOf<Int, MutableList<Pair<Int, SchemaElement>>>()
 
         for (conn in schema.connections) {
             val isA = conn.elementIdA == elemId
@@ -1020,43 +1023,25 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                     elemResult[conn.id] = Offset(childActiveX, p.y + p.height / 2f)
                 } else {
                     // Normal entity/relationship → attribute.
-                    // Faithfully replicates TBase.OrganizeAtributos (mer.pas 1894):
-                    //   P=1 (entity LEFT)  → OrientacaoD → attr RIGHT edge = divida_x
-                    //   P=2,3,4            → OrientacaoE → attr LEFT  edge = divida_x
-                    //
                     // For diamond owners (Relationship, SelfRelationship), all attributes
-                    // connect to the same vertex regardless of how many there are — no
-                    // Divida distribution, just enc[ponto] directly (the vertex point).
-                    // This matches the observed VCL behaviour where multiple attrs placed
-                    // on a Relacao all fan out from the same diamond vertex.
+                    // connect to the same fixed vertex — no Divida distribution.
                     val ponto = attrPontoByPosition(elem.position, otherElem.position)
                     val ap = otherElem.position
-                    val enc = connectionEncaixes(elem, otherElem, schema)
                     val isDiamond = elem is SchemaElement.Relationship ||
                                     elem is SchemaElement.SelfRelationship
-                    // Track attr position so non-attr Divida accounts for it (rect owners only).
-                    if (!isDiamond) {
+                    if (isDiamond) {
+                        // Diamond snap: all attrs share a single point at (cx, top + 75% height).
+                        val ep = elem.position
+                        elemResult[conn.id] = Offset(ep.x + ep.width / 2f, ep.y + ep.height * 0.75f)
+                    } else {
+                        // Track stored center so non-attr Divida accounts for this attr's slot.
                         val attrCenter = when (ponto) {
                             1, 3 -> ap.y + ap.height / 2f
                             else -> ap.x + ap.width / 2f
                         }
                         attrByPonto.getOrPut(ponto) { mutableListOf() }.add(attrCenter)
-                    }
-                    elemResult[conn.id] = when {
-                        // Diamond snap: all attrs share a single point at (cx, top + 75% height).
-                        // Every attribute on a relationship fans out from this fixed vertex.
-                        isDiamond -> {
-                            val ep = elem.position
-                            Offset(ep.x + ep.width / 2f, ep.y + ep.height * 0.75f)
-                        }
-                        ponto == 2 || ponto == 4 -> {
-                            val attrActiveX = ap.x.toFloat()
-                            Offset(attrActiveX, enc[ponto].y)
-                        }
-                        else -> {
-                            val attrCy = ap.y + ap.height / 2f
-                            Offset(enc[ponto].x, attrCy)  // preserve Divida-baked stored Y
-                        }
+                        // Buffer for post-loop Divida-aware snap computation.
+                        attrConnByPonto.getOrPut(ponto) { mutableListOf() }.add(conn.id to otherElem)
                     }
                 }
             } else if (elem is SchemaElement.Attribute) {
@@ -1072,6 +1057,51 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                 // Non-attribute → non-attribute: accumulate for Divida
                 val ponto = connectionPonto(elem, otherElem, schema, conn)
                 nonAttrByPonto.getOrPut(ponto) { mutableListOf() }.add(conn.id to otherElem)
+            }
+        }
+
+        // Entity→attribute snap computation.
+        //
+        // For each attribute we compare the stored center Y/X with the integer-Divida
+        // position that TBase.OrganizeAtributos would have computed:
+        //   tam = edgeLen div (N+1)  [Pascal integer division]
+        //   dividaAlong = anchorStart + tam * rank
+        //
+        // • Auto-placed attribute: stored center == dividaAlong (exact match, since Pascal
+        //   stored that value). Use storedCenter → entity snap equals attribute snap → straight line.
+        // • Manually moved/resized attribute: stored center ≠ dividaAlong (gap ≥ 2 px).
+        //   Use dividaAlong on the entity side → produces the correct Z-shape routing.
+        for ((ponto, attrConns) in attrConnByPonto) {
+            val firstAttr = attrConns.first().second
+            val enc = connectionEncaixes(elem, firstAttr, schema)
+            val pos = elem.position
+            val (anchorStart, edgeLen) = if (ponto == 1 || ponto == 3) {
+                pos.y.toFloat() to pos.height.toFloat()
+            } else {
+                pos.x.toFloat() to pos.width.toFloat()
+            }
+            val sorted = attrConns.sortedBy { (_, attr) ->
+                if (ponto == 1 || ponto == 3) attr.position.y + attr.position.height / 2f
+                else attr.position.x + attr.position.width / 2f
+            }
+            val N = sorted.size
+            val tam = (edgeLen.toInt() / (N + 1)).toFloat() // integer division, matches Pascal
+            for ((rank, pair) in sorted.withIndex()) {
+                val (connId, attr) = pair
+                val ap = attr.position
+                val storedCenter = if (ponto == 1 || ponto == 3) ap.y + ap.height / 2f
+                                   else ap.x + ap.width / 2f
+                val dividaAlong = anchorStart + tam * (rank + 1)
+                // Threshold 2f: auto-placed attrs match exactly (diff=0), manually moved
+                // attrs deviate by more, triggering Divida for correct Z-shape routing.
+                val snapAlong = if (abs(storedCenter - dividaAlong) < 2f) storedCenter
+                                else dividaAlong
+                elemResult[connId] = when (ponto) {
+                    1    -> Offset(enc[1].x, snapAlong)
+                    3    -> Offset(enc[3].x, snapAlong)
+                    2    -> Offset(snapAlong, enc[2].y)
+                    else -> Offset(snapAlong, enc[4].y)
+                }
             }
         }
 
