@@ -38,13 +38,20 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.Canvas
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -56,14 +63,25 @@ import androidx.compose.ui.unit.sp
 import kbrmodelo.composeapp.generated.resources.Res
 import kbrmodelo.composeapp.generated.resources.apagar_l
 import kbrmodelo.composeapp.generated.resources.apagar_s
+import kbrmodelo.composeapp.generated.resources.atributo_composto_s
+import kbrmodelo.composeapp.generated.resources.atributo_identificador_s
 import kbrmodelo.composeapp.generated.resources.atributo_l
+import kbrmodelo.composeapp.generated.resources.atributo_multivalorado_s
+import kbrmodelo.composeapp.generated.resources.atributo_opcional_s
+import kbrmodelo.composeapp.generated.resources.atributo_s
 import kbrmodelo.composeapp.generated.resources.autorelacionamento_l
 import kbrmodelo.composeapp.generated.resources.colar_l
 import kbrmodelo.composeapp.generated.resources.copiar_l
 import kbrmodelo.composeapp.generated.resources.copiar_s
 import kbrmodelo.composeapp.generated.resources.cursor_l
+import kbrmodelo.composeapp.generated.resources.dicionario_dados_3s
+import kbrmodelo.composeapp.generated.resources.entidade_associativa_s
 import kbrmodelo.composeapp.generated.resources.entidade_l
+import kbrmodelo.composeapp.generated.resources.entidade_s
+import kbrmodelo.composeapp.generated.resources.especializacao_exclusiva_s
 import kbrmodelo.composeapp.generated.resources.especializacao_l
+import kbrmodelo.composeapp.generated.resources.especializacao_nao_exclusiva_s
+import kbrmodelo.composeapp.generated.resources.especializacao_s
 import kbrmodelo.composeapp.generated.resources.excluir_2l
 import kbrmodelo.composeapp.generated.resources.fonte_l
 import kbrmodelo.composeapp.generated.resources.gerar_logico_l
@@ -71,9 +89,12 @@ import kbrmodelo.composeapp.generated.resources.ligacao_l
 import kbrmodelo.composeapp.generated.resources.log_l
 import kbrmodelo.composeapp.generated.resources.log_s
 import kbrmodelo.composeapp.generated.resources.operacoes_l
+import kbrmodelo.composeapp.generated.resources.operacoes_s
 import kbrmodelo.composeapp.generated.resources.recortar_l
 import kbrmodelo.composeapp.generated.resources.recortar_s
+import kbrmodelo.composeapp.generated.resources.relacao_s
 import kbrmodelo.composeapp.generated.resources.salvar_s
+import kbrmodelo.composeapp.generated.resources.selecionar_s
 import kbrmodelo.composeapp.generated.resources.texto_l
 import kbrmodelo.composeapp.generated.resources.visualizar_l
 import org.jetbrains.compose.resources.painterResource
@@ -246,9 +267,35 @@ private fun RibbonEsquemaConceitual() {
             groups = listOf(
                 listOf(MenuEntry("Seleção", Res.drawable.cursor_l)),
                 listOf(
-                    MenuEntry("Entidade", Res.drawable.entidade_l),
-                    MenuEntry("Especialização", Res.drawable.especializacao_l),
-                    MenuEntry("Atributo", Res.drawable.atributo_l)
+                    MenuEntry(
+                        title = "Entidade",
+                        icon = Res.drawable.entidade_l,
+                        dropdown = listOf(
+                            DropdownEntry("Entidade", Res.drawable.entidade_s),
+                            DropdownEntry("Relação", Res.drawable.entidade_associativa_s),
+                            DropdownEntry("Entidade Associativa", Res.drawable.relacao_s)
+                        )
+                    ),
+                    MenuEntry(
+                        title = "Especialização",
+                        icon = Res.drawable.especializacao_l,
+                        dropdown = listOf(
+                            DropdownEntry("Especialização", Res.drawable.especializacao_s),
+                            DropdownEntry("Especialização Exclusiva com Criação de Entidade", Res.drawable.especializacao_exclusiva_s),
+                            DropdownEntry("Especialização Não-Exclusiva com Criação de Entidade", Res.drawable.especializacao_nao_exclusiva_s)
+                        )
+                    ),
+                    MenuEntry(
+                        title = "Atributo",
+                        icon = Res.drawable.atributo_l,
+                        dropdown = listOf(
+                            DropdownEntry("Atributo", Res.drawable.atributo_s),
+                            DropdownEntry("Atributo Identificador", Res.drawable.atributo_identificador_s),
+                            DropdownEntry("Atributo Multivalorado", Res.drawable.atributo_multivalorado_s),
+                            DropdownEntry("Atributo Composto", Res.drawable.atributo_composto_s),
+                            DropdownEntry("Atributo Opcional", Res.drawable.atributo_opcional_s)
+                        )
+                    )
                 ),
                 listOf(
                     MenuEntry("Auto\nRelacionar", Res.drawable.autorelacionamento_l),
@@ -264,7 +311,20 @@ private fun RibbonEsquemaConceitual() {
         RibbonGroup(
             title = "Operações",
             items = listOf(
-                MenuEntry("Operações", Res.drawable.operacoes_l),
+                MenuEntry(
+                    title = "Operações",
+                    icon = Res.drawable.operacoes_l,
+                    dropdown = listOf(
+                        DropdownEntry("Ocultar Atributo", Res.drawable.atributo_s, enabled = false),
+                        DropdownEntry("Organizar Atributos", Res.drawable.atributo_s, enabled = false),
+                        DropdownEntry("Selecionar Atributo", Res.drawable.selecionar_s, isSeparatorAbove = true),
+                        DropdownEntry("Promover à Entidade Associativa", Res.drawable.entidade_associativa_s),
+                        DropdownEntry("Promover à Entidade", Res.drawable.entidade_s),
+                        DropdownEntry("Converter Esp. para Restrita", Res.drawable.especializacao_exclusiva_s),
+                        DropdownEntry("Converter Esp. para Opcional", Res.drawable.especializacao_nao_exclusiva_s),
+                        DropdownEntry("Dicionário de Dados do Objeto", Res.drawable.dicionario_dados_3s)
+                    )
+                ),
                 MenuEntry("Gerar Esquema\nLógico", Res.drawable.gerar_logico_l)
             )
         )
@@ -407,38 +467,71 @@ private fun RibbonGroupMixed(
 
 /**
  * Standard ribbon button: icon at the top, label immediately below.
- * All buttons in the same Row use Alignment.Top so every icon sits at the same height.
- * Labels are naturally aligned because all icons are the same size (32dp).
+ * When [entry.dropdown] is non-null the button shows a ▾ indicator and opens a dropdown on click.
  */
 @Composable
 private fun RibbonButton(entry: MenuEntry) {
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Top,
-        modifier = Modifier
-            .wrapContentWidth()
-            .fillMaxHeight()
-            .hoverable(interactionSource)
-            .background(if (isHovered) HOVER_BG else Color.Transparent, HOVER_SHAPE)
-            .border(1.dp, if (isHovered) HOVER_BORDER else Color.Transparent, HOVER_SHAPE)
-            .padding(horizontal = 3.dp, vertical = 3.dp)
-    ) {
-        Image(
-            painter = painterResource(entry.icon),
-            contentDescription = entry.title,
-            modifier = Modifier.size(32.dp),
-            contentScale = ContentScale.Fit
-        )
-        Text(
-            text = entry.title,
-            fontSize = 9.sp,
-            color = Color(0xFF2C3E50),
-            textAlign = TextAlign.Center,
-            lineHeight = 10.sp,
-            modifier = Modifier.padding(top = 3.dp)
-        )
+    var showDropdown by remember { mutableStateOf(false) }
+    val hasDropdown = !entry.dropdown.isNullOrEmpty()
+    val isActive = isHovered || showDropdown
+
+    Box {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Top,
+            modifier = Modifier
+                .wrapContentWidth()
+                .fillMaxHeight()
+                .hoverable(interactionSource)
+                .background(if (isActive) HOVER_BG else Color.Transparent, HOVER_SHAPE)
+                .border(1.dp, if (isActive) HOVER_BORDER else Color.Transparent, HOVER_SHAPE)
+                .padding(horizontal = 3.dp, vertical = 3.dp)
+                .then(
+                    if (hasDropdown) Modifier.clickable(
+                        interactionSource = interactionSource,
+                        indication = null
+                    ) { showDropdown = !showDropdown } else Modifier
+                )
+        ) {
+            Image(
+                painter = painterResource(entry.icon),
+                contentDescription = entry.title,
+                modifier = Modifier.size(32.dp),
+                contentScale = ContentScale.Fit
+            )
+            Text(
+                text = entry.title,
+                fontSize = 9.sp,
+                color = Color(0xFF2C3E50),
+                textAlign = TextAlign.Center,
+                lineHeight = 10.sp,
+                modifier = Modifier.padding(top = 3.dp)
+            )
+            if (hasDropdown) {
+                val arrowColor = Color(0xFF556677)
+                Canvas(modifier = Modifier.padding(top = 2.dp).size(width = 8.dp, height = 4.dp)) {
+                    drawPath(
+                        path = Path().apply {
+                            moveTo(0f, 0f)
+                            lineTo(size.width, 0f)
+                            lineTo(size.width / 2f, size.height)
+                            close()
+                        },
+                        color = arrowColor
+                    )
+                }
+            }
+        }
+
+        if (hasDropdown) {
+            RibbonDropdownMenu(
+                items = entry.dropdown!!,
+                onDismiss = { showDropdown = false },
+                expanded = showDropdown
+            )
+        }
     }
 }
 
@@ -510,6 +603,104 @@ private fun SmallRibbonButton(entry: MenuEntry) {
             color = Color(0xFF2C3E50),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+// Very light blue stripe — matches brModelo original (#F3F7FB)
+private val DROPDOWN_ICON_STRIPE = Color(0xFFF3F7FB)
+private val DROPDOWN_HOVER_BG    = Color(0xFFCCDDEE)
+private val DROPDOWN_STRIPE_W    = 26.dp
+// DropdownMenu adds 8dp vertical padding internally; we extend drawBehind by this amount
+private val DROPDOWN_MENU_VPAD   = 8
+
+/**
+ * Dropdown matching the brModelo original style:
+ * - Uses Material3 [DropdownMenu] for correct positioning below the button
+ * - Draws the icon stripe via [Modifier.drawBehind] with a -8dp vertical offset so the
+ *   stripe covers the DropdownMenu's internal vertical padding and reaches the border edges
+ * - Icon and text live in the same [Row] so hover works over the entire item width
+ */
+@Composable
+private fun RibbonDropdownMenu(
+    items: List<DropdownEntry>,
+    expanded: Boolean,
+    onDismiss: () -> Unit
+) {
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        containerColor = Color.White,
+        shadowElevation = 4.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .width(IntrinsicSize.Max)
+                .drawBehind {
+                    // Extend stripe 8dp above and below to cover DropdownMenu's padding
+                    drawRect(
+                        color = DROPDOWN_ICON_STRIPE,
+                        topLeft = androidx.compose.ui.geometry.Offset(
+                            x = 0f,
+                            y = -DROPDOWN_MENU_VPAD.dp.toPx()
+                        ),
+                        size = androidx.compose.ui.geometry.Size(
+                            width = DROPDOWN_STRIPE_W.toPx(),
+                            height = size.height + (DROPDOWN_MENU_VPAD * 2).dp.toPx()
+                        )
+                    )
+                }
+        ) {
+            items.forEach { item ->
+                if (item.isSeparatorAbove) {
+                    HorizontalDivider(color = Color(0xFFDDE4EE), thickness = 1.dp)
+                }
+                RibbonDropdownItem(item = item, onClick = onDismiss)
+            }
+        }
+    }
+}
+
+/**
+ * Single item row: icon box on the left (over the drawn stripe) + text on the right.
+ * Hover is applied to the entire [Row] so both icon and text trigger the highlight.
+ */
+@Composable
+private fun RibbonDropdownItem(item: DropdownEntry, onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(22.dp)
+            .hoverable(interactionSource)
+            .background(if (isHovered && item.enabled) DROPDOWN_HOVER_BG else Color.Transparent)
+            .clickable(
+                enabled = item.enabled,
+                interactionSource = interactionSource,
+                indication = null
+            ) { onClick() }
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(DROPDOWN_STRIPE_W, 22.dp)
+        ) {
+            Image(
+                painter = painterResource(item.icon),
+                contentDescription = null,
+                modifier = Modifier.size(14.dp),
+                contentScale = ContentScale.Fit,
+                alpha = if (item.enabled) 1f else 0.5f
+            )
+        }
+        Text(
+            text = item.label,
+            fontSize = 11.sp,
+            lineHeight = 11.sp,
+            color = if (item.enabled) Color(0xFF1C2B3A) else Color(0xFFAAAAAA),
+            modifier = Modifier.padding(horizontal = 8.dp)
         )
     }
 }

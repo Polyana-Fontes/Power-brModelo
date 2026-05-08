@@ -30,7 +30,15 @@ internal enum class RibbonTab {
     Opcoes
 }
 
+internal data class DropdownEntry(
+    val label: String,
+    val icon: DrawableResource,
+    val enabled: Boolean = true,
+    val isSeparatorAbove: Boolean = false
+)
+
 internal data class MenuEntry(
     val title: String,
-    val icon: DrawableResource
+    val icon: DrawableResource,
+    val dropdown: List<DropdownEntry>? = null
 )
