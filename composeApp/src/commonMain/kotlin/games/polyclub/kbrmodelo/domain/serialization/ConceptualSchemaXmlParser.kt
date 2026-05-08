@@ -429,16 +429,11 @@ object ConceptualSchemaXmlParser {
         val isWeak = node.boolValor("Fraca")
         val orientation = LineOrientation.fromCode(node.intValor("Orientacao"))
 
-        // Cardinality label position (only when the label is shown)
-        val cardPos = if (showCardinality) {
-            cardinalidadesNode.child("Cardinalidade")?.let { cardNode ->
-                parsePosition(cardNode)
-            }
-        } else null
-
-        val cardFixed = if (showCardinality) {
-            cardinalidadesNode.child("Cardinalidade")?.boolValor("Fixa") ?: false
-        } else false
+        // Cardinality label position, role name, and fixed flag (only when label is shown)
+        val cardNode = if (showCardinality) cardinalidadesNode.child("Cardinalidade") else null
+        val cardPos = cardNode?.let { parsePosition(it) }
+        val cardFixed = cardNode?.boolValor("Fixa") ?: false
+        val cardRole = cardNode?.attr("nome")?.trim() ?: ""
 
         connections.add(
             Connection(
@@ -450,6 +445,7 @@ object ConceptualSchemaXmlParser {
                 cardinalityFixed = cardFixed,
                 isWeak = isWeak,
                 orientation = orientation,
+                cardinalityRole = cardRole,
                 cardinalityPosition = cardPos,
             )
         )

@@ -580,8 +580,9 @@ private fun DrawScope.drawCardinalityLabel(
     textMeasurer: TextMeasurer,
 ) {
     if (!conn.showCardinality || conn.cardinality == null) return
-    val cardStr = conn.cardinality.label
-    if (cardStr.isBlank()) return
+    val baseLabel = conn.cardinality.label
+    if (baseLabel.isBlank()) return
+    val cardStr = if (conn.cardinalityRole.isNotEmpty()) "$baseLabel ${conn.cardinalityRole}" else baseLabel
 
     val elemA = schema.elements[conn.elementIdA] ?: return
     val elemB = schema.elements[conn.elementIdB] ?: return

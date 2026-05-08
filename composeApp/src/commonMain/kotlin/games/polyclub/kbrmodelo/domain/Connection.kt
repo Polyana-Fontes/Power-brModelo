@@ -63,6 +63,9 @@ enum class LineOrientation(val code: Int) {
  *                            (drawn as a double line). Corresponds to `TLigacao.Fraca`.
  * @param orientation         Primary orientation of the line segments.
  *                            Corresponds to `TLigacao.Orientacao`.
+ * @param cardinalityRole     Optional role name displayed after the cardinality label
+ *                            (e.g. "Responsável" → "(1,1) Responsável").
+ *                            Corresponds to `TCardinalidade.nome` in the original Pascal source.
  * @param cardinalityPosition Position of the floating cardinality label on the canvas.
  *                            Corresponds to `TCardinalidade` Left/Top (a `TBase` subclass).
  */
@@ -75,5 +78,6 @@ data class Connection(
     val cardinalityFixed: Boolean = false,
     val isWeak: Boolean = false,
     val orientation: LineOrientation = LineOrientation.HORIZONTAL,
+    val cardinalityRole: String = "",
     val cardinalityPosition: ElementPosition? = null,
 )

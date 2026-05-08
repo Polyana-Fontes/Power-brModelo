@@ -355,7 +355,7 @@ object ConceptualSchemaXmlSerializer {
     ): XmlNode = xmlNode("Cardinalidades", "Cardinalidade" to cardCode) {
         if (showCard) {
             val pos = conn.cardinalityPosition ?: ElementPosition(0, 0, 36, 20)
-            add(buildCardinalidadeNode(cardId, conn.cardinality, pos, conn.cardinalityFixed))
+            add(buildCardinalidadeNode(cardId, conn.cardinality, pos, conn.cardinalityFixed, conn.cardinalityRole))
         }
     }
 
@@ -364,6 +364,7 @@ object ConceptualSchemaXmlSerializer {
         cardinality: Cardinality?,
         position: ElementPosition,
         fixed: Boolean,
+        role: String = "",
     ): XmlNode {
         val cardCode = when (cardinality) {
             Cardinality.ONE_TO_ONE   -> 1
@@ -372,7 +373,7 @@ object ConceptualSchemaXmlSerializer {
             Cardinality.ZERO_TO_MANY -> 4
             null -> 4
         }
-        return xmlNode("Cardinalidade", "nome" to "", "id" to id) {
+        return xmlNode("Cardinalidade", "nome" to role, "id" to id) {
             valor("Left", position.x)
             valor("Top", position.y)
             valor("Width", position.width)
