@@ -260,16 +260,18 @@ private fun DrawScope.drawAttribute(
 
     // Ellipse diameter = Height - 3, matching "P := Height - 3" in Pascal
     val diameter = (h - 3f).coerceAtLeast(8f)
-    val radius = diameter / 2f
     val meio = (diameter - 1f) / 2f + 2f  // vertical centre of ellipse, matches Pascal
 
-    // Determine orientation from position relative to owner
+    // Orientation follows TBase.OrganizeAtributos from mer.pas:
+    //   P=1 (owner left side)  → attribute placed LEFT  of owner → OrientacaoD → ellipse on RIGHT
+    //   P=3 (owner right side) → attribute placed RIGHT of owner → OrientacaoE → ellipse on LEFT
+    // We approximate: attribute center to the RIGHT of owner center → OrientacaoE (ellipse left)
     val owner = schema.elements[attr.ownerId]
     val ellipseOnLeft = if (owner != null) {
         val attrCx = p.x + p.width / 2f
         val ownerCx = owner.position.x + owner.position.width / 2f
-        attrCx <= ownerCx
-    } else true  // default: ellipse on left
+        attrCx > ownerCx  // attribute is to the right → ellipse on left facing owner
+    } else false  // default: ellipse on right (attribute to the left of owner)
 
     val textLabel = buildString {
         append(attr.name)
@@ -304,11 +306,7 @@ private fun DrawScope.drawAttribute(
         if (textLabel.isNotBlank() && textMaxW > 0) {
             val layout = textMeasurer.measure(
                 textLabel,
-                style = CANVAS_TEXT_STYLE.copy(
-                    fontWeight = if (attr.isIdentifier) FontWeight.Bold else null,
-                    textDecoration = if (attr.isIdentifier)
-                        androidx.compose.ui.text.style.TextDecoration.Underline else null,
-                ),
+                style = CANVAS_TEXT_STYLE,
                 constraints = Constraints(maxWidth = textMaxW),
             )
             val textY = y + (h - layout.size.height) / 2f - 1f
@@ -321,7 +319,7 @@ private fun DrawScope.drawAttribute(
             drawText(asterisk, topLeft = Offset(x, y))
         }
     } else {
-        // Ellipse on right side
+        // Ellipse on right side (OrientacaoD): stub goes right, text to the left
         val ellipseLeft = x + w - 5f - diameter
         drawLine(Color.Black, Offset(x + w - 5f, y + meio), Offset(x + w, y + meio))
 
@@ -339,12 +337,7 @@ private fun DrawScope.drawAttribute(
         if (textLabel.isNotBlank() && textMaxW > 0) {
             val layout = textMeasurer.measure(
                 textLabel,
-                style = CANVAS_TEXT_STYLE.copy(
-                    textAlign = TextAlign.Right,
-                    fontWeight = if (attr.isIdentifier) FontWeight.Bold else null,
-                    textDecoration = if (attr.isIdentifier)
-                        androidx.compose.ui.text.style.TextDecoration.Underline else null,
-                ),
+                style = CANVAS_TEXT_STYLE.copy(textAlign = TextAlign.Right),
                 constraints = Constraints(maxWidth = textMaxW),
             )
             val textY = y + (h - layout.size.height) / 2f - 1f
@@ -464,73 +457,214 @@ private fun DrawScope.drawAnnotation(ann: SchemaElement.Annotation, textMeasurer
 // ── Connections ───────────────────────────────────────────────────────────────
 
 /**
- * Draws the connection line between two elements.
+ * Draws the connection line between two elements using orthogonal routing.
  *
- * Reproduces [TLinha.paint] and [TLigacao] from mer.pas.
+ * Implements [TLigacao.Ative] from mer.pas faithfully:
+ * – Cases 1 & 2: diagonal separation → 2-segment L-shape
+ * – Case 3: pure vertical separation → 3-segment V→H→V (Z-shape)
+ * – Case 4: pure horizontal separation → 3-segment H→V→H (Z-shape)
+ * – Case 5: fallback (overlapping/close) → 2-segment L-shape
  *
- * The original uses three [TLinha] segments (LinhaA, LinhaMeio, LinhaB) to create
- * an orthogonal (L-shaped) path. Since our domain model stores only the semantic
- * connection, we compute attachment points from element positions and draw either
- * a straight or two-segment path.
- *
- * Weak connections ([Connection.isWeak]) are drawn with a double line.
+ * Weak connections ([Connection.isWeak]) are drawn with a parallel double line.
  */
 private fun DrawScope.drawConnection(conn: Connection, schema: ConceptualSchema, textMeasurer: TextMeasurer) {
     val elemA = schema.elements[conn.elementIdA] ?: return
     val elemB = schema.elements[conn.elementIdB] ?: return
 
-    val ptA = attachmentPoint(elemA.position, elemB.position)
-    val ptB = attachmentPoint(elemB.position, elemA.position)
+    val encA = elementEncaixes(elemA, schema)
+    val encB = elementEncaixes(elemB, schema)
 
-    if (conn.isWeak) {
-        // Double line: two parallel lines 2px apart (matching TLinha.isWeak rendering)
-        val perpX = if (abs(ptB.x - ptA.x) > abs(ptB.y - ptA.y)) 0f else 2f
-        val perpY = if (abs(ptB.x - ptA.x) > abs(ptB.y - ptA.y)) 2f else 0f
-        drawLine(Color.Black, Offset(ptA.x - perpX, ptA.y - perpY), Offset(ptB.x - perpX, ptB.y - perpY))
-        drawLine(Color.Black, Offset(ptA.x + perpX, ptA.y + perpY), Offset(ptB.x + perpX, ptB.y + perpY))
-    } else {
-        drawLine(Color.Black, ptA, ptB)
+    val waypoints = computeConnectionPath(elemA.position, encA, elemB.position, encB, conn.orientation)
+    if (waypoints.size < 2) return
+
+    for (i in 0 until waypoints.size - 1) {
+        val from = waypoints[i]
+        val to = waypoints[i + 1]
+        if (conn.isWeak) {
+            // Double line: parallel offset perpendicular to segment direction
+            val isHoriz = abs(to.x - from.x) >= abs(to.y - from.y)
+            val offX = if (isHoriz) 0f else 2f
+            val offY = if (isHoriz) 2f else 0f
+            drawLine(Color.Black, Offset(from.x - offX, from.y - offY), Offset(to.x - offX, to.y - offY))
+            drawLine(Color.Black, Offset(from.x + offX, from.y + offY), Offset(to.x + offX, to.y + offY))
+        } else {
+            drawLine(Color.Black, from, to)
+        }
     }
 
-    // Cardinality label
+    // Cardinality label — anchored to the entity/relationship end (PosicioneCardinalidade logic)
     if (conn.showCardinality && conn.cardinality != null) {
         val cardStr = conn.cardinality.label
         if (cardStr.isBlank()) return
 
         val labelPos = conn.cardinalityPosition
-        val labelOffset = if (labelPos != null) {
-            Offset(labelPos.x.toFloat(), labelPos.y.toFloat())
+        if (labelPos != null) {
+            val layout = textMeasurer.measure(cardStr, style = MULTIVALUE_CARD_STYLE)
+            drawText(layout, topLeft = Offset(labelPos.x.toFloat(), labelPos.y.toFloat()))
         } else {
-            // Auto-position: 30% of the way from B (near the B element)
-            Offset(ptA.x + (ptB.x - ptA.x) * 0.7f, ptA.y + (ptB.y - ptA.y) * 0.7f)
+            // Auto-position near the entity/relationship end of the connection
+            val entityElem = listOf(elemA, elemB).firstOrNull {
+                it is SchemaElement.Entity || it is SchemaElement.Relationship ||
+                        it is SchemaElement.AssociativeEntity
+            } ?: elemB
+            val entityEnc = if (entityElem == elemA) encA else encB
+            val otherEnc  = if (entityElem == elemA) encB else encA
+            val otherPos  = if (entityElem == elemA) elemB.position else elemA.position
+
+            // Determine which encaixe index faces the other element
+            val p = nearestEncaixeIndex(entityEnc, otherPos)
+            val anchor = entityEnc[p]
+            val layout = textMeasurer.measure(cardStr, style = MULTIVALUE_CARD_STYLE)
+            val lw = layout.size.width.toFloat()
+            val lh = layout.size.height.toFloat()
+
+            // Mirrors TLigacao.PosicioneCardinalidade offsets
+            var aLeft = anchor.x
+            var aTop  = anchor.y - lh + 5f
+            when (p) {
+                1 -> aLeft = aLeft - lw + 2f
+                4 -> aTop  = aTop  + lh - 4f
+            }
+            drawText(layout, topLeft = Offset(aLeft, aTop))
         }
-        val layout = textMeasurer.measure(cardStr, style = MULTIVALUE_CARD_STYLE)
-        drawText(layout, topLeft = Offset(labelOffset.x - layout.size.width / 2f, labelOffset.y - layout.size.height / 2f))
     }
 }
 
-// ── Helper: attachment point ───────────────────────────────────────────────────
+// ── Helper: encaixe points ────────────────────────────────────────────────────
 
 /**
- * Computes the edge mid-point of [pos] that faces [toward].
+ * Computes the four encaixe (attachment) points for an element, applying
+ * the attribute override from [TAtributo.AtualizaEncaixes]:
+ * all four slots collapse to the "active" side (left for [OrientacaoE], right for [OrientacaoD]).
  *
- * Mirrors how [TBase.AtualizaEncaixes] selects the appropriate [Encaixe] slot
- * for line routing: the side of the bounding rectangle closest to the other element.
+ * Index mapping (1-based, matching the original Pascal):
+ * [1] = left center, [2] = top center, [3] = right center, [4] = bottom center
  */
-private fun attachmentPoint(pos: ElementPosition, toward: ElementPosition): Offset {
-    val ax = pos.x + pos.width / 2f
-    val ay = pos.y + pos.height / 2f
-    val bx = toward.x + toward.width / 2f
-    val by = toward.y + toward.height / 2f
-    val dx = bx - ax
-    val dy = by - ay
-    return if (abs(dx) >= abs(dy)) {
-        if (dx >= 0) Offset(pos.x + pos.width.toFloat(), ay)
-        else Offset(pos.x.toFloat(), ay)
-    } else {
-        if (dy >= 0) Offset(ax, pos.y + pos.height.toFloat())
-        else Offset(ax, pos.y.toFloat())
+private fun elementEncaixes(element: SchemaElement, schema: ConceptualSchema): Array<Offset> {
+    val p = element.position
+    val left   = p.x.toFloat()
+    val top    = p.y.toFloat()
+    val right  = left + p.width
+    val bottom = top  + p.height
+    val cx     = left + p.width  / 2f
+    val cy     = top  + p.height / 2f
+
+    val base = arrayOf(
+        Offset.Zero,           // [0] unused
+        Offset(left,  cy),     // [1] left center
+        Offset(cx,    top),    // [2] top center
+        Offset(right, cy),     // [3] right center
+        Offset(cx,    bottom), // [4] bottom center
+    )
+
+    if (element is SchemaElement.Attribute) {
+        val attrCx  = cx
+        val ownerCx = schema.elements[element.ownerId]?.let {
+            it.position.x + it.position.width / 2f
+        } ?: (cx - 1f)  // fallback: treat attribute as to the right
+
+        // OrientacaoE (attribute to the right of owner) → all encaixes = left [1]
+        // OrientacaoD (attribute to the left of owner)  → all encaixes = right [3]
+        val connector = if (attrCx > ownerCx) base[1] else base[3]
+        return arrayOf(Offset.Zero, connector, connector, connector, connector)
     }
+
+    return base
+}
+
+/** Returns the 1-based encaixe index (1..4) whose point is nearest to [other]'s center. */
+private fun nearestEncaixeIndex(enc: Array<Offset>, other: ElementPosition): Int {
+    val cx = other.x + other.width  / 2f
+    val cy = other.y + other.height / 2f
+    var best = 1
+    var bestDist = Float.MAX_VALUE
+    for (i in 1..4) {
+        val dx = enc[i].x - cx
+        val dy = enc[i].y - cy
+        val d  = dx * dx + dy * dy
+        if (d < bestDist) { bestDist = d; best = i }
+    }
+    return best
+}
+
+// ── Helper: orthogonal routing (TLigacao.Ative) ───────────────────────────────
+
+/**
+ * Computes a list of waypoints for drawing an orthogonal (axis-aligned) connection.
+ *
+ * Faithfully implements [function TLigacao.Ative] from mer.pas, including:
+ * - Diagonal cases (2 segments / L-shape)
+ * - Pure vertical / horizontal separation (3 segments / Z-shape)
+ * - Fallback L-shape using [orientation]
+ */
+private fun computeConnectionPath(
+    pos1: ElementPosition, enc1: Array<Offset>,
+    pos2: ElementPosition, enc2: Array<Offset>,
+    orientation: games.polyclub.kbrmodelo.domain.LineOrientation,
+): List<Offset> {
+    var e1 = pos1; var a1 = enc1
+    var e2 = pos2; var a2 = enc2
+
+    val DIST = 20f
+    val isH = orientation == games.polyclub.kbrmodelo.domain.LineOrientation.HORIZONTAL
+
+    // ── Case 1: E1 top-left of E2 diagonally ────────────────────────────────
+    val c1fwd = a1[3].x < e2.x - DIST && a1[4].y < e2.y - DIST
+    val c1rev = a2[3].x < e1.x - DIST && a2[4].y < e1.y - DIST
+    if (c1fwd || c1rev) {
+        if (c1rev) { val te = e1; e1 = e2; e2 = te; val ta = a1; a1 = a2; a2 = ta }
+        return if (!isH) {
+            val turn = Offset(a1[4].x, a2[1].y)
+            listOf(a1[4], turn, a2[1])
+        } else {
+            val turn = Offset(a2[2].x, a1[3].y)
+            listOf(a1[3], turn, a2[2])
+        }
+    }
+
+    // ── Case 2: E1 bottom-left of E2 diagonally ─────────────────────────────
+    val c2fwd = a1[3].x < e2.x - DIST && a2[4].y < e1.y - DIST
+    val c2rev = a2[3].x < e1.x - DIST && a1[4].y < e2.y - DIST
+    if (c2fwd || c2rev) {
+        if (c2rev) { val te = e1; e1 = e2; e2 = te; val ta = a1; a1 = a2; a2 = ta }
+        return if (isH) {
+            val turn = Offset(a1[2].x, a2[1].y)
+            listOf(a1[2], turn, a2[1])
+        } else {
+            val turn = Offset(a2[4].x, a1[3].y)
+            listOf(a1[3], turn, a2[4])
+        }
+    }
+
+    // ── Case 3: Pure vertical separation (e1.bottom < e2.top - 4) ───────────
+    val e1b = e1.y + e1.height
+    val e2b = e2.y + e2.height
+    if (e1b < e2.y - 4 || e2b < e1.y - 4) {
+        if (e2b < e1.y - 4) { val te = e1; e1 = e2; e2 = te; val ta = a1; a1 = a2; a2 = ta }
+        val midY = e2.y.toFloat() - (e2.y - a1[4].y) / 2f
+        return listOf(a1[4], Offset(a1[4].x, midY), Offset(a2[2].x, midY), a2[2])
+    }
+
+    // ── Case 4: Pure horizontal separation (e1.right < e2.left - 4) ─────────
+    val e1r = e1.x + e1.width
+    val e2r = e2.x + e2.width
+    if (e1r < e2.x - 4 || e2r < e1.x - 4) {
+        if (e2r < e1.x - 4) { val te = e1; e1 = e2; e2 = te; val ta = a1; a1 = a2; a2 = ta }
+        val midX = e2.x.toFloat() - (e2.x - a1[3].x) / 2f
+        return listOf(a1[3], Offset(midX, a1[3].y), Offset(midX, a2[1].y), a2[1])
+    }
+
+    // ── Case 5: Fallback L-shape (elements overlap or are very close) ─────────
+    val pE1: Int; val pE2: Int
+    if (isH) {
+        pE1 = if (e1.x <= e2.x) 3 else 1
+        pE2 = if (e1.y <= e2.y) 2 else 4
+    } else {
+        pE2 = if (e1.x <= e2.x) 1 else 3
+        pE1 = if (e1.y <= e2.y) 4 else 2
+    }
+    val turn = Offset(a2[pE2].x, a1[pE1].y)
+    return listOf(a1[pE1], turn, a2[pE2])
 }
 
 // ── Helper: centred label ─────────────────────────────────────────────────────
