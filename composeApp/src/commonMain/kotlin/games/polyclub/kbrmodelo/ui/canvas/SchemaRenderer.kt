@@ -590,9 +590,13 @@ private fun DrawScope.drawCardinalityLabel(
     val layout = textMeasurer.measure(cardStr, style = MULTIVALUE_CARD_STYLE)
 
     // Use stored position when available; apply X correction for font-width difference.
+    // The stored position was calibrated for the cardinality-only string (e.g. "(1,1)"),
+    // so the correction must also be based solely on that part — not the full combined
+    // label that may include a role name ("Responsável"), which would over-shift it.
     if (conn.cardinalityPosition != null) {
         val lp = conn.cardinalityPosition
-        val xAdjustment = layout.size.width / 4f
+        val cardOnlyLayout = textMeasurer.measure(baseLabel, style = MULTIVALUE_CARD_STYLE)
+        val xAdjustment = cardOnlyLayout.size.width / 4f
         drawText(layout, topLeft = Offset(lp.x.toFloat() + xAdjustment, lp.y.toFloat()))
         return
     }
