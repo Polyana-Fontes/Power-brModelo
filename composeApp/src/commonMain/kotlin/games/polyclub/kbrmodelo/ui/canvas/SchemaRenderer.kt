@@ -488,35 +488,44 @@ private fun DrawScope.drawAnnotation(ann: SchemaElement.Annotation, textMeasurer
     // Resolve background colour (COLORREF BGR → RGB conversion)
     val bgColor = if (ann.color != null) colorRefToCompose(ann.color) else Color(0xFF87CEEB) // clSkyBlue
 
+    // Pascal: if (Width < 15) or (Height < 15) then F := 5 else F := 15 → corner = F-5 = 0 or 10.
+    // GDI RoundRect corner parameter is the ellipse diameter, so Compose radius = diameter/2 = 5.
+    val hintCorner = androidx.compose.ui.geometry.CornerRadius(if (w < 15f || h < 15f) 0f else 5f)
+
     when (ann.annotationType) {
         AnnotationType.BOX -> {
-            // Shadow: filled rect at +2 offset
-            drawRect(SHADOW_LIGHT, topLeft = Offset(x + 2f, y + 2f), size = Size(w - 1f, h - 1f))
-            // Background rect
+            // Pascal: Rectangle(2,2, W-1,H-1) shadow then Rectangle(0,0, W-3,H-3) body.
+            // Both rectangles are W-3 × H-3; shadow is offset (+2, +2).
+            drawRect(SHADOW_LIGHT, topLeft = Offset(x + 2f, y + 2f), size = Size(w - 3f, h - 3f))
             drawRect(bgColor, topLeft = Offset(x, y), size = Size(w - 3f, h - 3f))
             drawRect(TEXT_BOX_DARK, topLeft = Offset(x, y), size = Size(w - 3f, h - 3f), style = Stroke(1f))
         }
         AnnotationType.HINT -> {
-            // Rounded rect shadow + background
-            drawRoundRect(SHADOW_LIGHT, topLeft = Offset(x, y), size = Size(w - 1f, h - 1f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(0f))
-            drawRoundRect(bgColor, topLeft = Offset(x, y), size = Size(w - 3f, h - 3f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(0f))
-            drawRoundRect(TEXT_BOX_DARK, topLeft = Offset(x, y), size = Size(w - 3f, h - 3f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(0f), style = Stroke(1f))
+            // Pascal: RoundRect(0,0, W-1,H-1, F-5,F-5) shadow then RoundRect(0,0, W-3,H-3, …) body.
+            drawRoundRect(SHADOW_LIGHT, topLeft = Offset(x, y), size = Size(w - 1f, h - 1f), cornerRadius = hintCorner)
+            drawRoundRect(bgColor, topLeft = Offset(x, y), size = Size(w - 3f, h - 3f), cornerRadius = hintCorner)
+            drawRoundRect(TEXT_BOX_DARK, topLeft = Offset(x, y), size = Size(w - 3f, h - 3f), cornerRadius = hintCorner, style = Stroke(1f))
         }
         AnnotationType.PLAIN -> {
             // No background drawn (brush.bsClear in original)
         }
     }
 
-    // Text inside with 5px horizontal margin, 2px top margin
-    val textArea = Rect(x + 5f, y + 2f, x + w - 5f, y + h - 5f)
-    if (ann.name.isNotBlank() && textArea.width > 0 && textArea.height > 0) {
+    // Normalize Windows line endings (\r\n) and lone carriage returns (\r) to \n so Compose
+    // renders line breaks correctly — XML encodes them as &#13; (CR only).
+    val displayText = ann.name.replace("\r\n", "\n").replace("\r", "\n")
+
+    // Pascal: Rect adjusted by F (= 2 for HINT, 0 otherwise): Right -= 5+F, Bottom -= 5+F.
+    val F = if (ann.annotationType == AnnotationType.HINT) 2f else 0f
+    val textArea = Rect(x + 5f, y + 2f, x + w - (5f + F), y + h - (5f + F))
+    if (displayText.isNotBlank() && textArea.width > 0 && textArea.height > 0) {
         val align = when (ann.alignment) {
             games.polyclub.kbrmodelo.domain.TextAlignment.LEFT -> TextAlign.Left
             games.polyclub.kbrmodelo.domain.TextAlignment.CENTER -> TextAlign.Center
             games.polyclub.kbrmodelo.domain.TextAlignment.RIGHT -> TextAlign.Right
         }
         val layout = textMeasurer.measure(
-            ann.name,
+            displayText,
             style = CANVAS_TEXT_STYLE.copy(textAlign = align),
             constraints = Constraints(maxWidth = textArea.width.toInt().coerceAtLeast(1)),
         )
@@ -982,8 +991,11 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
         // Attribute connections per ponto, used to adjust non-attr Divida spacing.
         // Diamond owners (Relationship/SelfRelationship) use a fixed snap point for
         // attrs (no Divida participation), so we only track this for rect-like owners.
-        val isDiamondOwner = elem is SchemaElement.Relationship || elem is SchemaElement.SelfRelationship
         val attrByPonto = mutableMapOf<Int, MutableList<Float>>() // ponto → list of other-center values
+        // Entity→attribute connections buffered for Divida: each group is sorted and spaced
+        // using TBase.OrganizeAtributos logic (tam = edgeLen / (N+1)), matching Pascal's
+        // dynamic snap computation rather than relying on the stored attribute center Y/X.
+        val attrConnByPonto = mutableMapOf<Int, MutableList<Pair<Int, SchemaElement>>>()
 
         for (conn in schema.connections) {
             val isA = conn.elementIdA == elemId
@@ -1009,9 +1021,6 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                     elemResult[conn.id] = Offset(childActiveX, p.y + p.height / 2f)
                 } else {
                     // Normal entity/relationship → attribute.
-                    // Faithfully replicates TBase.OrganizeAtributos (mer.pas 1894):
-                    //   P=1 (entity LEFT)  → OrientacaoD → attr RIGHT edge = divida_x
-                    //   P=2,3,4            → OrientacaoE → attr LEFT  edge = divida_x
                     //
                     // For diamond owners (Relationship, SelfRelationship), all attributes
                     // connect to the same vertex regardless of how many there are — no
@@ -1020,33 +1029,21 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                     // on a Relacao all fan out from the same diamond vertex.
                     val ponto = attrPontoByPosition(elem.position, otherElem.position)
                     val ap = otherElem.position
-                    val enc = connectionEncaixes(elem, otherElem, schema)
                     val isDiamond = elem is SchemaElement.Relationship ||
                                     elem is SchemaElement.SelfRelationship
-                    // Track attr position so non-attr Divida accounts for it (rect owners only).
-                    if (!isDiamond) {
+                    if (isDiamond) {
+                        // Diamond snap: all attrs share a single point at (cx, top + 75% height).
+                        val ep = elem.position
+                        elemResult[conn.id] = Offset(ep.x + ep.width / 2f, ep.y + ep.height * 0.75f)
+                    } else {
+                        // Track attr position so non-attr Divida accounts for it (rect owners only).
                         val attrCenter = when (ponto) {
                             1, 3 -> ap.y + ap.height / 2f
                             else -> ap.x + ap.width / 2f
                         }
                         attrByPonto.getOrPut(ponto) { mutableListOf() }.add(attrCenter)
-                    }
-                    elemResult[conn.id] = when {
-                        // Diamond snap: all attrs share a single point at (cx, top + 75% height).
-                        // Every attribute on a relationship fans out from this fixed vertex.
-                        isDiamond -> {
-                            val ep = elem.position
-                            Offset(ep.x + ep.width / 2f, ep.y + ep.height * 0.75f)
-                        }
-                        ponto == 2 || ponto == 4 -> {
-                            val attrActiveX = if (ponto == 1) (ap.x + ap.width).toFloat()
-                                              else ap.x.toFloat()
-                            Offset(attrActiveX, enc[ponto].y)
-                        }
-                        else -> {
-                            val attrCy = ap.y + ap.height / 2f
-                            Offset(enc[ponto].x, attrCy)  // preserve Divida-baked stored Y
-                        }
+                        // Buffer for Divida-based snap computation after all connections are seen.
+                        attrConnByPonto.getOrPut(ponto) { mutableListOf() }.add(conn.id to otherElem)
                     }
                 }
             } else if (elem is SchemaElement.Attribute) {
@@ -1062,6 +1059,42 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                 // Non-attribute → non-attribute: accumulate for Divida
                 val ponto = connectionPonto(elem, otherElem, schema, conn)
                 nonAttrByPonto.getOrPut(ponto) { mutableListOf() }.add(conn.id to otherElem)
+            }
+        }
+
+        // Divida distribution for entity→attribute connections (TBase.OrganizeAtributos).
+        // The entity's snap point for each attribute is evenly spaced along the edge:
+        //   tam = edgeLength / (N+1),  snapAlongEdge[rank] = anchorStart + tam * (rank+1).
+        // Attributes are sorted by their stored center Y (or X) along the edge, which matches
+        // the order Pascal uses in OrganizeAtributos. When an attribute was manually
+        // repositioned, its center may differ from the Divida-computed position; in that case
+        // the entity snap uses the Divida formula while the attribute's active-edge point keeps
+        // its stored location — producing the expected Z-shape routing (TLigacao.Ative Case 4).
+        for ((ponto, attrConns) in attrConnByPonto) {
+            val firstAttr = attrConns.first().second
+            val enc = connectionEncaixes(elem, firstAttr, schema)
+            val pos = elem.position
+            val (anchorStart, edgeLen) = if (ponto == 1 || ponto == 3) {
+                pos.y.toFloat() to pos.height.toFloat()
+            } else {
+                pos.x.toFloat() to pos.width.toFloat()
+            }
+            // Sort by attribute center along the active axis (matches OrganizeAtributos order).
+            val sorted = attrConns.sortedBy { (_, attr) ->
+                if (ponto == 1 || ponto == 3) attr.position.y + attr.position.height / 2f
+                else attr.position.x + attr.position.width / 2f
+            }
+            val N = sorted.size
+            val tam = edgeLen / (N + 1)
+            for ((rank, pair) in sorted.withIndex()) {
+                val (connId, _) = pair
+                val snapAlong = anchorStart + tam * (rank + 1)
+                elemResult[connId] = when (ponto) {
+                    1    -> Offset(enc[1].x, snapAlong)
+                    3    -> Offset(enc[3].x, snapAlong)
+                    2    -> Offset(snapAlong, enc[2].y)
+                    else -> Offset(snapAlong, enc[4].y)
+                }
             }
         }
 
