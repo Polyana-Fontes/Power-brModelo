@@ -32,7 +32,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
@@ -55,10 +54,12 @@ import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -90,18 +91,18 @@ private val HEADER_BG          = Color(0xFFD8D8D8)  // neutral gray strip backgr
 private val TAB_ACTIVE_BG      = Color(0xFFFFFFFF)
 private val TAB_INACTIVE_BG    = Color(0xFFBBBBBB)  // neutral gray for inactive tab
 private val TAB_STRIP_BORDER   = Color(0xFF8C8C8C)  // neutral gray border
-private val SECTION_HEADER_BG  = Color(0xFFD4DCE8)
-private val CELL_LABEL_BG      = Color(0xFFE0E8F0)
-private val CELL_LABEL_FOCUSED = Color(0xFF1050A0)
+private val SECTION_HEADER_BG  = Color(0xFFD2D5D8)  // neutral gray section header
+private val CELL_LABEL_BG      = Color(0xFFDFE2E6)  // neutral gray label cell
+private val CELL_LABEL_FOCUSED = Color(0xFF4A5868)  // muted slate for focused label bg
 private val CELL_VALUE_BG      = Color(0xFFFFFFFF)
-private val CELL_BORDER        = Color(0xFFB0BEC5)
+private val CELL_BORDER        = Color(0xFFB8BCC0)
 private val LABEL_COLOR        = Color(0xFF2A3A4A)
 private val LABEL_FOCUSED_COLOR = Color(0xFFFFFFFF)
 private val VALUE_COLOR        = Color(0xFF1A2535)
-private val HINT_BG            = Color(0xFFDDE5EE)
+private val HINT_BG            = Color(0xFFDCDFE2)  // neutral gray hint area
 private val HINT_TEXT_COLOR    = Color(0xFF2A3040)
 
-private val CELL_LABEL_WIDTH = 72.dp
+private val CELL_LABEL_WIDTH = 96.dp
 private val ROW_TEXT_SIZE    = 10.sp
 private val VALUE_TEXT_SIZE  = 10.sp
 
@@ -781,10 +782,17 @@ private fun SectionTitle(text: String) {
         modifier = Modifier
             .fillMaxWidth()
             .background(SECTION_HEADER_BG)
-            .padding(horizontal = 4.dp, vertical = 2.dp),
+            .padding(horizontal = 4.dp, vertical = 1.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text = text, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1C2D3E))
+        Text(
+            text = text,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF1C2D3E),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -803,7 +811,7 @@ private fun ReadOnlyRow(
             text = value,
             fontSize = VALUE_TEXT_SIZE,
             color = if (focused) Color(0xFF80A0C0) else VALUE_COLOR,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
         )
     }
 }
@@ -833,7 +841,7 @@ private fun EditableRow(
                 singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                    .padding(horizontal = 4.dp, vertical = 1.dp)
                     .onFocusChanged { fs ->
                         if (!fs.isFocused && draft != value) {
                             onCommit(draft)
@@ -845,7 +853,7 @@ private fun EditableRow(
                 text = if (enabled) value else "",
                 fontSize = VALUE_TEXT_SIZE,
                 color = if (enabled) VALUE_COLOR else Color(0xFF9AA0A8),
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
             )
         }
     }
@@ -874,7 +882,7 @@ private fun DropdownRow(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                    .padding(horizontal = 4.dp, vertical = 1.dp),
             ) {
                 Text(
                     text = selected,
@@ -913,6 +921,10 @@ private fun PropertyRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            // IntrinsicSize.Min lets both cells share the height of whichever is taller,
+            // so the value cell background always fills the full row height even when the
+            // label wraps to multiple lines.
+            .height(IntrinsicSize.Min)
             .border(width = 0.5.dp, color = CELL_BORDER)
             .clickable(onClick = onClick),
         verticalAlignment = Alignment.Top,
@@ -921,22 +933,24 @@ private fun PropertyRow(
         Box(
             modifier = Modifier
                 .width(CELL_LABEL_WIDTH)
-                .wrapContentHeight()
+                .fillMaxHeight()
                 .background(if (focused) CELL_LABEL_FOCUSED else CELL_LABEL_BG)
-                .padding(horizontal = 4.dp, vertical = 2.dp),
+                .padding(horizontal = 4.dp, vertical = 1.dp),
         ) {
             Text(
                 text = label,
                 fontSize = ROW_TEXT_SIZE,
+                lineHeight = ROW_TEXT_SIZE,
                 color = if (focused) LABEL_FOCUSED_COLOR else LABEL_COLOR,
-                lineHeight = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         // Value cell
         Box(
             modifier = Modifier
                 .weight(1f)
-                .wrapContentHeight()
+                .fillMaxHeight()
                 .background(CELL_VALUE_BG),
         ) {
             valueContent()
