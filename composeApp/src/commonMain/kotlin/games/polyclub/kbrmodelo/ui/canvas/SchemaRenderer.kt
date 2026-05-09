@@ -851,6 +851,84 @@ private fun connectionEncaixes(
     )
 }
 
+/**
+ * Returns the 1-based index (1=LEFT, 2=TOP, 3=RIGHT, 4=BOTTOM) of the diamond vertex
+ * closest to [attrPos]'s centre, by Euclidean distance.
+ *
+ * Used for diamond → attribute connections so the chosen ponto matches the *visually*
+ * nearest vertex even for attributes whose bounding box overlaps the diamond (where
+ * Pascal's `TLigacao.Ative` case-5 fallback would pick a different quadrant by walking
+ * `Left/Top` orderings instead of geometric distance).
+ */
+private fun diamondNearestVertex(diamondPos: ElementPosition, attrPos: ElementPosition): Int {
+    val cx = diamondPos.x + diamondPos.width / 2f
+    val cy = diamondPos.y + diamondPos.height / 2f
+    val w  = diamondPos.width.toFloat()
+    val h  = diamondPos.height.toFloat()
+    val ax = attrPos.x + attrPos.width / 2f
+    val ay = attrPos.y + attrPos.height / 2f
+    fun d2(vx: Float, vy: Float): Float {
+        val dx = ax - vx; val dy = ay - vy; return dx * dx + dy * dy
+    }
+    val dLeft   = d2(cx - w / 2f, cy)
+    val dTop    = d2(cx, cy - h / 2f)
+    val dRight  = d2(cx + w / 2f, cy)
+    val dBottom = d2(cx, cy + h / 2f)
+    val minD = minOf(dLeft, dTop, dRight, dBottom)
+    return when (minD) {
+        dLeft   -> 1
+        dTop    -> 2
+        dRight  -> 3
+        else    -> 4
+    }
+}
+
+/**
+ * Computes the boundary attachment point of a diamond ([Relationship] / [SelfRelationship])
+ * for an attribute connection on `ponto` (1=LEFT, 2=TOP, 3=RIGHT, 4=BOTTOM).
+ *
+ * Mirrors `TBaseRelacao.PrepareToAtive` in `mer.pas` (~line 6672):
+ *
+ * 1. Start at the centre of the chosen edge — the diamond's vertex.
+ * 2. Shift the perpendicular coordinate by ±`atDes` (= attribute's `Desvio`, default 10),
+ *    moving away from the vertex along the bounding-box edge.
+ * 3. Snap the parallel coordinate onto the diamond's diagonal boundary (Pascal's
+ *    `arruma` helper iteratively walks one pixel at a time until `PtInRegion` is true;
+ *    we solve it analytically using the diamond equation `|dx|/hw + |dy|/hh = 1`).
+ *
+ * The result is a point on one of the diamond's diagonal edges, near the vertex of `ponto`.
+ *
+ * Index mapping:
+ * - 1 (LEFT): on the upper-left edge → `(left + atDes*w/h, cy - atDes)`
+ * - 2 (TOP):  on the upper-right edge → `(cx + atDes, top + atDes*h/w)`
+ * - 3 (RIGHT):on the lower-right edge → `(left + w - atDes*w/h, cy + atDes)`
+ * - 4 (BOTTOM):on the lower-right edge → `(cx + atDes, top + h - atDes*h/w)`
+ *
+ * The (1, +/-Y) and (3, +/-Y) cases use the upper-left and lower-right diagonals respectively,
+ * exactly matching the `case 1: Encaixe[1].Y -= atDes; …` / `case 3: Encaixe[3].Y += atDes; …`
+ * branches in the Pascal source.
+ */
+private fun diamondAttrEncaixe(
+    diamondPos: ElementPosition,
+    ponto: Int,
+    desvio: Int,
+): Offset {
+    val left = diamondPos.x.toFloat()
+    val top  = diamondPos.y.toFloat()
+    val w    = diamondPos.width.toFloat()
+    val h    = diamondPos.height.toFloat()
+    val cx   = left + w / 2f
+    val cy   = top  + h / 2f
+    val d    = desvio.toFloat()
+    return when (ponto) {
+        1 -> Offset(left + d * w / h,         cy - d)              // upper-left  edge
+        2 -> Offset(cx + d,                   top + d * h / w)     // upper-right edge
+        3 -> Offset(left + w - d * w / h,     cy + d)              // lower-right edge
+        4 -> Offset(cx + d,                   top + h - d * h / w) // lower-right edge
+        else -> Offset(cx, cy)
+    }
+}
+
 /** Returns the 1-based encaixe index (1..4) whose point is nearest to [other]'s center. */
 private fun nearestEncaixeIndex(enc: Array<Offset>, other: ElementPosition): Int {
     val cx = other.x + other.width  / 2f
@@ -914,9 +992,15 @@ private fun connectionPonto(
             if (ellipseOnLeft) 1 else 3  // normal side (left for OrientacaoE)
         }
     }
-    // For a non-attribute element connecting TO an attribute: use position-based
-    // quadrant assignment matching TBase.OrganizeAtributos (stored positions).
+    // For a non-attribute element connecting TO an attribute, use the full `TLigacao.Ative`
+    // case selection. The XML stores the attribute as the `<Ligacao>` owner (BaseInicial = E1),
+    // so the entity is E2 → isE1 = (conn.elementIdA == elem.id). Falls back to position-based
+    // quadrant when no Connection is provided (used by deprecated callers).
     if (otherElem is SchemaElement.Attribute) {
+        if (conn != null) {
+            val isE1 = conn.elementIdA == elem.id
+            return computeNonAttrPonto(elem.position, otherElem.position, conn.orientation, isE1)
+        }
         return attrPontoByPosition(elem.position, otherElem.position)
     }
     // For non-attribute elements, use the routing-aware ponto that matches Ative's
@@ -1095,11 +1179,11 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
 
     for ((elemId, elem) in schema.elements) {
         val elemResult = result.getOrPut(elemId) { mutableMapOf() }
-        val nonAttrByPonto = mutableMapOf<Int, MutableList<Pair<Int, SchemaElement>>>()
-        // Attribute connections per ponto, used to adjust non-attr Divida spacing.
-        // Diamond owners (Relationship/SelfRelationship) use a fixed snap point for
-        // attrs (no Divida participation), so we only track this for rect-like owners.
-        val attrByPonto = mutableMapOf<Int, MutableList<Float>>() // ponto → list of other-center values
+        // All non-attribute → non-attribute (or non-diamond → attribute) connections are
+        // collected here, grouped by `ponto`, so a single Divida pass can space them evenly
+        // along the chosen edge of `elem`. Diamond → attribute connections are handled in
+        // the inline branch below (Pascal does not apply Divida to TBaseRelacao).
+        val byPonto = mutableMapOf<Int, MutableList<DividaSlot>>()
 
         for (conn in schema.connections) {
             val isA = conn.elementIdA == elemId
@@ -1125,79 +1209,68 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                     elemResult[conn.id] = Offset(childActiveX, p.y + p.height / 2f)
                 } else {
                     // Normal entity/relationship → attribute.
-                    // For diamond owners (Relationship, SelfRelationship), all attributes
-                    // connect to the same fixed vertex — no Divida distribution.
-                    val ponto = attrPontoByPosition(elem.position, otherElem.position)
-                    val ap = otherElem.position
+                    // For diamonds we pick the *closest vertex* to the attribute's centre
+                    // (Euclidean distance). Empirically this matches the original brModelo
+                    // rendering on overlapping attributes (e.g. Atributo2 in altamente-
+                    // personalizado.xml) where the bounding-box-based `Ative` case-5 fallback
+                    // would pick a far-side vertex but the real Pascal renderer uses a
+                    // boundary point near the *closest* vertex. For non-diamond owners the
+                    // standard `Ative` case selection (via [connectionPonto]) is used.
                     val isDiamond = elem is SchemaElement.Relationship ||
                                     elem is SchemaElement.SelfRelationship
+                    val ponto = if (isDiamond)
+                        diamondNearestVertex(elem.position, otherElem.position)
+                    else
+                        connectionPonto(elem, otherElem, schema, conn)
                     if (isDiamond) {
-                        // Diamond snap: attribute connects to the appropriate vertex of the diamond.
-                        // Reproduces TRelacao/TBaseRelacao attribute attachment in TLigacao.Ative.
-                        //
-                        // Guard: if the attribute's bounding box overlaps the diamond's bounding box
-                        // horizontally (or vertically), attrPontoByPosition fell back to angle-based
-                        // detection, which may give a vertex that is on the wrong side of the attribute
-                        // (snap.x > attrLeft for a supposed right-side attr). Fall back to the safe
-                        // center-bottom point in that case, matching the old behaviour for overlapping attrs.
-                        val ep = elem.position
-                        val eLeft  = ep.x.toFloat()
-                        val eRight = (ep.x + ep.width).toFloat()
-                        val eTop   = ep.y.toFloat()
-                        val eBottom= (ep.y + ep.height).toFloat()
-                        val aLeft  = ap.x.toFloat()
-                        val aRight = (ap.x + ap.width).toFloat()
-                        val aTop   = ap.y.toFloat()
-                        val aBottom= (ap.y + ap.height).toFloat()
-                        val overlaps = aRight > eLeft && aLeft < eRight && aBottom > eTop && aTop < eBottom
-                        if (overlaps) {
-                            // Attribute overlaps diamond bounding box — use safe fallback
-                            elemResult[conn.id] = Offset(eLeft + ep.width / 2f, eTop + ep.height * 0.75f)
-                        } else {
-                            val enc = connectionEncaixes(elem, otherElem, schema)
-                            elemResult[conn.id] = enc[ponto]
-                        }
+                        // Pascal `TBaseRelacao.PrepareToAtive` (mer.pas ~6672) shifts the
+                        // diamond's `Encaixe[ponto]` by ±`Desvio` along the perpendicular axis,
+                        // then snaps the parallel axis onto the diamond's boundary via the
+                        // `arruma` helper. The resulting point lives on the diagonal edge near
+                        // the chosen vertex — NOT at the vertex itself. TBaseRelacao does NOT
+                        // participate in Divida, so each attribute uses its own `Desvio`.
+                        elemResult[conn.id] = diamondAttrEncaixe(
+                            elem.position,
+                            ponto,
+                            otherElem.deviationAngle,
+                        )
                     } else {
-                        // Track attr center so non-attr Divida can account for this slot.
-                        val attrCenter = when (ponto) {
-                            1, 3 -> ap.y + ap.height / 2f
-                            else -> ap.x + ap.width / 2f
-                        }
-                        attrByPonto.getOrPut(ponto) { mutableListOf() }.add(attrCenter)
-                        // Direct snap: entity edge + attribute's own stored center position.
-                        // Reproduces the Divida-baked positions that OrganizeAtributos saved into
-                        // the XML — stored center == Divida point → connection is a straight line.
-                        val enc = connectionEncaixes(elem, otherElem, schema)
-                        elemResult[conn.id] = when {
-                            ponto == 2 || ponto == 4 -> Offset(ap.x.toFloat(), enc[ponto].y)
-                            else -> Offset(enc[ponto].x, ap.y + ap.height / 2f)
-                        }
+                        // Entity/Table: queue for Divida along with non-attr connections so
+                        // that all ligações on this `ponto` are evenly spaced (matches Pascal's
+                        // TBase.Divida + TLigacao.Ative behaviour from OnBaseMoved).
+                        byPonto.getOrPut(ponto) { mutableListOf() }
+                            .add(DividaSlot(conn.id, otherElem, isAttribute = true))
                     }
                 }
             } else if (elem is SchemaElement.Attribute) {
                 // This IS an attribute connecting to a non-attribute owner.
-                // OrganizeAtributos rule (same as above, from attribute's perspective):
+                // OrganizeAtributos rule:
                 //   owner P=1 → OrientacaoD → attr RIGHT active edge
                 //   owner P≠1 → OrientacaoE → attr LEFT  active edge
-                val entityPonto = attrPontoByPosition(otherElem.position, elem.position)
+                // Reuse the same `Ative`-driven `Mapa` selection so the orientation
+                // matches the entity-side computation above (avoids inconsistent ponto
+                // pairs that would mis-route the connection).
+                val entityPonto = connectionPonto(otherElem, elem, schema, conn)
                 val p = elem.position
                 val attrActiveX = if (entityPonto == 1) (p.x + p.width).toFloat() else p.x.toFloat()
                 elemResult[conn.id] = Offset(attrActiveX, p.y + p.height / 2f)
             } else {
-                // Non-attribute → non-attribute: accumulate for Divida
+                // Non-attribute → non-attribute: queue for Divida.
                 val ponto = connectionPonto(elem, otherElem, schema, conn)
-                nonAttrByPonto.getOrPut(ponto) { mutableListOf() }.add(conn.id to otherElem)
+                byPonto.getOrPut(ponto) { mutableListOf() }
+                    .add(DividaSlot(conn.id, otherElem, isAttribute = false))
             }
         }
 
-        // Divida distribution for entity/relationship connections.
-        // For rect-like owners, attribute connections participate in spacing so that the
-        // total slot count (and therefore visual gap) matches TBase.Divida in Pascal.
-        for ((ponto, pairs) in nonAttrByPonto) {
-            val enc = connectionEncaixes(elem, pairs.first().second, schema)
+        // Divida distribution: for each `ponto`, evenly space all queued connections
+        // along the corresponding edge of [elem]. Replicates `TBase.Divida` + `TLigacao.Ative`
+        // (mer.pas ~1614, ~7011) which override `Encaixe[ponto]` with `start + tam*cont`
+        // before each [Ative] call when QuantosNestePonto > 1.
+        for ((ponto, slots) in byPonto) {
+            val firstOther = slots.first().otherElem
+            val enc = connectionEncaixes(elem, firstOther, schema)
             // Use inner diamond dimensions for Divida distribution in AssociativeEntity.
-            val pos = if (elem is SchemaElement.AssociativeEntity &&
-                pairs.first().second !is SchemaElement.Attribute)
+            val pos = if (elem is SchemaElement.AssociativeEntity && firstOther !is SchemaElement.Attribute)
                 assocInnerDiamondPos(elem.position) else elem.position
             val (anchorStart, edgeLen) = if (ponto == 1 || ponto == 3) {
                 pos.y.toFloat() to pos.height.toFloat()
@@ -1205,80 +1278,84 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                 pos.x.toFloat() to pos.width.toFloat()
             }
 
-            // Build a combined, sorted list of centers: non-attr pairs + attr centers.
-            // Attr centers come from the stored positions that OrganizeAtributos baked in.
-            val attrCenters = attrByPonto[ponto] ?: emptyList()
-            // Represent each entry as (center, connId?) — null connId for attr placeholders.
-            val combined: List<Pair<Float, Int?>> =
-                pairs.map { (id, other) ->
-                    val c = when (ponto) {
-                        1, 3 -> other.position.y + other.position.height / 2f
-                        else -> other.position.x + other.position.width / 2f
-                    }
-                    c to id
-                } + attrCenters.map { c -> c to null }
-
-            val nTotal = combined.size
-            if (nTotal == 0) continue
-
-            // SelfRelationship with exactly 2 connections on the same ponto and no attrs:
+            // SelfRelationship with exactly 2 non-attribute legs on the same ponto:
             // use Pascal's TAutoRelacao.PrepareToAtive / triagulo formula, which places
             // snap points on the diamond's diagonal edge rather than at the central vertex.
-            if (elem is SchemaElement.SelfRelationship && pairs.size == 2 && attrCenters.isEmpty()) {
+            val nonAttrSlots = slots.filter { !it.isAttribute }
+            if (elem is SchemaElement.SelfRelationship &&
+                nonAttrSlots.size == 2 && nonAttrSlots.size == slots.size) {
+                val pairs = nonAttrSlots.map { it.connId to it.otherElem }
                 applyAutoRelacaoTriagulo(schema, elem, ponto, pairs, elemResult)
                 continue
             }
 
-            // Primary sort by other-element center. Secondary: when two legs share the same
-            // SelfRelationship diamond, use Pascal Menor order — `Ponta.FLigacoes.IndexOf`
-            // (creation / XML order), not lexical Card_id — so diamond sides and entity Divida
-            // stay paired with the correct cardinality labels.
-            val sameSelfRelDiamond = pairs.size == 2 &&
-                pairs[0].second.id == pairs[1].second.id &&
-                pairs[0].second is SchemaElement.SelfRelationship
-            val diamondId = if (sameSelfRelDiamond) pairs[0].second.id else -1
-            val sorted = combined.sortedWith(
-                compareBy(
-                    { it.first },
-                    { entry ->
-                        val cid = entry.second
-                        when {
-                            cid == null -> Int.MAX_VALUE
-                            sameSelfRelDiamond ->
-                                autoRelLegRank(schema, diamondId, elem.id, cid)
-                            else -> cid
-                        }
-                    },
-                ),
-            )
-            val tam = edgeLen / (nTotal + 1)
-
-            if (pairs.size == 1 && attrCenters.isEmpty()) {
-                // Fast path: single connection, no attrs on this edge.
-                elemResult[pairs[0].first] = enc[ponto]
+            val nTotal = slots.size
+            if (nTotal == 1) {
+                // Single connection on this edge: use the unmodified central Encaixe (Pascal
+                // skips Divida and calls AtivePorPonto, which uses the original Encaixe).
+                elemResult[slots[0].connId] = enc[ponto]
                 continue
             }
 
-            for ((idx, entry) in sorted.withIndex()) {
-                val connId = entry.second ?: continue  // skip attr placeholder slots
+            // Primary sort: by other-element centre along the relevant axis (the same axis
+            // Pascal's OrdenadorTop / OrdenadorLeft rank by). Secondary: SelfRelationship
+            // legs use Pascal Menor order (`Ponta.FLigacoes.IndexOf`, i.e. XML order) so
+            // diamond sides stay paired with the correct cardinality labels.
+            val sameSelfRelDiamond = nonAttrSlots.size == 2 && slots.size == 2 &&
+                nonAttrSlots[0].otherElem.id == nonAttrSlots[1].otherElem.id &&
+                nonAttrSlots[0].otherElem is SchemaElement.SelfRelationship
+            val diamondId = if (sameSelfRelDiamond) nonAttrSlots[0].otherElem.id else -1
+            val sorted = slots.sortedWith(
+                compareBy(
+                    { slot ->
+                        val op = slot.otherElem.position
+                        when (ponto) {
+                            1, 3 -> op.y + op.height / 2f
+                            else -> op.x + op.width / 2f
+                        }
+                    },
+                    { slot ->
+                        if (sameSelfRelDiamond)
+                            autoRelLegRank(schema, diamondId, elem.id, slot.connId)
+                        else slot.connId
+                    },
+                ),
+            )
+
+            // Pascal uses integer division for `tam` (`Height div (qtd+1)` / `Width div (qtd+1)`).
+            // Mirror that to keep snap coordinates pixel-aligned identical to the original.
+            val tam = (edgeLen.toInt()) / (nTotal + 1)
+
+            for ((idx, slot) in sorted.withIndex()) {
+                val coord = anchorStart + (tam * (idx + 1)).toFloat()
                 val pt = when (ponto) {
-                    1, 3 -> {
-                        val y = anchorStart + tam * (idx + 1)
-                        if (ponto == 1) Offset(pos.x.toFloat(), y)
-                        else            Offset((pos.x + pos.width).toFloat(), y)
-                    }
-                    else -> {
-                        val x = anchorStart + tam * (idx + 1)
-                        if (ponto == 2) Offset(x, pos.y.toFloat())
-                        else            Offset(x, (pos.y + pos.height).toFloat())
-                    }
+                    1 -> Offset(pos.x.toFloat(), coord)
+                    3 -> Offset((pos.x + pos.width).toFloat(), coord)
+                    2 -> Offset(coord, pos.y.toFloat())
+                    else /* 4 */ -> Offset(coord, (pos.y + pos.height).toFloat())
                 }
-                elemResult[connId] = pt
+                elemResult[slot.connId] = pt
             }
         }
     }
     return result
 }
+
+/**
+ * One queued connection participating in a single [TBase.Divida] pass for some `ponto`.
+ *
+ * @param connId       Stable schema connection id (used as the result map key).
+ * @param otherElem    The element on the OTHER side of the connection. Its centre coordinate
+ *                     drives the sort order along the chosen edge.
+ * @param isAttribute  True if [otherElem] is a [SchemaElement.Attribute]. Pascal counts attrs
+ *                     in `QuantosNestePonto` exactly like any other ligação, so this is only
+ *                     informational (e.g. for the SelfRelationship triagulo special-case).
+ */
+private data class DividaSlot(
+    val connId: Int,
+    val otherElem: SchemaElement,
+    val isAttribute: Boolean,
+)
 
 /**
  * Rank of [connId] among legs from [diamondId] to [entityId] in [ConceptualSchema.connections]
