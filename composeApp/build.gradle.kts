@@ -124,6 +124,19 @@ compose.resources {
     packageOfResClass = "games.polyclub.power.brmodelo.generated.resources"
 }
 
+/**
+ * Regenerates `composeResources/files/brmodelo_cursors/{cur,png}` and `hotspots.json`
+ * from `../Fontes-Originais/cursor.RES`. Requires Python 3 and Pillow (`pip install pillow`).
+ */
+tasks.register<Exec>("extractBrmodeloCursors") {
+    group = "build"
+    description = "Extract legacy Delphi cursor.RES into composeResources (Python + Pillow)"
+    workingDir = rootProject.projectDir
+    commandLine("python3", "scripts/extract_brmodelo_cursors.py")
+    inputs.file(rootProject.file("../Fontes-Originais/cursor.RES"))
+    outputs.dir(layout.projectDirectory.dir("src/commonMain/composeResources/files/brmodelo_cursors"))
+}
+
 compose.desktop {
     application {
         mainClass = "games.polyclub.power.brmodelo.MainKt"

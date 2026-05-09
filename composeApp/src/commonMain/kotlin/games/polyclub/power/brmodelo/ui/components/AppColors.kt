@@ -39,6 +39,15 @@ internal object AppColors {
     val hoverBorder = Color(0xFFE8A800)
     val hoverShape  = RoundedCornerShape(3.dp)
 
+    /** Split ribbon button: line between label and arrow; shown only while hover/active (on [hoverBg]). */
+    val ribbonSplitDividerActive = Color(0xFFE8C040)
+
+    /** Split button: extra highlight on the main (tool) hit target while hovered. */
+    val ribbonSplitMainSegmentHover = Color(0xFFFFE078)
+
+    /** Split button: extra highlight on the arrow strip while hovered (distinct from [ribbonSplitMainSegmentHover]). */
+    val ribbonSplitArrowSegmentHover = Color(0xFFF0C85A)
+
     // ─── Ribbon dropdown ──────────────────────────────────────────────────────
 
     val dropdownIconStripe = Color(0xFFF3F7FB)

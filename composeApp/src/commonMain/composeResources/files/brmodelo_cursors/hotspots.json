@@ -1,0 +1,137 @@
+{
+  "cursors": {
+    "files/brmodelo_cursors/png/cursor_textoii.png": {
+      "hotspotX": 0,
+      "hotspotY": 0,
+      "delphiGroupName": "TEXTOII",
+      "delphiLoadCursorResource": "TextoII",
+      "curRelativePath": "files/brmodelo_cursors/cur/cursor_textoii.cur"
+    },
+    "files/brmodelo_cursors/png/cursor_trabalho_tabela.png": {
+      "hotspotX": 0,
+      "hotspotY": 0,
+      "delphiGroupName": "TRABALHO_TABELA",
+      "delphiLoadCursorResource": "TRABALHO_TABELA",
+      "curRelativePath": "files/brmodelo_cursors/cur/cursor_trabalho_tabela.cur"
+    },
+    "files/brmodelo_cursors/png/cursor_lrelacao2.png": {
+      "hotspotX": 0,
+      "hotspotY": 0,
+      "delphiGroupName": "LRELACAO2",
+      "delphiLoadCursorResource": "LRELACAO2",
+      "curRelativePath": "files/brmodelo_cursors/cur/cursor_lrelacao2.cur"
+    },
+    "files/brmodelo_cursors/png/cursor_lrelacao.png": {
+      "hotspotX": 0,
+      "hotspotY": 0,
+      "delphiGroupName": "LRELACAO",
+      "delphiLoadCursorResource": "LRELACAO",
+      "curRelativePath": "files/brmodelo_cursors/cur/cursor_lrelacao.cur"
+    },
+    "files/brmodelo_cursors/png/cursor_separador.png": {
+      "hotspotX": 0,
+      "hotspotY": 0,
+      "delphiGroupName": "SEPARADOR",
+      "delphiLoadCursorResource": "SEPARADOR",
+      "curRelativePath": "files/brmodelo_cursors/cur/cursor_separador.cur"
+    },
+    "files/brmodelo_cursors/png/cursor_ltabela.png": {
+      "hotspotX": 0,
+      "hotspotY": 0,
+      "delphiGroupName": "LTABELA",
+      "delphiLoadCursorResource": "LTABELA",
+      "curRelativePath": "files/brmodelo_cursors/cur/cursor_ltabela.cur"
+    },
+    "files/brmodelo_cursors/png/cursor_lcampo.png": {
+      "hotspotX": 0,
+      "hotspotY": 0,
+      "delphiGroupName": "LCAMPO",
+      "delphiLoadCursorResource": "LCAMPO",
+      "curRelativePath": "files/brmodelo_cursors/cur/cursor_lcampo.cur"
+    },
+    "files/brmodelo_cursors/png/cursor_ligacao.png": {
+      "hotspotX": 0,
+      "hotspotY": 0,
+      "delphiGroupName": "LIGACAO",
+      "delphiLoadCursorResource": "Ligacao",
+      "curRelativePath": "files/brmodelo_cursors/cur/cursor_ligacao.cur"
+    },
+    "files/brmodelo_cursors/png/cursor_ligacao2.png": {
+      "hotspotX": 0,
+      "hotspotY": 0,
+      "delphiGroupName": "LIGACAO2",
+      "delphiLoadCursorResource": "Ligacao2",
+      "curRelativePath": "files/brmodelo_cursors/cur/cursor_ligacao2.cur"
+    },
+    "files/brmodelo_cursors/png/cursor_especializacaob.png": {
+      "hotspotX": 0,
+      "hotspotY": 0,
+      "delphiGroupName": "ESPECIALIZACAOB",
+      "delphiLoadCursorResource": "EspecializacaoB",
+      "curRelativePath": "files/brmodelo_cursors/cur/cursor_especializacaob.cur"
+    },
+    "files/brmodelo_cursors/png/cursor_especializacaoa.png": {
+      "hotspotX": 0,
+      "hotspotY": 0,
+      "delphiGroupName": "ESPECIALIZACAOA",
+      "delphiLoadCursorResource": "EspecializacaoA",
+      "curRelativePath": "files/brmodelo_cursors/cur/cursor_especializacaoa.cur"
+    },
+    "files/brmodelo_cursors/png/cursor_atributo.png": {
+      "hotspotX": 0,
+      "hotspotY": 0,
+      "delphiGroupName": "ATRIBUTO",
+      "delphiLoadCursorResource": "Atributo",
+      "curRelativePath": "files/brmodelo_cursors/cur/cursor_atributo.cur"
+    },
+    "files/brmodelo_cursors/png/cursor_entidade.png": {
+      "hotspotX": 0,
+      "hotspotY": 0,
+      "delphiGroupName": "ENTIDADE",
+      "delphiLoadCursorResource": "Entidade",
+      "curRelativePath": "files/brmodelo_cursors/cur/cursor_entidade.cur"
+    },
+    "files/brmodelo_cursors/png/cursor_relacao.png": {
+      "hotspotX": 0,
+      "hotspotY": 0,
+      "delphiGroupName": "RELACAO",
+      "delphiLoadCursorResource": "Relacao",
+      "curRelativePath": "files/brmodelo_cursors/cur/cursor_relacao.cur"
+    },
+    "files/brmodelo_cursors/png/cursor_entassoss.png": {
+      "hotspotX": 0,
+      "hotspotY": 0,
+      "delphiGroupName": "ENTASSOSS",
+      "delphiLoadCursorResource": "EntAssoss",
+      "curRelativePath": "files/brmodelo_cursors/cur/cursor_entassoss.cur"
+    },
+    "files/brmodelo_cursors/png/cursor_especializacao.png": {
+      "hotspotX": 0,
+      "hotspotY": 0,
+      "delphiGroupName": "ESPECIALIZACAO",
+      "delphiLoadCursorResource": "Especializacao",
+      "curRelativePath": "files/brmodelo_cursors/cur/cursor_especializacao.cur"
+    },
+    "files/brmodelo_cursors/png/cursor_texto.png": {
+      "hotspotX": 0,
+      "hotspotY": 0,
+      "delphiGroupName": "TEXTO",
+      "delphiLoadCursorResource": "Texto",
+      "curRelativePath": "files/brmodelo_cursors/cur/cursor_texto.cur"
+    },
+    "files/brmodelo_cursors/png/cursor_autorel.png": {
+      "hotspotX": 0,
+      "hotspotY": 0,
+      "delphiGroupName": "AUTOREL",
+      "delphiLoadCursorResource": "AutoRel",
+      "curRelativePath": "files/brmodelo_cursors/cur/cursor_autorel.cur"
+    },
+    "files/brmodelo_cursors/png/cursor_apagar.png": {
+      "hotspotX": 0,
+      "hotspotY": 0,
+      "delphiGroupName": "APAGAR",
+      "delphiLoadCursorResource": "APAGAR",
+      "curRelativePath": "files/brmodelo_cursors/cur/cursor_apagar.cur"
+    }
+  }
+}

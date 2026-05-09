@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -38,6 +39,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -57,6 +60,155 @@ import androidx.compose.ui.unit.sp
 import games.polyclub.power.brmodelo.ui.MenuEntry
 import games.polyclub.power.brmodelo.ui.components.AppColors
 import org.jetbrains.compose.resources.painterResource
+
+private val SPLIT_ARROW_STRIP_H = 14.dp
+private val SPLIT_INNER_SEGMENT_SHAPE = RoundedCornerShape(2.dp)
+
+/** Conceptual-schema ribbon entries that use a split control (main = default tool, arrow = category menu). */
+private val RIBBON_SPLIT_DROPDOWN_TITLES = setOf(
+    "Entidade",
+    "Especialização",
+    "Atributo",
+)
+
+/**
+ * Ribbon control with a split layout: top = primary tool, bottom strip = ▾ opens category menu only.
+ * Shared chrome (background + border) follows hover anywhere on the control bounds, not only on the two click targets.
+ * Each hit target still has its own hover highlight (tint + soft border) on top of that chrome.
+ */
+@Composable
+internal fun RibbonSplitDropdownButton(
+    entry: MenuEntry,
+    onMainClick: () -> Unit = {},
+) {
+    val dropdownItems = entry.dropdown ?: return
+    var showDropdown by remember { mutableStateOf(false) }
+
+    val outerInteraction = remember { MutableInteractionSource() }
+    val mainInteraction = remember { MutableInteractionSource() }
+    val arrowInteraction = remember { MutableInteractionSource() }
+    val isOuterHovered by outerInteraction.collectIsHoveredAsState()
+    val isMainHovered by mainInteraction.collectIsHoveredAsState()
+    val isArrowHovered by arrowInteraction.collectIsHoveredAsState()
+    val isControlActive =
+        isOuterHovered || isMainHovered || isArrowHovered || showDropdown
+
+    Box {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Top,
+            modifier = Modifier
+                // HorizontalDivider uses fillMaxWidth(); without intrinsic width the column would grow to the Row's max width.
+                .width(IntrinsicSize.Min)
+                .fillMaxHeight()
+                .hoverable(outerInteraction)
+                .background(if (isControlActive) AppColors.hoverBg else Color.Transparent, AppColors.hoverShape)
+                .border(1.dp, if (isControlActive) AppColors.hoverBorder else Color.Transparent, AppColors.hoverShape)
+                .padding(horizontal = 3.dp, vertical = 3.dp),
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Top,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .background(
+                        color = if (isMainHovered) AppColors.ribbonSplitMainSegmentHover else Color.Transparent,
+                        shape = SPLIT_INNER_SEGMENT_SHAPE,
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = if (isMainHovered) AppColors.hoverBorder.copy(alpha = 0.45f) else Color.Transparent,
+                        shape = SPLIT_INNER_SEGMENT_SHAPE,
+                    )
+                    .clickable(
+                        interactionSource = mainInteraction,
+                        indication = null,
+                    ) {
+                        showDropdown = false
+                        onMainClick()
+                    },
+            ) {
+                Image(
+                    painter = painterResource(entry.icon),
+                    contentDescription = entry.title,
+                    modifier = Modifier.size(32.dp),
+                    contentScale = ContentScale.Fit,
+                )
+                Text(
+                    text = entry.title,
+                    fontSize = 9.sp,
+                    color = Color(0xFF2C3E50),
+                    textAlign = TextAlign.Center,
+                    lineHeight = 10.sp,
+                    modifier = Modifier.padding(top = 3.dp),
+                )
+                Spacer(modifier = Modifier.weight(1f))
+            }
+
+            HorizontalDivider(
+                modifier = Modifier.padding(top = 2.dp),
+                thickness = 1.dp,
+                color = if (isControlActive) AppColors.ribbonSplitDividerActive else Color.Transparent,
+            )
+
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Spacer(modifier = Modifier.height(1.dp))
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(SPLIT_ARROW_STRIP_H)
+                        .background(
+                            color = if (isArrowHovered) AppColors.ribbonSplitArrowSegmentHover else Color.Transparent,
+                            shape = SPLIT_INNER_SEGMENT_SHAPE,
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = if (isArrowHovered) AppColors.hoverBorder.copy(alpha = 0.45f) else Color.Transparent,
+                            shape = SPLIT_INNER_SEGMENT_SHAPE,
+                        )
+                        .clickable(
+                            interactionSource = arrowInteraction,
+                            indication = null,
+                        ) { showDropdown = !showDropdown },
+                ) {
+                    val arrowColor = Color(0xFF556677)
+                    Canvas(modifier = Modifier.size(width = 8.dp, height = 4.dp)) {
+                        drawPath(
+                            path = Path().apply {
+                                moveTo(0f, 0f)
+                                lineTo(size.width, 0f)
+                                lineTo(size.width / 2f, size.height)
+                                close()
+                            },
+                            color = arrowColor,
+                        )
+                    }
+                }
+            }
+        }
+
+        RibbonDropdownMenu(
+            items = dropdownItems,
+            expanded = showDropdown,
+            onDismiss = { showDropdown = false },
+        )
+    }
+}
+
+/**
+ * Dispatches to [RibbonSplitDropdownButton] for conceptual-schema tools with a category menu
+ * ([RIBBON_SPLIT_DROPDOWN_TITLES]); otherwise [RibbonButton].
+ */
+@Composable
+internal fun RibbonMenuEntryButton(entry: MenuEntry) {
+    if (entry.title in RIBBON_SPLIT_DROPDOWN_TITLES && !entry.dropdown.isNullOrEmpty()) {
+        RibbonSplitDropdownButton(entry = entry)
+    } else {
+        RibbonButton(entry)
+    }
+}
 
 /**
  * Standard ribbon button: icon at the top, label immediately below.

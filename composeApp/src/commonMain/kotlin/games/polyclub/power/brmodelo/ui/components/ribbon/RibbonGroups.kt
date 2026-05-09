@@ -84,7 +84,7 @@ internal fun RibbonGroupWithSeparators(title: String, groups: List<List<MenuEntr
         ) {
             groups.forEachIndexed { index, group ->
                 if (index > 0) RibbonGroupSeparator()
-                group.forEach { RibbonButton(it) }
+                group.forEach { RibbonMenuEntryButton(it) }
             }
         }
         RibbonGroupTitle(title)
