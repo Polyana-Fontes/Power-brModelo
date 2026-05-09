@@ -1,0 +1,54 @@
+# Builds the Compose Multiplatform wasmJs browser distribution and pushes it to the
+# gh-pages branch so GitHub Pages can serve the latest web build.
+#
+# Repository settings: Settings → Pages → Build and deployment → Source: Deploy from a branch,
+# Branch: gh-pages / / (root).
+
+name: Deploy WASM to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'composeApp/**'
+      - 'gradle/**'
+      - '*.gradle.kts'
+      - 'gradle.properties'
+      - '.github/workflows/deploy-wasm-gh-pages.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: pages-wasm-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build wasm browser distribution
+        run: ./gradlew :composeApp:wasmJsBrowserDistribution --no-daemon --stacktrace
+
+      - name: Deploy to gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: composeApp/build/dist/wasmJs/productionExecutable
+          publish_branch: gh-pages
+          force_orphan: true
