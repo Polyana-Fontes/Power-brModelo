@@ -40,11 +40,13 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      # Caches Gradle User Home (dependencies, wrapper dists, local build-cache) between runs.
+      # Meaningful build-cache reuse needs org.gradle.caching=true in gradle.properties.
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build wasm browser distribution
-        run: ./gradlew :composeApp:wasmJsBrowserDistribution --no-daemon --stacktrace
+        run: ./gradlew :composeApp:wasmJsBrowserDistribution --stacktrace
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
