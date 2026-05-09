@@ -1,8 +1,7 @@
-# Builds the Compose Multiplatform wasmJs browser distribution and pushes it to the
-# gh-pages branch so GitHub Pages can serve the latest web build.
+# Builds the Compose Multiplatform wasmJs browser distribution and deploys it to
+# GitHub Pages via the official Actions flow (no gh-pages branch).
 #
-# Repository settings: Settings → Pages → Build and deployment → Source: Deploy from a branch,
-# Branch: gh-pages / / (root).
+# Repository settings: Settings → Pages → Build and deployment → Source: GitHub Actions.
 
 name: Deploy WASM to GitHub Pages
 
@@ -20,14 +19,16 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: pages-wasm-${{ github.ref }}
+  group: pages
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -45,10 +46,18 @@ jobs:
       - name: Build wasm browser distribution
         run: ./gradlew :composeApp:wasmJsBrowserDistribution --no-daemon --stacktrace
 
-      - name: Deploy to gh-pages branch
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: composeApp/build/dist/wasmJs/productionExecutable
-          publish_branch: gh-pages
-          force_orphan: true
+          path: composeApp/build/dist/wasmJs/productionExecutable
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

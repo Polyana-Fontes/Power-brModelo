@@ -23,9 +23,9 @@ import androidx.compose.ui.window.CanvasBasedWindow
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
-    setDocumentTitle("Power brModelo ${BuildInfo.displayVersion} - [teste-em-xml]")
+    setDocumentTitle(formatApplicationWindowTitle(null))
     CanvasBasedWindow(canvasElementId = "ComposeTarget") {
-        App()
+        App(onApplicationTitleChange = { setDocumentTitle(it) })
     }
 }
 

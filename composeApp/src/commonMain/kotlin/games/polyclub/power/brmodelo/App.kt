@@ -48,7 +48,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
-fun App() {
+fun App(onApplicationTitleChange: (String) -> Unit = {}) {
     var isMainMenuOpen by remember { mutableStateOf(false) }
     var activeMenu by remember { mutableStateOf<MainMenuType?>(null) }
     var selectedTab by remember { mutableStateOf(RibbonTab.EsquemaConceitual) }
@@ -175,6 +175,10 @@ fun App() {
         onDispose { bindDesktopSaveShortcut(null) }
     }
 
+    LaunchedEffect(schema?.name) {
+        onApplicationTitleChange(formatApplicationWindowTitle(schema?.name))
+    }
+
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFE3E3E3)) {
             BrModeloScreen(
@@ -209,6 +213,15 @@ fun App() {
             )
         }
     }
+}
+
+/**
+ * Desktop window caption and browser tab title: app name, version, and the loaded model name when present.
+ */
+internal fun formatApplicationWindowTitle(modelDisplayName: String?): String {
+    val appName = "Power brModelo ${BuildInfo.displayVersion}"
+    val name = modelDisplayName?.trim().orEmpty()
+    return if (name.isEmpty()) appName else "$name — $appName"
 }
 
 private fun mergeLoadedModel(parsed: ConceptualSchema, openedFromBrm: Boolean, picked: PickedFile): ConceptualSchema =

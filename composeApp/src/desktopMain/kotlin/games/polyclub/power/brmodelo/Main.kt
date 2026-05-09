@@ -18,6 +18,10 @@
 
 package games.polyclub.power.brmodelo
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
@@ -44,13 +48,14 @@ fun main() {
     }
     application {
         val windowState = rememberWindowState(width = 1366.dp, height = 768.dp)
+        var windowTitle by remember { mutableStateOf(formatApplicationWindowTitle(null)) }
         Window(
             onCloseRequest = ::exitApplication,
-            title = "Power brModelo ${BuildInfo.displayVersion} - [teste-em-xml]",
+            title = windowTitle,
             state = windowState,
             icon = painterResource(Res.drawable.app_icon),
         ) {
-            App()
+            App(onApplicationTitleChange = { windowTitle = it })
         }
     }
 }

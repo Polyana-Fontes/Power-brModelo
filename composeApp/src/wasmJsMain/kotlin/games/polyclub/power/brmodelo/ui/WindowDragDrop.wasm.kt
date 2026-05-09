@@ -75,7 +75,8 @@ internal actual fun consumeWindowDropFile(): PickedFile? {
 }
 
 // Single-expression helper — performs the read+clear in one js() call.
-private fun readAndClearDropFile(): String = js(
+// Nullable: JS returns null when there is no staged drop (must not map into non-null Kotlin String on Wasm).
+private fun readAndClearDropFile(): String? = js(
     """
     (function() {
         if (!window._kbrDropFile) return null;
