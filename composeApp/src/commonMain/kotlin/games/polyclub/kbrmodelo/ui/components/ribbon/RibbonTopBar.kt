@@ -25,111 +25,131 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import games.polyclub.kbrmodelo.ui.RibbonTab
 import games.polyclub.kbrmodelo.ui.components.AppColors
+import games.polyclub.kbrmodelo.ui.components.CHROMIUM_TAB_STRIP_HEIGHT
+import games.polyclub.kbrmodelo.ui.components.ChromiumTab
+import games.polyclub.kbrmodelo.ui.components.ChromiumTabShape
+
+// Ribbon tabs are slightly shorter than the full strip height to leave a small
+// breathing space at the top, distinguishing them from the canvas/inspector tabs.
+private val RIBBON_TAB_ACTIVE_HEIGHT   = 22.dp
+private val RIBBON_TAB_INACTIVE_HEIGHT = 19.dp
 
 @Composable
 internal fun RibbonTopBar(
     selectedTab: RibbonTab,
     onMainMenuClick: () -> Unit,
-    onTabSelect: (RibbonTab) -> Unit
+    onTabSelect: (RibbonTab) -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(26.dp)
-            .background(AppColors.ribbonBg)
-            .padding(horizontal = 4.dp),
-        verticalAlignment = Alignment.Bottom
-    ) {
-        // Hamburger menu button — drawn as 3 solid lines (avoids WASM glyph issues)
-        Box(
-            modifier = Modifier
-                .size(width = 26.dp, height = 22.dp)
-                .background(Color(0xFF3E5A7E), RoundedCornerShape(3.dp))
-                .clickable(onClick = onMainMenuClick)
-                .align(Alignment.CenterVertically),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(3.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                repeat(3) {
-                    Box(
-                        modifier = Modifier
-                            .width(14.dp)
-                            .height(2.dp)
-                            .background(Color.White, RoundedCornerShape(1.dp))
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.width(6.dp))
-
-        RibbonTabButton(
-            text = "Esquema Conceitual",
-            selected = selectedTab == RibbonTab.EsquemaConceitual,
-            onClick = { onTabSelect(RibbonTab.EsquemaConceitual) }
-        )
-        Spacer(modifier = Modifier.width(2.dp))
-        RibbonTabButton(
-            text = "Opções",
-            selected = selectedTab == RibbonTab.Opcoes,
-            onClick = { onTabSelect(RibbonTab.Opcoes) }
-        )
+    val density = LocalDensity.current
+    val topCornerPx   = with(density) { 5.dp.toPx() }
+    val bottomCurvePx = with(density) { 4.dp.toPx() }
+    val tabShape = remember(topCornerPx, bottomCurvePx) {
+        ChromiumTabShape(topCornerRadius = topCornerPx, bottomCurveRadius = bottomCurvePx)
     }
-}
 
-@Composable
-private fun RibbonTabButton(text: String, selected: Boolean, onClick: () -> Unit) {
-    val bg        = if (selected) AppColors.ribbonBg else AppColors.ribbonTabInactive
-    val textColor = if (selected) Color(0xFF1B365D) else Color(0xFF445566)
+    // Outer Box so we can position the HorizontalDivider at the bottom independently
+    // from the Row content (hamburger + tabs).
     Box(
         modifier = Modifier
-            .height(22.dp)
-            .background(bg, RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp))
-            .then(
-                if (selected) {
-                    Modifier.drawBehind {
-                        val w = size.width; val h = size.height; val s = 1.dp.toPx()
-                        val c = AppColors.ribbonBorder
-                        drawLine(c, Offset(0f, h), Offset(0f, s / 2))
-                        drawLine(c, Offset(0f, s / 2), Offset(w, s / 2))
-                        drawLine(c, Offset(w, s / 2), Offset(w, h))
-                        // No bottom line — tab merges with ribbon below
-                    }
-                } else {
-                    Modifier.drawBehind {
-                        val w = size.width; val h = size.height; val s = 1.dp.toPx()
-                        val c = AppColors.ribbonBorder
-                        drawLine(c, Offset(0f, h), Offset(0f, s / 2))
-                        drawLine(c, Offset(0f, s / 2), Offset(w, s / 2))
-                        drawLine(c, Offset(w, s / 2), Offset(w, h))
-                        drawLine(c, Offset(0f, h), Offset(w, h))
+            .fillMaxWidth()
+            .height(CHROMIUM_TAB_STRIP_HEIGHT)
+            .background(AppColors.ribbonBg),
+    ) {
+        // Strip separator — active tab (zIndex 2f) renders on top of it, making the
+        // active tab appear to rise seamlessly into the ribbon content below.
+        HorizontalDivider(
+            color = AppColors.ribbonBorder,
+            thickness = 1.dp,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .zIndex(1.5f),
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 6.dp),
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            // Hamburger menu button
+            Box(
+                modifier = Modifier
+                    .size(width = 26.dp, height = 22.dp)
+                    .background(Color(0xFF3E5A7E), RoundedCornerShape(3.dp))
+                    .clickable(onClick = onMainMenuClick)
+                    .align(Alignment.CenterVertically),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    repeat(3) {
+                        Box(
+                            modifier = Modifier
+                                .width(14.dp)
+                                .height(2.dp)
+                                .background(Color.White, RoundedCornerShape(1.dp))
+                        )
                     }
                 }
+            }
+
+            Spacer(modifier = Modifier.width(6.dp))
+
+            ChromiumTab(
+                label = "Esquema Conceitual",
+                selected = selectedTab == RibbonTab.EsquemaConceitual,
+                tabShape = tabShape,
+                activeTabBg = AppColors.ribbonBg,
+                inactiveTabBg = AppColors.ribbonTabInactive,
+                borderColor = AppColors.ribbonBorder,
+                modifier = Modifier
+                    .height(
+                        if (selectedTab == RibbonTab.EsquemaConceitual)
+                            RIBBON_TAB_ACTIVE_HEIGHT
+                        else
+                            RIBBON_TAB_INACTIVE_HEIGHT
+                    )
+                    .zIndex(if (selectedTab == RibbonTab.EsquemaConceitual) 2f else 1f),
+                onClick = { onTabSelect(RibbonTab.EsquemaConceitual) },
             )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(text = text, fontSize = 12.sp, color = textColor)
+
+            ChromiumTab(
+                label = "Opções",
+                selected = selectedTab == RibbonTab.Opcoes,
+                tabShape = tabShape,
+                activeTabBg = AppColors.ribbonBg,
+                inactiveTabBg = AppColors.ribbonTabInactive,
+                borderColor = AppColors.ribbonBorder,
+                modifier = Modifier
+                    .height(
+                        if (selectedTab == RibbonTab.Opcoes)
+                            RIBBON_TAB_ACTIVE_HEIGHT
+                        else
+                            RIBBON_TAB_INACTIVE_HEIGHT
+                    )
+                    .zIndex(if (selectedTab == RibbonTab.Opcoes) 2f else 1f),
+                onClick = { onTabSelect(RibbonTab.Opcoes) },
+            )
+        }
     }
 }
