@@ -832,6 +832,21 @@ private fun connectionEncaixes(
         }
     }
 
+    // Specialization (TEspecializacao) doesn't use the centred bounding-box edges. Pascal
+    // computes `FalsasBases` (Redesenhe, mer.pas ~8643) and PrepareToAtive (~8700) selects
+    // ONE of those four points based on the connected entity's relative left and whether
+    // it's the EntidadeBase. The 4 false-bases live at the triangle's *corners* (not edge
+    // centres), and a different point is chosen depending on:
+    //   - Posi: POSI_ABAIXO (Esp.Top > base.Top) ⇒ apex on top, base on bottom (default).
+    //   - Posi: POSI_ACIMA ⇒ flipped: apex on bottom, base on top.
+    //   - Connected entity is the EntidadeBase ⇒ snap on FalsasBases[2] (apex centre).
+    //   - Type=Optional or Ponta.Left == base.Left ⇒ FalsasBases[4] (base centre).
+    //   - Ponta.Left < base.Left ⇒ FalsasBases[1] (base-left corner).
+    //   - Else ⇒ FalsasBases[3] (base-right corner).
+    if (elem is SchemaElement.Specialization) {
+        return specializationEncaixes(elem, otherElem, schema)
+    }
+
     // AssociativeEntity connecting to a non-Attribute uses the inner diamond's edge
     // midpoints (TChildRelacao handles those connections in the original).
     if (elem is SchemaElement.AssociativeEntity && otherElem !is SchemaElement.Attribute) {
@@ -849,6 +864,71 @@ private fun connectionEncaixes(
         Offset(right, cy),     // [3] right center
         Offset(cx,    bottom), // [4] bottom center
     )
+}
+
+/**
+ * Returns the four `FalsasBases` snap points of a [Specialization] at indices 1..4,
+ * matching `TEspecializacao.Redesenhe` (mer.pas ~8643) and `PrepareToAtive` (~8700).
+ *
+ * The triangle has the apex at the top (when Esp is BELOW its base entity, i.e. POSI_ABAIXO)
+ * or at the bottom (POSI_ACIMA). FalsasBases identifies the apex centre, the base centre,
+ * and the two base corners. PrepareToAtive then picks one of these based on which entity
+ * the line connects to and that entity's left position relative to the base.
+ *
+ * All four returned offsets are equal (Pascal collapses Encaixe[1..4] to a single point per
+ * connection), so callers indexing by the chosen `ponto` always retrieve the right snap.
+ */
+private fun specializationEncaixes(
+    spec: SchemaElement.Specialization,
+    otherElem: SchemaElement,
+    schema: ConceptualSchema,
+): Array<Offset> {
+    val p = spec.position
+    val xOffset = -1.5f                                       // mirror drawSpecialization shift
+    val left   = p.x.toFloat() + xOffset
+    val top    = p.y.toFloat()
+    val width  = p.width.toFloat()
+    val height = p.height.toFloat()
+    // Pascal: meio = aLeft + ((aWidth-3) div 2); H = aTop + (aHeight-3); W = aLeft + (aWidth-3)
+    val meio = left + ((width - 3f) / 2f)
+    val h    = top + (height - 3f)
+    val w    = left + (width - 3f)
+
+    val baseEntity = schema.elements[spec.baseEntityId]
+    val isAcima = baseEntity != null && p.y < baseEntity.position.y    // POSI_ACIMA when Esp.Top < base.Top
+    // FalsasBases[1..4] for POSI_ABAIXO (default): apex top, base bottom
+    //   [1] base-left, [2] apex centre (top), [3] base-right, [4] base centre (bottom)
+    // FalsasBases[1..4] for POSI_ACIMA: apex bottom, base top — flipped
+    //   [1] base-left (top), [2] apex centre (bottom), [3] base-right (top), [4] base centre (top)
+    val falsa1: Offset; val falsa2: Offset; val falsa3: Offset; val falsa4: Offset
+    if (isAcima) {
+        falsa2 = Offset(meio, h)
+        falsa4 = Offset(meio, top)
+        falsa1 = Offset(left, top)
+        falsa3 = Offset(w, top)
+    } else {
+        falsa2 = Offset(meio, top)
+        falsa4 = Offset(meio, h)
+        falsa1 = Offset(left, h)
+        falsa3 = Offset(w, h)
+    }
+
+    // PrepareToAtive (mer.pas ~8700) selects ONE FalsasBase based on the connected entity:
+    //   - Ponta == EntidadeBase           → FalsasBases[2] (apex)
+    //   - Type=Optional or Ponta.Left=base.Left → FalsasBases[4] (base centre)
+    //   - Ponta.Left < base.Left          → FalsasBases[1] (base-left)
+    //   - else                            → FalsasBases[3] (base-right)
+    val pick: Offset = run {
+        val baseLeft = baseEntity?.position?.x ?: p.x
+        when {
+            otherElem.id == spec.baseEntityId               -> falsa2
+            spec.type == games.polyclub.kbrmodelo.domain.SpecializationType.OPTIONAL ||
+                otherElem.position.x == baseLeft            -> falsa4
+            otherElem.position.x < baseLeft                 -> falsa1
+            else                                            -> falsa3
+        }
+    }
+    return arrayOf(Offset.Zero, pick, pick, pick, pick)
 }
 
 /**
@@ -908,6 +988,61 @@ private fun diamondNearestVertex(diamondPos: ElementPosition, attrPos: ElementPo
  * exactly matching the `case 1: Encaixe[1].Y -= atDes; …` / `case 3: Encaixe[3].Y += atDes; …`
  * branches in the Pascal source.
  */
+/**
+ * Returns the point on a diamond's diagonal boundary that intersects the attribute's
+ * centre line (cy for ponto 1/3, cx for ponto 2/4), or `null` when the projection falls
+ * outside the diamond's range for the requested ponto.
+ *
+ * Used as an alternative to [diamondAttrEncaixe] for attributes whose bounding box
+ * overlaps the diamond's bounding box: the original brModelo Pascal binary draws those
+ * connections as a single straight line at the attribute's centre (no Z routing), which
+ * implies the diamond's snap point is the actual intersection of the diagonal with the
+ * attribute's `cy`/`cx` (not the `Encaixe[ponto] + Desvio` produced by `PrepareToAtive`).
+ *
+ * The diamond equation `|x-cx|/hw + |y-cy|/hh = 1` defines its border; for a given y in
+ * `[top, bottom]` the border x on the upper-left side is `cx - hw*(1 - |y-cy|/hh)`.
+ */
+private fun projectAttrOnDiamondBorder(
+    diamondPos: ElementPosition,
+    ponto: Int,
+    attrPos: ElementPosition,
+): Offset? {
+    val left   = diamondPos.x.toFloat()
+    val top    = diamondPos.y.toFloat()
+    val w      = diamondPos.width.toFloat()
+    val h      = diamondPos.height.toFloat()
+    val cx     = left + w / 2f
+    val cy     = top  + h / 2f
+    val right  = left + w
+    val bottom = top  + h
+    val ax     = attrPos.x + attrPos.width  / 2f
+    val ay     = attrPos.y + attrPos.height / 2f
+
+    return when (ponto) {
+        1 -> if (ay in top..bottom) {
+            val rel  = abs(ay - cy) / (h / 2f)
+            val xOff = (w / 2f) * rel
+            Offset(left + xOff, ay)
+        } else null
+        3 -> if (ay in top..bottom) {
+            val rel  = abs(ay - cy) / (h / 2f)
+            val xOff = (w / 2f) * rel
+            Offset(right - xOff, ay)
+        } else null
+        2 -> if (ax in left..right) {
+            val rel  = abs(ax - cx) / (w / 2f)
+            val yOff = (h / 2f) * rel
+            Offset(ax, top + yOff)
+        } else null
+        4 -> if (ax in left..right) {
+            val rel  = abs(ax - cx) / (w / 2f)
+            val yOff = (h / 2f) * rel
+            Offset(ax, bottom - yOff)
+        } else null
+        else -> null
+    }
+}
+
 private fun diamondAttrEncaixe(
     diamondPos: ElementPosition,
     ponto: Int,
@@ -1242,11 +1377,24 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                         // `arruma` helper. The resulting point lives on the diagonal edge near
                         // the chosen vertex — NOT at the vertex itself. TBaseRelacao does NOT
                         // participate in Divida, so each attribute uses its own `Desvio`.
-                        elemResult[conn.id] = diamondAttrEncaixe(
-                            elem.position,
-                            ponto,
-                            otherElem.deviationAngle,
-                        )
+                        //
+                        // Special case: when the attribute's bounding box OVERLAPS the diamond
+                        // (e.g. `funcaoGrat` in `MER-PousadaSolDaManha.xml`), the attribute is
+                        // sitting close enough to the diamond border that the original brModelo
+                        // routes the line *along the attribute's own centre* directly to where
+                        // the diamond's diagonal crosses that y/x. This produces the perfectly
+                        // straight line we observe in the Pascal binary's render. Falls back
+                        // to the standard `PrepareToAtive` formula for non-overlapping attrs.
+                        val ap = otherElem.position
+                        val dp = elem.position
+                        val overlaps = ap.x < dp.x + dp.width && ap.x + ap.width > dp.x &&
+                                       ap.y < dp.y + dp.height && ap.y + ap.height > dp.y
+                        elemResult[conn.id] = if (overlaps) {
+                            projectAttrOnDiamondBorder(dp, ponto, ap)
+                                ?: diamondAttrEncaixe(dp, ponto, otherElem.deviationAngle)
+                        } else {
+                            diamondAttrEncaixe(dp, ponto, otherElem.deviationAngle)
+                        }
                     } else {
                         // Entity/Table: queue for Divida along with non-attr connections so
                         // that all ligações on this `ponto` are evenly spaced (matches Pascal's

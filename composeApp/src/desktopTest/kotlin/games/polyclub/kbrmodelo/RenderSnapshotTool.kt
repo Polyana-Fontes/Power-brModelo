@@ -120,4 +120,11 @@ class RenderSnapshotTool {
         val out = render("exemplo-simples.xml")
         check(out.length() > 0) { "Generated snapshot is empty: $out" }
     }
+
+    @Test
+    fun `snapshot - Teste3`() {
+        // Act & Assert
+        val out = render("Teste3.xml")
+        check(out.length() > 0) { "Generated snapshot is empty: $out" }
+    }
 }
