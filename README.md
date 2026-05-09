@@ -1,4 +1,4 @@
-# KbrModelo
+# Power brModelo
 
 Rewrite of https://sourceforge.net/projects/brmodelo30/ in Kotlin Compose Multiplatform.
 

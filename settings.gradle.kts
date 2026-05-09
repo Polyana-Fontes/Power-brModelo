@@ -1,5 +1,5 @@
 /*
- * KbrModelo - Kotlin port of brModelo 3.0 originally written in Pascal
+ * Power brModelo - Kotlin port of brModelo 3.0 originally written in Pascal
  * Copyright (C) 2026  Polyana Fontes
  *
  * This program is free software: you can redistribute it and/or modify
@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-rootProject.name = "KbrModelo"
+rootProject.name = "Power-brModelo"
 
 pluginManagement {
     repositories {

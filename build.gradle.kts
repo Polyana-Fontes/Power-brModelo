@@ -1,5 +1,5 @@
 /*
- * KbrModelo - Kotlin port of brModelo 3.0 originally written in Pascal
+ * Power brModelo - Kotlin port of brModelo 3.0 originally written in Pascal
  * Copyright (C) 2026  Polyana Fontes
  *
  * This program is free software: you can redistribute it and/or modify
@@ -20,4 +20,9 @@ plugins {
     alias(libs.plugins.kotlin.multiplatform) apply false
     alias(libs.plugins.compose.multiplatform) apply false
     alias(libs.plugins.compose.compiler) apply false
+}
+
+allprojects {
+    group = "games.polyclub.power.brmodelo"
+    version = "4.0.0-SNAPSHOT"
 }
