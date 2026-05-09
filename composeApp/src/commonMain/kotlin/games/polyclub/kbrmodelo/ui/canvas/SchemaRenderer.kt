@@ -135,7 +135,7 @@ private fun DrawScope.drawElement(
         is SchemaElement.Relationship -> drawRelationship(element, textMeasurer)
         is SchemaElement.AssociativeEntity -> drawAssociativeEntity(element, textMeasurer)
         is SchemaElement.Attribute -> drawAttribute(element, schema, textMeasurer)
-        is SchemaElement.Specialization -> drawSpecialization(element, textMeasurer)
+        is SchemaElement.Specialization -> drawSpecialization(element, schema, textMeasurer)
         is SchemaElement.SelfRelationship -> Unit // drawn in drawSchema step 4b on top of lines
         is SchemaElement.Annotation -> drawAnnotation(element, textMeasurer)
     }
@@ -539,21 +539,42 @@ private fun DrawScope.drawAttribute(
  * specialisation's position and width/height. We reconstruct them here from the
  * stored [ElementPosition].
  */
-private fun DrawScope.drawSpecialization(spec: SchemaElement.Specialization, textMeasurer: TextMeasurer) {
+private fun DrawScope.drawSpecialization(
+    spec: SchemaElement.Specialization,
+    schema: ConceptualSchema,
+    textMeasurer: TextMeasurer,
+) {
     val p = spec.position
-    // Shift 2 px left to compensate for the off-by-one in the original Pascal coordinate
-    // system, which makes connection lines from parent/child entities perfectly straight.
-    val x = p.x.toFloat() - 1.5f
+    val x = p.x.toFloat()
     val y = p.y.toFloat()
     val w = p.width.toFloat()
     val h = p.height.toFloat()
 
-    // Triangle vertices: top-center, bottom-right, bottom-left
-    // (matching typical IS-A triangle orientation: apex on top → base entity)
+    // Pascal `Redesenhe` (mer.pas ~8643) integer arithmetic, NOT centre-of-bbox:
+    //   meio := aLeft + ((aWidth-3) div 2)
+    //   H    := aTop  + (aHeight-3)
+    //   W    := aLeft + (aWidth-3)
+    // The triangle's three vertices come straight from `FalsasBases`, which align with
+    // the snap points that `specializationEncaixes` returns — keeping connection lines
+    // pixel-perfect with parent/child entity centres.
+    val meio = ((p.width - 3) / 2).toFloat()
+    val hOff = (p.height - 3).toFloat()
+    val wOff = (p.width - 3).toFloat()
+    val baseEntity = schema.elements[spec.baseEntityId]
+    val isAcima = baseEntity != null && p.y < baseEntity.position.y
+
     val path = Path().apply {
-        moveTo(x + w / 2f, y)
-        lineTo(x + w - 1f, y + h - 1f)
-        lineTo(x, y + h - 1f)
+        if (isAcima) {
+            // Apex pointing DOWN: base on top, apex at (meio, hOff)
+            moveTo(x, y)
+            lineTo(x + wOff, y)
+            lineTo(x + meio, y + hOff)
+        } else {
+            // Apex pointing UP (default POSI_ABAIXO): base on bottom, apex at (meio, 0)
+            moveTo(x + meio, y)
+            lineTo(x + wOff, y + hOff)
+            lineTo(x, y + hOff)
+        }
         close()
     }
     drawPath(path, Color.White, style = Fill)
@@ -806,10 +827,7 @@ private fun connectionEncaixes(
     schema: ConceptualSchema,
 ): Array<Offset> {
     val p = elem.position
-    // Specialization is rendered 1 px to the left (see drawSpecialization), so its
-    // connection encaixe points must follow the same offset to keep lines straight.
-    val xOffset = if (elem is SchemaElement.Specialization) -1.5f else 0f
-    val left   = p.x.toFloat() + xOffset
+    val left   = p.x.toFloat()
     val top    = p.y.toFloat()
     val right  = left + p.width
     val bottom = top  + p.height
@@ -884,15 +902,17 @@ private fun specializationEncaixes(
     schema: ConceptualSchema,
 ): Array<Offset> {
     val p = spec.position
-    val xOffset = -1.5f                                       // mirror drawSpecialization shift
-    val left   = p.x.toFloat() + xOffset
-    val top    = p.y.toFloat()
-    val width  = p.width.toFloat()
-    val height = p.height.toFloat()
-    // Pascal: meio = aLeft + ((aWidth-3) div 2); H = aTop + (aHeight-3); W = aLeft + (aWidth-3)
-    val meio = left + ((width - 3f) / 2f)
-    val h    = top + (height - 3f)
-    val w    = left + (width - 3f)
+    val left = p.x.toFloat()
+    val top  = p.y.toFloat()
+    // Pascal `Redesenhe` (mer.pas ~8643) uses INTEGER division:
+    //   meio := aLeft + ((aWidth-3) div 2)
+    //   H    := aTop  + (aHeight-3)
+    //   W    := aLeft + (aWidth-3)
+    // Replicated exactly so connection lines align pixel-perfect with parent/child
+    // entity centres (which themselves use `Left + Width div 2` integer arithmetic).
+    val meio = left + ((p.width - 3) / 2).toFloat()
+    val h    = top  + (p.height - 3).toFloat()
+    val w    = left + (p.width  - 3).toFloat()
 
     val baseEntity = schema.elements[spec.baseEntityId]
     val isAcima = baseEntity != null && p.y < baseEntity.position.y    // POSI_ACIMA when Esp.Top < base.Top
