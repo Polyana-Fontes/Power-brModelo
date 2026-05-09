@@ -494,4 +494,105 @@ class ConceptualSchemaXmlTest {
         // Assert
         assertEquals(origSr.ownerEntityId, reSr.ownerEntityId)
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // HIDDEN ATTRIBUTES — teste-varios-componentes
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `varios XML - MinhaEntidade has 7 hidden attributes`() {
+        // Arrange
+        val schema = parseResource("teste-varios-componentes.xml")
+
+        // Act
+        val entity = schema.entities.first { it.name == "MinhaEntidade" }
+
+        // Assert
+        assertEquals(7, entity.hiddenAttributes.size,
+            "Expected 7 hidden attributes, got: ${entity.hiddenAttributes.map { it.name }}")
+    }
+
+    @Test
+    fun `varios XML - hidden attribute names are preserved including duplicates and spaces`() {
+        // Arrange
+        val schema = parseResource("teste-varios-componentes.xml")
+        val entity = schema.entities.first { it.name == "MinhaEntidade" }
+
+        // Act
+        val names = entity.hiddenAttributes.map { it.name }
+
+        // Assert
+        assertTrue("umAtributoOculto" in names)
+        assertTrue("atributo2" in names)
+        assertTrue(names.any { it.contains("espaço") || it.contains("espa") },
+            "Expected an attribute with spaces in name")
+        assertEquals(2, names.count { it == "vouDuplicarOnomeDesse" },
+            "Expected duplicate name to appear twice")
+        assertTrue("vixeEleDeixouDuplicar" in names)
+        assertTrue("tipo inventado" in names)
+    }
+
+    @Test
+    fun `varios XML - umAtributoOculto is identifier and multivalued`() {
+        // Arrange
+        val schema = parseResource("teste-varios-componentes.xml")
+        val entity = schema.entities.first { it.name == "MinhaEntidade" }
+
+        // Act
+        val attr = entity.hiddenAttributes.first { it.name == "umAtributoOculto" }
+
+        // Assert
+        assertTrue(attr.isIdentifier, "umAtributoOculto should be identifier")
+        assertTrue(attr.isMultiValued, "umAtributoOculto MaxCard=20 should be multivalued")
+        assertEquals(20, attr.cardinality.maxCardinality)
+        assertEquals(1, attr.cardinality.minCardinality)
+        assertEquals("Texto(1)", attr.type)
+    }
+
+    @Test
+    fun `varios XML - non-identifier non-multivalued attribute parsed correctly`() {
+        // Arrange
+        val schema = parseResource("teste-varios-componentes.xml")
+        val entity = schema.entities.first { it.name == "MinhaEntidade" }
+
+        // Act
+        val attr = entity.hiddenAttributes.first { it.name == "vouDuplicarOnomeDesse" && it.type == "Moeda" }
+
+        // Assert
+        assertFalse(attr.isIdentifier)
+        assertFalse(attr.isMultiValued)
+        assertEquals("Moeda", attr.type)
+    }
+
+    @Test
+    fun `varios XML - invented type is preserved verbatim`() {
+        // Arrange
+        val schema = parseResource("teste-varios-componentes.xml")
+        val entity = schema.entities.first { it.name == "MinhaEntidade" }
+
+        // Act
+        val attr = entity.hiddenAttributes.first { it.name == "tipo inventado" }
+
+        // Assert
+        assertEquals("bolhaDeSabão", attr.type)
+    }
+
+    @Test
+    fun `varios XML - round-trip preserves all hidden attributes`() {
+        // Arrange
+        val original = parseResource("teste-varios-componentes.xml")
+        val originalEntity = original.entities.first { it.name == "MinhaEntidade" }
+
+        // Act
+        val reloaded = ConceptualSchemaXmlParser.parse(
+            ConceptualSchemaXmlSerializer.serialize(original).toByteArray()
+        )
+        val reloadedEntity = reloaded.entities.first { it.name == "MinhaEntidade" }
+
+        // Assert
+        assertEquals(originalEntity.hiddenAttributes.size, reloadedEntity.hiddenAttributes.size)
+        val origNames = originalEntity.hiddenAttributes.map { it.name }
+        val reNames = reloadedEntity.hiddenAttributes.map { it.name }
+        assertEquals(origNames, reNames)
+    }
 }

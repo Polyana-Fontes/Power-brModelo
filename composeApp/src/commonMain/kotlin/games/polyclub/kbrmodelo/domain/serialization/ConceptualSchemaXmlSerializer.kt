@@ -106,7 +106,7 @@ object ConceptualSchemaXmlSerializer {
     ): XmlNode = xmlNode("Entidade", "nome" to entity.name, "id" to entity.id) {
         addAll(buildBaseFields(entity))
         add(buildAtributos(schema.attributesOf(entity.id), schema, ctx))
-        add(xmlNode("AtributosOcultos"))
+        add(buildAtributosOcultos(entity.hiddenAttributes))
         textNode("Dicionario", entity.dictionary)
         boolValor("Nula", entity.isWeak)
         textNode("Observacao", entity.observations)
@@ -132,7 +132,7 @@ object ConceptualSchemaXmlSerializer {
     ): XmlNode = xmlNode("Relacao", "nome" to rel.name, "id" to rel.id) {
         addAll(buildBaseFields(rel))
         add(buildAtributos(schema.attributesOf(rel.id), schema, ctx))
-        add(xmlNode("AtributosOcultos"))
+        add(buildAtributosOcultos(rel.hiddenAttributes))
         textNode("Dicionario", rel.dictionary)
         boolValor("Nula", false)
         textNode("Observacao", rel.observations)
@@ -158,7 +158,7 @@ object ConceptualSchemaXmlSerializer {
     ): XmlNode = xmlNode("EntidadeAssoss", "nome" to ea.name, "id" to ea.id) {
         addAll(buildBaseFields(ea))
         add(buildAtributos(schema.attributesOf(ea.id), schema, ctx))
-        add(xmlNode("AtributosOcultos"))
+        add(buildAtributosOcultos(ea.hiddenAttributes))
         textNode("Dicionario", ea.dictionary)
         boolValor("Nula", false)
         textNode("Observacao", ea.observations)
@@ -215,7 +215,7 @@ object ConceptualSchemaXmlSerializer {
 
             // For composite attributes <Atributos/> is empty; children go inside <BarraDeAtributos>
             add(xmlNode("Atributos"))
-            add(xmlNode("AtributosOcultos"))
+            add(buildAtributosOcultos(attr.hiddenAttributes))
             textNode("Dicionario", attr.dictionary)
             boolValor("Nula", false)
             textNode("Observacao", attr.observations)
@@ -274,7 +274,7 @@ object ConceptualSchemaXmlSerializer {
     ): XmlNode = xmlNode("AutoRelacao", "nome" to sr.name, "id" to sr.id) {
         addAll(buildBaseFields(sr))
         add(xmlNode("Atributos"))
-        add(xmlNode("AtributosOcultos"))
+        add(buildAtributosOcultos(sr.hiddenAttributes))
         textNode("Dicionario", sr.dictionary)
         boolValor("Nula", false)
         textNode("Observacao", sr.observations)
@@ -304,7 +304,7 @@ object ConceptualSchemaXmlSerializer {
     ): XmlNode = xmlNode("Especializacao", "nome" to spec.name, "id" to spec.id) {
         addAll(buildBaseFields(spec))
         add(xmlNode("Atributos"))
-        add(xmlNode("AtributosOcultos"))
+        add(buildAtributosOcultos(spec.hiddenAttributes))
         textNode("Dicionario", spec.dictionary)
         boolValor("Nula", false)
         textNode("Observacao", spec.observations)
@@ -355,7 +355,7 @@ object ConceptualSchemaXmlSerializer {
     ): XmlNode = xmlNode("Cardinalidades", "Cardinalidade" to cardCode) {
         if (showCard) {
             val pos = conn.cardinalityPosition ?: ElementPosition(0, 0, 36, 20)
-            add(buildCardinalidadeNode(cardId, conn.cardinality, pos, conn.cardinalityFixed, conn.cardinalityRole))
+            add(buildCardinalidadeNode(cardId, conn.cardinality, pos, conn.cardinalityFixed, conn.cardinalityRole, conn.cardinalityAutoSize))
         }
     }
 
@@ -365,6 +365,7 @@ object ConceptualSchemaXmlSerializer {
         position: ElementPosition,
         fixed: Boolean,
         role: String = "",
+        autoSize: Boolean = true,
     ): XmlNode {
         val cardCode = when (cardinality) {
             Cardinality.ONE_TO_ONE   -> 1
@@ -387,7 +388,7 @@ object ConceptualSchemaXmlSerializer {
             textNode("Futuro", "")
             add(xmlNode("Anexos"))
             valor("Cor", DEFAULT_CARD_COLOR)
-            boolValor("TamAuto", true)
+            boolValor("TamAuto", autoSize)
             valor("Tipo", 0)
             valor("TextAlin", 0)
             valor("Card", cardCode)
@@ -432,6 +433,33 @@ object ConceptualSchemaXmlSerializer {
         attr: SchemaElement.Attribute,
         siblings: List<SchemaElement.Attribute>,
     ): Boolean = siblings.any { it.childAttributeIds.contains(attr.id) }
+
+    /**
+     * Builds the `<AtributosOcultos>` node for a list of hidden attributes.
+     *
+     * Each [HiddenAttribute] is serialized as `<AtributoOculto Nome="...">` with its
+     * properties. Composite attributes include a nested `<Atributos>` block containing
+     * their children. Mirrors `TAtributoOculto.GeraXML` / `TConjPAtt.GeraXML` in `att.pas`.
+     */
+    private fun buildAtributosOcultos(hidden: List<HiddenAttribute>): XmlNode =
+        xmlNode("AtributosOcultos") {
+            hidden.forEach { add(buildAtributoOculto(it)) }
+        }
+
+    private fun buildAtributoOculto(attr: HiddenAttribute): XmlNode =
+        xmlNode("AtributoOculto", "Nome" to attr.name) {
+            add(xmlNode("LeftTop", "X" to attr.position.x, "Y" to attr.position.y))
+            valor("MaxCard", attr.cardinality.maxCardinality)
+            valor("MinCard", attr.cardinality.minCardinality)
+            boolValor("Composto", attr.isComposite)
+            boolValor("Identificador", attr.isIdentifier)
+            valor("Tipo", attr.type)
+            if (attr.isComposite) {
+                add(xmlNode("Atributos") {
+                    attr.children.forEach { add(buildAtributoOculto(it)) }
+                })
+            }
+        }
 
     /** Default cardinality label background colour (Windows COLORREF 0xF0CAA6, light blue-grey). */
     private const val DEFAULT_CARD_COLOR = 15780518

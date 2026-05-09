@@ -369,6 +369,107 @@ class ConceptualSchemaBrmTest {
             )
         }
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // HIDDEN ATTRIBUTES — teste-varios-componentes
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `varios brM - MinhaEntidade has 7 hidden attributes`() {
+        // Arrange
+        val schema = parseBrm("teste-varios-componentes.brM")
+
+        // Act
+        val entity = schema.entities.first { it.name == "MinhaEntidade" }
+
+        // Assert
+        assertEquals(7, entity.hiddenAttributes.size,
+            "Expected 7 hidden attributes, got: ${entity.hiddenAttributes.map { it.name }}")
+    }
+
+    @Test
+    fun `varios brM - hidden attribute count matches XML`() {
+        // Arrange
+        val brm = parseBrm("teste-varios-componentes.brM")
+        val xml = parseXml("teste-varios-componentes.xml")
+
+        // Act
+        val brmEntity = brm.entities.first { it.name == "MinhaEntidade" }
+        val xmlEntity = xml.entities.first { it.name == "MinhaEntidade" }
+
+        // Assert
+        assertEquals(xmlEntity.hiddenAttributes.size, brmEntity.hiddenAttributes.size,
+            "Hidden attribute count differs: XML=${xmlEntity.hiddenAttributes.size}, brM=${brmEntity.hiddenAttributes.size}")
+    }
+
+    @Test
+    fun `varios brM - hidden attribute names match XML`() {
+        // Arrange
+        val brm = parseBrm("teste-varios-componentes.brM")
+        val xml = parseXml("teste-varios-componentes.xml")
+        val brmEntity = brm.entities.first { it.name == "MinhaEntidade" }
+        val xmlEntity = xml.entities.first { it.name == "MinhaEntidade" }
+
+        // Act
+        val brmNames = brmEntity.hiddenAttributes.map { it.name }
+        val xmlNames = xmlEntity.hiddenAttributes.map { it.name }
+
+        // Assert
+        assertEquals(xmlNames, brmNames, "Hidden attribute names differ between XML and brM")
+    }
+
+    @Test
+    fun `varios brM - umAtributoOculto is identifier and multivalued`() {
+        // Arrange
+        val schema = parseBrm("teste-varios-componentes.brM")
+        val entity = schema.entities.first { it.name == "MinhaEntidade" }
+
+        // Act
+        val attr = entity.hiddenAttributes.first { it.name == "umAtributoOculto" }
+
+        // Assert
+        assertTrue(attr.isIdentifier, "umAtributoOculto should be identifier")
+        assertTrue(attr.isMultiValued, "umAtributoOculto MaxCard=20 should be multivalued")
+        assertEquals(20, attr.cardinality.maxCardinality)
+        assertEquals(1, attr.cardinality.minCardinality)
+        assertEquals("Texto(1)", attr.type)
+    }
+
+    @Test
+    fun `varios brM - hidden attribute isIdentifier matches XML`() {
+        // Arrange
+        val brm = parseBrm("teste-varios-componentes.brM")
+        val xml = parseXml("teste-varios-componentes.xml")
+        val brmEntity = brm.entities.first { it.name == "MinhaEntidade" }
+        val xmlEntity = xml.entities.first { it.name == "MinhaEntidade" }
+
+        // Act & Assert
+        brmEntity.hiddenAttributes.forEachIndexed { i, brmAttr ->
+            val xmlAttr = xmlEntity.hiddenAttributes.getOrNull(i) ?: return@forEachIndexed
+            assertEquals(
+                xmlAttr.isIdentifier, brmAttr.isIdentifier,
+                "isIdentifier mismatch for '${brmAttr.name}': XML=${xmlAttr.isIdentifier}, brM=${brmAttr.isIdentifier}"
+            )
+        }
+    }
+
+    @Test
+    fun `varios brM - hidden attribute types match XML`() {
+        // Arrange
+        val brm = parseBrm("teste-varios-componentes.brM")
+        val xml = parseXml("teste-varios-componentes.xml")
+        val brmEntity = brm.entities.first { it.name == "MinhaEntidade" }
+        val xmlEntity = xml.entities.first { it.name == "MinhaEntidade" }
+
+        // Act & Assert
+        brmEntity.hiddenAttributes.forEachIndexed { i, brmAttr ->
+            val xmlAttr = xmlEntity.hiddenAttributes.getOrNull(i) ?: return@forEachIndexed
+            assertEquals(
+                xmlAttr.type, brmAttr.type,
+                "Type mismatch for '${brmAttr.name}': XML='${xmlAttr.type}', brM='${brmAttr.type}'"
+            )
+        }
+    }
 }
 
 // Convenience alias so the test class does not depend on JUnit 4 directly

@@ -68,6 +68,8 @@ enum class LineOrientation(val code: Int) {
  *                            Corresponds to `TCardinalidade.nome` in the original Pascal source.
  * @param cardinalityPosition Position of the floating cardinality label on the canvas.
  *                            Corresponds to `TCardinalidade` Left/Top (a `TBase` subclass).
+ * @param cardinalityAutoSize Whether the cardinality label box auto-resizes to fit its text.
+ *                            Corresponds to `TCardinalidade.TamAuto`.
  */
 data class Connection(
     val id: Int,
@@ -80,4 +82,5 @@ data class Connection(
     val orientation: LineOrientation = LineOrientation.HORIZONTAL,
     val cardinalityRole: String = "",
     val cardinalityPosition: ElementPosition? = null,
+    val cardinalityAutoSize: Boolean = true,
 )

@@ -434,6 +434,7 @@ object ConceptualSchemaXmlParser {
         val cardPos = cardNode?.let { parsePosition(it) }
         val cardFixed = cardNode?.boolValor("Fixa") ?: false
         val cardRole = cardNode?.attr("nome")?.trim() ?: ""
+        val cardAutoSize = cardNode?.boolValor("TamAuto") ?: true
 
         connections.add(
             Connection(
@@ -447,6 +448,7 @@ object ConceptualSchemaXmlParser {
                 orientation = orientation,
                 cardinalityRole = cardRole,
                 cardinalityPosition = cardPos,
+                cardinalityAutoSize = cardAutoSize,
             )
         )
     }
@@ -473,8 +475,41 @@ object ConceptualSchemaXmlParser {
     /**
      * Parses `<AtributosOcultos>` — hidden attributes not shown on the canvas.
      *
-     * In the XML files produced by the original brModelo these are always empty
-     * (`<AtributosOcultos/>`), so this currently returns an empty list.
+     * Each `<AtributoOculto Nome="...">` child may contain a nested `<Atributos>` block
+     * with further `<AtributoOculto>` elements when `<Composto Valor="-1"/>`.
+     * Mirrors `TAtributoOculto.LoadByXML` / `GeraXML` in `att.pas`.
      */
-    private fun parseHiddenAttributes(node: XmlNode): List<HiddenAttribute> = emptyList()
+    private fun parseHiddenAttributes(node: XmlNode): List<HiddenAttribute> {
+        val aocultos = node.child("AtributosOcultos") ?: return emptyList()
+        return aocultos.children("AtributoOculto").map { parseHiddenAttribute(it) }
+    }
+
+    private fun parseHiddenAttribute(node: XmlNode): HiddenAttribute {
+        val name = node.attr("Nome") ?: ""
+        val leftTop = node.child("LeftTop")
+        val position = ElementPosition(
+            x = leftTop?.attr("X")?.toIntOrNull() ?: -1,
+            y = leftTop?.attr("Y")?.toIntOrNull() ?: -1,
+            width = 0,
+            height = 0,
+        )
+        val maxCard = node.intValor("MaxCard")
+        val minCard = node.intValor("MinCard")
+        val isIdentifier = node.boolValor("Identificador")
+        val type = node.strValor("Tipo")
+        val isComposite = node.boolValor("Composto")
+        val children = if (isComposite) {
+            node.child("Atributos")?.children("AtributoOculto")?.map { parseHiddenAttribute(it) } ?: emptyList()
+        } else {
+            emptyList()
+        }
+        return HiddenAttribute(
+            name = name,
+            type = type,
+            isIdentifier = isIdentifier,
+            cardinality = AttributeCardinality(minCardinality = minCard, maxCardinality = maxCard),
+            position = position,
+            children = children,
+        )
+    }
 }

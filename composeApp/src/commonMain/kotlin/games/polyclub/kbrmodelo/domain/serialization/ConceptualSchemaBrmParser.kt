@@ -467,6 +467,7 @@ object ConceptualSchemaBrmParser {
             orientation = orientation,
             cardinalityRole = node.strProp("Nome"),
             cardinalityPosition = labelPos,
+            cardinalityAutoSize = node.boolProp("TamAuto", true),
         )
     }
 
@@ -537,7 +538,63 @@ object ConceptualSchemaBrmParser {
         put("clmedgray",    0xA4A0A0)
     }
 
-    /** Hidden-attribute parsing is not yet implemented; deferred to a future iteration. */
-    @Suppress("UNUSED_PARAMETER")
-    private fun parseHiddenAttributes(node: DfmNode): List<HiddenAttribute> = emptyList()
+    /**
+     * Parses the `_AOcultos` string property — the serialized list of hidden attributes.
+     *
+     * The value is a `\r\n`-separated sequence of pipe-delimited records:
+     * ```
+     * {nivel}|{X}|{Y}|{MaxCard}|{MinCard}|{Identificador}|{Tipo}|{Nome}|
+     * ```
+     * - `nivel` determines depth (0 = root, 1 = child of the last level-0 attribute, etc.)
+     * - `Identificador` uses Delphi's `BoolToStr`: `-1` = true, `0` = false
+     *
+     * Mirrors `TAtributoOculto.Serialize` / `unSerialize` in `att.pas`.
+     */
+    private fun parseHiddenAttributes(node: DfmNode): List<HiddenAttribute> {
+        val raw = node.strProp("_AOcultos")
+        if (raw.isBlank()) return emptyList()
+        val lines = raw.split("\r\n", "\n").filter { it.isNotBlank() }
+        return buildHiddenTree(lines, 0, 0).first
+    }
+
+    private fun buildHiddenTree(
+        lines: List<String>,
+        startIndex: Int,
+        expectedLevel: Int,
+    ): Pair<List<HiddenAttribute>, Int> {
+        val result = mutableListOf<HiddenAttribute>()
+        var i = startIndex
+        while (i < lines.size) {
+            val parts = lines[i].split("|")
+            if (parts.size < 8) { i++; continue }
+            val nivel = parts[0].toIntOrNull() ?: break
+            if (nivel < expectedLevel) break          // back to parent
+            if (nivel > expectedLevel) { i++; continue } // skip orphan lines
+
+            val x        = parts[1].toIntOrNull() ?: -1
+            val y        = parts[2].toIntOrNull() ?: -1
+            val maxCard  = parts[3].toIntOrNull() ?: 0
+            val minCard  = parts[4].toIntOrNull() ?: 0
+            val isIdentifier = parts[5].trim() == "-1"
+            val tipo     = parts[6]
+            val nome     = parts[7]
+            i++
+
+            // Collect children at the next level
+            val (children, nextIdx) = buildHiddenTree(lines, i, expectedLevel + 1)
+            i = nextIdx
+
+            result.add(
+                HiddenAttribute(
+                    name = nome,
+                    type = tipo,
+                    isIdentifier = isIdentifier,
+                    cardinality = AttributeCardinality(minCardinality = minCard, maxCardinality = maxCard),
+                    position = ElementPosition(x = x, y = y, width = 0, height = 0),
+                    children = children,
+                )
+            )
+        }
+        return result to i
+    }
 }
