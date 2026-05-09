@@ -17,13 +17,20 @@
   -->
 
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <!-- Title is replaced at runtime by Kotlin/Wasm with the actual project version. -->
   <title>Power brModelo</title>
+  <meta name="theme-color" content="#e3e3e3" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Power brModelo" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="icon" type="image/png" href="./composeResources/games.polyclub.power.brmodelo.generated.resources/drawable/app_icon.png" />
+  <link rel="apple-touch-icon" href="./composeResources/games.polyclub.power.brmodelo.generated.resources/drawable/app_icon.png" />
   <style>
     html, body {
       margin: 0;
@@ -44,6 +51,13 @@
       }
     }
   </script>
-  <script type="module" src="./composeApp.mjs"></script>
+  <script src="./composeApp.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(function () { /* ignore */ });
+      });
+    }
+  </script>
 </body>
 </html>
