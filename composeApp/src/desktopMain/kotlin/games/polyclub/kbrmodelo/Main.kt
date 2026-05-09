@@ -22,18 +22,35 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import com.formdev.flatlaf.FlatLightLaf
+import java.awt.KeyboardFocusManager
+import java.awt.event.KeyEvent
 import kbrmodelo.composeapp.generated.resources.Res
 import kbrmodelo.composeapp.generated.resources.app_icon
 import org.jetbrains.compose.resources.painterResource
 
-fun main() = application {
-    val windowState = rememberWindowState(width = 1366.dp, height = 768.dp)
-    Window(
-        onCloseRequest = ::exitApplication,
-        title = "brModelo 3.0 - [teste-em-xml]",
-        state = windowState,
-        icon = painterResource(Res.drawable.app_icon)
-    ) {
-        App()
+fun main() {
+    FlatLightLaf.setup()
+    KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher { e ->
+        if (e.id == KeyEvent.KEY_PRESSED &&
+            (e.isControlDown || e.isMetaDown) &&
+            e.keyCode == KeyEvent.VK_S
+        ) {
+            DesktopSaveShortcutRegistry.onSaveRequest?.invoke()
+            true
+        } else {
+            false
+        }
+    }
+    application {
+        val windowState = rememberWindowState(width = 1366.dp, height = 768.dp)
+        Window(
+            onCloseRequest = ::exitApplication,
+            title = "brModelo 3.0 - [teste-em-xml]",
+            state = windowState,
+            icon = painterResource(Res.drawable.app_icon),
+        ) {
+            App()
+        }
     }
 }

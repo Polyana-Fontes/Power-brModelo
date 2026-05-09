@@ -65,6 +65,8 @@ internal fun BrModeloScreen(
     onSchemaPreview: (ConceptualSchema) -> Unit = {},
     onSchemaCommit: (ConceptualSchema) -> Unit = {},
     onCloseTab: (() -> Unit)? = null,
+    onSave: () -> Unit = {},
+    onSaveAs: () -> Unit = {},
 ) {
     // Export state: counter bumps every time a new export is requested.
     var exportCounter by remember { mutableIntStateOf(0) }
@@ -140,6 +142,14 @@ internal fun BrModeloScreen(
                     onDismissMenu()
                     exportIsJpeg = false
                     exportCounter++
+                },
+                onSave = {
+                    onDismissMenu()
+                    onSave()
+                },
+                onSaveAs = {
+                    onDismissMenu()
+                    onSaveAs()
                 },
             )
         }

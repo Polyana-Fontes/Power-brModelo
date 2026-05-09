@@ -1,9 +1,11 @@
 [versions]
 kotlin = "2.0.21"
 compose-multiplatform = "1.7.3"
+flatlaf = "3.7"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
+flatlaf = { module = "com.formdev:flatlaf", version.ref = "flatlaf" }
 
 [plugins]
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }

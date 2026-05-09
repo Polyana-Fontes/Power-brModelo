@@ -16,15 +16,20 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package games.polyclub.kbrmodelo.ui
+package games.polyclub.kbrmodelo
 
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
+import games.polyclub.kbrmodelo.domain.ConceptualSchema
 
-// WASM: drag-and-drop is handled by the JS event listeners in WindowDragDrop.wasm.kt
-// and polled from App.kt's LaunchedEffect. No Compose modifier needed here.
-@Composable
-internal actual fun Modifier.fileDragDropTarget(
-    onDragStateChange: (Boolean) -> Unit,
-    onFileDrop: (PickedFile) -> Unit,
-): Modifier = this
+/**
+ * Writes [schema] as brModelo XML to disk.
+ *
+ * @param suggestedBaseName Filename stem suggested when a save dialog is shown.
+ * @param pickLocation When true, always asks for a path (Save As / XML migration).
+ * @return Schema updated with [ConceptualSchema.filePath] and [ConceptualSchema.openedFromBrm] cleared,
+ *         or null if cancelled / unsupported (e.g. WASM).
+ */
+internal expect suspend fun saveConceptualSchemaXml(
+    schema: ConceptualSchema,
+    suggestedBaseName: String,
+    pickLocation: Boolean,
+): ConceptualSchema?

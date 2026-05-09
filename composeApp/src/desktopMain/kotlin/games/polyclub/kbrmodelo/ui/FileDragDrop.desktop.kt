@@ -30,6 +30,7 @@ import androidx.compose.ui.draganddrop.DragAndDropTarget
 import androidx.compose.ui.draganddrop.DragData
 import androidx.compose.ui.draganddrop.awtTransferable
 import androidx.compose.ui.draganddrop.dragData
+import games.polyclub.kbrmodelo.ModelWorkingDirectories
 import java.awt.datatransfer.DataFlavor
 import java.io.File
 import java.net.URI
@@ -78,7 +79,14 @@ internal actual fun Modifier.fileDragDropTarget(
                     val uri = files.firstOrNull() ?: return false
                     val file = File(URI.create(uri))
                     if (!file.exists()) return false
-                    fileDropRef.value(PickedFile(name = file.nameWithoutExtension, bytes = file.readBytes()))
+                    ModelWorkingDirectories.rememberDirectoryOfFile(file.absolutePath)
+                    fileDropRef.value(
+                        PickedFile(
+                            name = file.nameWithoutExtension,
+                            bytes = file.readBytes(),
+                            diskPath = file.absolutePath,
+                        ),
+                    )
                     true
                 }.getOrDefault(false)
             }

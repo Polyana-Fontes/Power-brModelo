@@ -46,6 +46,8 @@ package games.polyclub.kbrmodelo.domain
  *                    Corresponds to the `TLigacao` children of `TModelo`.
  * @param nextId      Counter for assigning unique IDs to new elements.
  *                    Corresponds to `TModelo.FIDs` (the internal OID counter).
+ * @param openedFromBrm When true, the model was loaded from a Delphi `.brM` binary file.
+ *                      Saving as XML uses "Save As" semantics until written to an XML path.
  */
 data class ConceptualSchema(
     val name: String = "",
@@ -56,6 +58,7 @@ data class ConceptualSchema(
     val elements: Map<Int, SchemaElement> = emptyMap(),
     val connections: List<Connection> = emptyList(),
     val nextId: Int = 1,
+    val openedFromBrm: Boolean = false,
 ) {
     // ── Typed element accessors ──────────────────────────────────────────────
 

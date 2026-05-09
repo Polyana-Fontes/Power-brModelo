@@ -16,15 +16,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package games.polyclub.kbrmodelo.ui
+package games.polyclub.kbrmodelo
 
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
+internal object DesktopSaveShortcutRegistry {
+    @Volatile
+    var onSaveRequest: (() -> Unit)? = null
+}
 
-// WASM: drag-and-drop is handled by the JS event listeners in WindowDragDrop.wasm.kt
-// and polled from App.kt's LaunchedEffect. No Compose modifier needed here.
-@Composable
-internal actual fun Modifier.fileDragDropTarget(
-    onDragStateChange: (Boolean) -> Unit,
-    onFileDrop: (PickedFile) -> Unit,
-): Modifier = this
+internal actual fun bindDesktopSaveShortcut(action: (() -> Unit)?) {
+    DesktopSaveShortcutRegistry.onSaveRequest = action
+}

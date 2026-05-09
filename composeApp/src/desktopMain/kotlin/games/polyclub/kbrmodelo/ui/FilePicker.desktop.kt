@@ -18,29 +18,47 @@
 
 package games.polyclub.kbrmodelo.ui
 
+import games.polyclub.kbrmodelo.ModelWorkingDirectories
+import com.formdev.flatlaf.util.SystemFileChooser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import javax.swing.JFileChooser
-import javax.swing.filechooser.FileNameExtensionFilter
+import java.io.File
+import javax.swing.SwingUtilities
 
 internal actual suspend fun showNativeFilePicker(): PickedFile? = withContext(Dispatchers.IO) {
     var result: PickedFile? = null
     val latch = java.util.concurrent.CountDownLatch(1)
-    javax.swing.SwingUtilities.invokeLater {
-        val chooser = JFileChooser().apply {
-            dialogTitle = "Abrir modelo brModelo"
-            fileFilter = FileNameExtensionFilter("Arquivos brModelo (*.xml, *.brM)", "xml", "brM", "brm")
-            isMultiSelectionEnabled = false
+    SwingUtilities.invokeLater {
+        try {
+            val chooser = SystemFileChooser().apply {
+                dialogTitle = "Abrir modelo brModelo"
+                addChoosableFileFilter(
+                    SystemFileChooser.FileNameExtensionFilter(
+                        "Arquivos brModelo (*.xml, *.brM)",
+                        "xml",
+                        "brM",
+                        "brm",
+                    ),
+                )
+                isMultiSelectionEnabled = false
+                ModelWorkingDirectories.lastVisitedDirectoryPath?.let { path ->
+                    val d = File(path)
+                    if (d.isDirectory) currentDirectory = d
+                }
+            }
+            val status = chooser.showOpenDialog(null)
+            if (status == SystemFileChooser.APPROVE_OPTION) {
+                val file = chooser.selectedFile ?: return@invokeLater
+                ModelWorkingDirectories.rememberDirectoryOfFile(file.absolutePath)
+                result = PickedFile(
+                    name = file.nameWithoutExtension,
+                    bytes = file.readBytes(),
+                    diskPath = file.absolutePath,
+                )
+            }
+        } finally {
+            latch.countDown()
         }
-        val status = chooser.showOpenDialog(null)
-        if (status == JFileChooser.APPROVE_OPTION) {
-            val file = chooser.selectedFile
-            result = PickedFile(
-                name = file.nameWithoutExtension,
-                bytes = file.readBytes(),
-            )
-        }
-        latch.countDown()
     }
     latch.await()
     result

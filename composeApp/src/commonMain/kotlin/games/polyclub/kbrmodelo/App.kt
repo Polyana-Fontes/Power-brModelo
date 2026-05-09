@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -80,9 +81,9 @@ fun App() {
             isDragOverFromPolling = isWindowDragActive()
             val dropped = consumeWindowDropFile()
             if (dropped != null) {
-                runCatching { parseModelBytes(dropped.bytes) }
-                    .onSuccess {
-                        val named = it.copy(name = dropped.name)
+                runCatching { parseModelBytesWithSource(dropped.bytes) }
+                    .onSuccess { (parsed, fromBrm) ->
+                        val named = mergeLoadedModel(parsed, fromBrm, dropped)
                         history.push(named)
                         schema = named
                         selection = CanvasSelection.None
@@ -94,9 +95,9 @@ fun App() {
     val openFile: () -> Unit = {
         scope.launch {
             val picked = showNativeFilePicker() ?: return@launch
-            runCatching { parseModelBytes(picked.bytes) }
-                .onSuccess {
-                    val named = it.copy(name = picked.name)
+            runCatching { parseModelBytesWithSource(picked.bytes) }
+                .onSuccess { (parsed, fromBrm) ->
+                    val named = mergeLoadedModel(parsed, fromBrm, picked)
                     history.push(named)
                     schema = named
                     selection = CanvasSelection.None
@@ -105,9 +106,9 @@ fun App() {
     }
 
     val loadPickedFile: (PickedFile) -> Unit = { picked ->
-        runCatching { parseModelBytes(picked.bytes) }
-            .onSuccess {
-                val named = it.copy(name = picked.name)
+        runCatching { parseModelBytesWithSource(picked.bytes) }
+            .onSuccess { (parsed, fromBrm) ->
+                val named = mergeLoadedModel(parsed, fromBrm, picked)
                 history.push(named)
                 schema = named
                 selection = CanvasSelection.None
@@ -130,6 +131,25 @@ fun App() {
     val onCloseTab: () -> Unit = {
         schema = null
         selection = CanvasSelection.None
+    }
+
+    fun enqueueSave(saveAs: Boolean) {
+        scope.launch {
+            val s = schema ?: return@launch
+            val pickLocation = saveAs || s.filePath.isBlank() || s.openedFromBrm
+            val updated = saveConceptualSchemaXml(
+                schema = s,
+                suggestedBaseName = s.name.ifBlank { "modelo" },
+                pickLocation = pickLocation,
+            ) ?: return@launch
+            history.syncCurrent(updated)
+            schema = updated
+        }
+    }
+
+    DisposableEffect(schema) {
+        bindDesktopSaveShortcut { enqueueSave(saveAs = false) }
+        onDispose { bindDesktopSaveShortcut(null) }
     }
 
     MaterialTheme {
@@ -158,10 +178,19 @@ fun App() {
                 onSchemaPreview = onSchemaPreview,
                 onSchemaCommit = onSchemaCommit,
                 onCloseTab = onCloseTab,
+                onSave = { enqueueSave(saveAs = false) },
+                onSaveAs = { enqueueSave(saveAs = true) },
             )
         }
     }
 }
+
+private fun mergeLoadedModel(parsed: ConceptualSchema, openedFromBrm: Boolean, picked: PickedFile): ConceptualSchema =
+    parsed.copy(
+        name = picked.name,
+        filePath = picked.diskPath ?: "",
+        openedFromBrm = openedFromBrm,
+    )
 
 /**
  * Detects the model format from the byte content and routes to the correct parser.
@@ -169,13 +198,17 @@ fun App() {
  * Delphi binary DFM files start with a ShortString version prefix (e.g. `\x05 "2.0.0"`)
  * immediately followed by the 4-byte magic `"TPF0"`. All other content is treated as XML.
  */
-internal fun parseModelBytes(bytes: ByteArray): ConceptualSchema {
+internal fun parseModelBytes(bytes: ByteArray): ConceptualSchema =
+    parseModelBytesWithSource(bytes).first
+
+internal fun parseModelBytesWithSource(bytes: ByteArray): Pair<ConceptualSchema, Boolean> {
     val isBrm = bytes.size > 10 &&
         bytes[6] == 'T'.code.toByte() &&
         bytes[7] == 'P'.code.toByte() &&
         bytes[8] == 'F'.code.toByte() &&
         bytes[9] == '0'.code.toByte()
-    return if (isBrm) ConceptualSchemaBrmParser.parse(bytes)
+    val schema = if (isBrm) ConceptualSchemaBrmParser.parse(bytes)
     else ConceptualSchemaXmlParser.parse(bytes)
+    return schema to isBrm
 }
 

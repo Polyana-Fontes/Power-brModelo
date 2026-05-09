@@ -63,6 +63,14 @@ class SchemaHistory(initial: ConceptualSchema?) {
     }
 
     /**
+     * Replaces [current] without pushing an undo checkpoint (e.g. updating [ConceptualSchema.filePath]
+     * after a successful Save).
+     */
+    fun syncCurrent(newSchema: ConceptualSchema?) {
+        current = newSchema
+    }
+
+    /**
      * Reverts to the previous committed state.
      *
      * If there is nothing to undo, returns [current] unchanged.

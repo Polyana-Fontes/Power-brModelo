@@ -24,6 +24,11 @@ internal data class PickedFile(
     val name: String,
     /** Raw file bytes. */
     val bytes: ByteArray,
+    /**
+     * Absolute path when the platform provides it (desktop open / drag-and-drop).
+     * Used for Save without picking a new location.
+     */
+    val diskPath: String? = null,
 )
 
 /**

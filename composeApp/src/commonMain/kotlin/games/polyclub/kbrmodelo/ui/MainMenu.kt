@@ -82,6 +82,8 @@ internal fun FunctionalMainMenu(
     onCloseCurrentModel: () -> Unit = {},
     onExportJpeg: () -> Unit = {},
     onExportPng: () -> Unit = {},
+    onSave: () -> Unit = {},
+    onSaveAs: () -> Unit = {},
 ) {
     Row(
         modifier = modifier.border(1.dp, MENU_BORDER)
@@ -91,6 +93,8 @@ internal fun FunctionalMainMenu(
             onMenuHover = onMenuHover,
             onOpenFile = onOpenFile,
             onCloseCurrentModel = onCloseCurrentModel,
+            onSave = onSave,
+            onSaveAs = onSaveAs,
         )
         // The right panel always shows; content varies by hovered item
         when (activeMenu) {
@@ -107,6 +111,8 @@ private fun MainMenuItems(
     onMenuHover: (MainMenuType) -> Unit,
     onOpenFile: () -> Unit,
     onCloseCurrentModel: () -> Unit = {},
+    onSave: () -> Unit,
+    onSaveAs: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -122,8 +128,10 @@ private fun MainMenuItems(
             onHover = { onMenuHover(MainMenuType.NewModel) }
         )
         MainMenuItem("Abrir", Res.drawable.abrir_2s, onClick = onOpenFile)
-        MainMenuItem("Salvar", Res.drawable.salvar_s)
-        MainMenuItem("Salvar Como...", Res.drawable.salvar_como_s)
+        if (isDesktopTarget) {
+            MainMenuItem("Salvar", Res.drawable.salvar_s, onClick = onSave)
+        }
+        MainMenuItem("Salvar Como...", Res.drawable.salvar_como_s, onClick = onSaveAs)
         MainMenuItem("Fechar Modelo Atual", Res.drawable.fechar_2s, onClick = onCloseCurrentModel)
 
         HorizontalDivider(color = SEPARATOR, thickness = 1.dp, modifier = Modifier.padding(horizontal = 4.dp))
