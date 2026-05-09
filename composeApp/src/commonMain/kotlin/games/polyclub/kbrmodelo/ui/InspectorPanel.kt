@@ -351,7 +351,15 @@ private fun SelectionTab(
                 selection is CanvasSelection.Cardinality -> {
                     val conn = schema.connections.firstOrNull { it.id == selection.connectionId }
                     if (conn != null) {
-                        CardinalityContent(conn, schema, focusedKey, onFocusChange, onSchemaCommit)
+                        CardinalityContent(
+                            conn = conn,
+                            schema = schema,
+                            committedSchema = committedSchema,
+                            focusedKey = focusedKey,
+                            onFocusChange = onFocusChange,
+                            onSchemaPreview = onSchemaPreview,
+                            onSchemaCommit = onSchemaCommit,
+                        )
                     }
                 }
             }
@@ -477,8 +485,24 @@ private fun ElementContent(
     when (element) {
         is SchemaElement.Entity           -> EntityFields(element, schema, focusedKey, onFocusChange, onSchemaCommit)
         is SchemaElement.Relationship     -> RelationshipFields(element, schema, focusedKey, onFocusChange, onSchemaCommit)
-        is SchemaElement.AssociativeEntity -> AssocEntityFields(element, schema, focusedKey, onFocusChange, onSchemaCommit)
-        is SchemaElement.Attribute        -> AttributeFields(element, schema, focusedKey, onFocusChange, onSchemaCommit)
+        is SchemaElement.AssociativeEntity -> AssocEntityFields(
+            element = element,
+            schema = schema,
+            committedSchema = committedSchema,
+            focusedKey = focusedKey,
+            onFocusChange = onFocusChange,
+            onSchemaPreview = onSchemaPreview,
+            onSchemaCommit = onSchemaCommit,
+        )
+        is SchemaElement.Attribute -> AttributeFields(
+            element = element,
+            schema = schema,
+            committedSchema = committedSchema,
+            focusedKey = focusedKey,
+            onFocusChange = onFocusChange,
+            onSchemaPreview = onSchemaPreview,
+            onSchemaCommit = onSchemaCommit,
+        )
         is SchemaElement.Specialization   -> SpecializationFields(element, schema, focusedKey, onFocusChange, onSchemaCommit)
         is SchemaElement.SelfRelationship -> SelfRelFields(element, schema, focusedKey, onFocusChange, onSchemaCommit)
         is SchemaElement.Annotation       -> AnnotationFields(element, schema, focusedKey, onFocusChange, onSchemaCommit)
@@ -535,8 +559,10 @@ private fun RelationshipFields(
 private fun AssocEntityFields(
     element: SchemaElement.AssociativeEntity,
     schema: ConceptualSchema,
+    committedSchema: ConceptualSchema?,
     focusedKey: String?,
     onFocusChange: (String?) -> Unit,
+    onSchemaPreview: (ConceptualSchema) -> Unit,
     onSchemaCommit: (ConceptualSchema) -> Unit,
 ) {
     SectionTitle("Esquema")
@@ -546,7 +572,19 @@ private fun AssocEntityFields(
     ReadOnlyRow("Auto relacionado", if (autoRel) "Sim" else "Não", "AUTO_REL", focusedKey, onFocusChange)
 
     SectionTitle("Relacionamento")
-    EditableRow("+Nome", element.relationshipName, "EA_NOME", focusedKey, onFocusChange) { v ->
+    val relationshipNameCommitted =
+        (committedSchema?.elements?.get(element.id) as? SchemaElement.AssociativeEntity)?.relationshipName
+            ?: element.relationshipName
+    EditableRow(
+        label = "+Nome",
+        value = relationshipNameCommitted,
+        key = "EA_NOME",
+        focusedKey = focusedKey,
+        onFocusChange = onFocusChange,
+        onLiveDraftChange = { draft ->
+            onSchemaPreview(schema.withElement(element.copy(relationshipName = draft)))
+        },
+    ) { v ->
         onSchemaCommit(schema.withElement(element.copy(relationshipName = v)))
     }
     EditableRow("+Dicionário", element.relationshipDictionary, "EA_DIC", focusedKey, onFocusChange) { v ->
@@ -574,8 +612,10 @@ private fun AssocEntityFields(
 private fun AttributeFields(
     element: SchemaElement.Attribute,
     schema: ConceptualSchema,
+    committedSchema: ConceptualSchema?,
     focusedKey: String?,
     onFocusChange: (String?) -> Unit,
+    onSchemaPreview: (ConceptualSchema) -> Unit,
     onSchemaCommit: (ConceptualSchema) -> Unit,
 ) {
     SectionTitle("Atributo")
@@ -628,28 +668,46 @@ private fun AttributeFields(
 
     ReadOnlyRow("Qtd. Campos", element.multiValuedCount.toString(), "QTD_CAMPOS", focusedKey, onFocusChange)
 
+    val attrCommitted = committedSchema?.elements?.get(element.id) as? SchemaElement.Attribute ?: element
+    val minCardinalityCommitted = attrCommitted.cardinality.minCardinality.toString()
     EditableRow(
         label = "Card. Mínima",
-        value = element.cardinality.minCardinality.toString(),
+        value = minCardinalityCommitted,
         key = "CARD_MIN",
         focusedKey = focusedKey,
         onFocusChange = onFocusChange,
         enabled = element.isMultiValued,
+        onLiveDraftChange = { draft ->
+            draft.toIntOrNull()?.let { min ->
+                onSchemaPreview(
+                    schema.withElement(element.copy(cardinality = element.cardinality.copy(minCardinality = min))),
+                )
+            }
+        },
     ) { v ->
         v.toIntOrNull()?.let {
             onSchemaCommit(schema.withElement(element.copy(cardinality = element.cardinality.copy(minCardinality = it))))
         }
     }
-    val maxLabel = if (element.cardinality.isUnbounded) "n" else element.cardinality.maxCardinality.toString()
+    val maxLabelCommitted =
+        if (attrCommitted.cardinality.isUnbounded) "n" else attrCommitted.cardinality.maxCardinality.toString()
     EditableRow(
         label = "Card. Máxima",
-        value = maxLabel,
+        value = maxLabelCommitted,
         key = "CARD_MAX",
         focusedKey = focusedKey,
         onFocusChange = onFocusChange,
         enabled = element.isMultiValued,
+        onLiveDraftChange = { draft ->
+            val maxVal = parseAttributeMaxCardinalityDraft(draft)
+            if (maxVal != null) {
+                onSchemaPreview(
+                    schema.withElement(element.copy(cardinality = element.cardinality.copy(maxCardinality = maxVal))),
+                )
+            }
+        },
     ) { v ->
-        val intVal = if (v == "n") 21 else v.toIntOrNull() ?: return@EditableRow
+        val intVal = parseAttributeMaxCardinalityDraft(v) ?: return@EditableRow
         onSchemaCommit(schema.withElement(element.copy(cardinality = element.cardinality.copy(maxCardinality = intVal))))
     }
 
@@ -773,13 +831,32 @@ private fun AnnotationFields(
 private fun CardinalityContent(
     conn: games.polyclub.kbrmodelo.domain.Connection,
     schema: ConceptualSchema,
+    committedSchema: ConceptualSchema?,
     focusedKey: String?,
     onFocusChange: (String?) -> Unit,
+    onSchemaPreview: (ConceptualSchema) -> Unit,
     onSchemaCommit: (ConceptualSchema) -> Unit,
 ) {
     SectionTitle("Cardinalidade")
 
-    EditableRow("Papel", conn.cardinalityRole, "PAPEL", focusedKey, onFocusChange) { v ->
+    val papelCommitted =
+        committedSchema?.connections?.firstOrNull { it.id == conn.id }?.cardinalityRole ?: conn.cardinalityRole
+    EditableRow(
+        label = "Papel",
+        value = papelCommitted,
+        key = "PAPEL",
+        focusedKey = focusedKey,
+        onFocusChange = onFocusChange,
+        onLiveDraftChange = { draft ->
+            onSchemaPreview(
+                schema.copy(
+                    connections = schema.connections.map {
+                        if (it.id == conn.id) it.copy(cardinalityRole = draft) else it
+                    },
+                ),
+            )
+        },
+    ) { v ->
         onSchemaCommit(schema.copy(connections = schema.connections.map {
             if (it.id == conn.id) it.copy(cardinalityRole = v) else it
         }))
@@ -1290,6 +1367,10 @@ private fun ActionButton(label: String, onClick: () -> Unit) {
 }
 
 // ── Domain helpers ────────────────────────────────────────────────────────────
+
+/** Parses multivalued attribute max cardinality field text ("n" → unbounded sentinel 21). */
+private fun parseAttributeMaxCardinalityDraft(v: String): Int? =
+    if (v == "n") 21 else v.toIntOrNull()
 
 private fun SchemaElement.withName(n: String): SchemaElement = when (this) {
     is SchemaElement.Entity           -> copy(name = n)
