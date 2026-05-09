@@ -1207,6 +1207,19 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                     val p = elem.position
                     val childActiveX = if (barIsOnRight) p.x.toFloat() else (p.x + p.width).toFloat()
                     elemResult[conn.id] = Offset(childActiveX, p.y + p.height / 2f)
+                } else if (elem is SchemaElement.Attribute && otherElem.ownerId == elem.id) {
+                    // Composite parent → child attribute: snap on the bar edge of the composite,
+                    // at the child's centre Y so the connection draws as a single horizontal line.
+                    // Children of a composite never participate in `Divida` (the bar is a stub,
+                    // not an actual edge) — bypass the byPonto queue.
+                    val parentOwnerPos = schema.elements[elem.ownerId]?.position
+                    val compPonto = if (parentOwnerPos != null)
+                        attrPontoByPosition(parentOwnerPos, elem.position) else 3
+                    val barIsOnRight = compPonto != 1
+                    val ep = elem.position
+                    val barX = if (barIsOnRight) (ep.x + ep.width).toFloat() else ep.x.toFloat()
+                    val childCy = otherElem.position.y + otherElem.position.height / 2f
+                    elemResult[conn.id] = Offset(barX, childCy)
                 } else {
                     // Normal entity/relationship → attribute.
                     // For diamonds we pick the *closest vertex* to the attribute's centre
@@ -1297,10 +1310,13 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                 continue
             }
 
-            // Primary sort: by other-element centre along the relevant axis (the same axis
-            // Pascal's OrdenadorTop / OrdenadorLeft rank by). Secondary: SelfRelationship
-            // legs use Pascal Menor order (`Ponta.FLigacoes.IndexOf`, i.e. XML order) so
-            // diamond sides stay paired with the correct cardinality labels.
+            // Primary sort: Pascal's OrdenadorLeftNegativo / OrdenadorTop rank by raw `Top`
+            // (for ponto 1, 3) or `Left` (for ponto 2, 4) of the OTHER element — NOT the
+            // centre. This matters when widths/heights vary, otherwise pairs like
+            // (telefone Left=217, W=94, cx=264) and (pix Left=227, W=41, cx=247.5) end up
+            // swapped vs the Pascal layout, dragging their snaps onto the wrong Divida slot.
+            // Secondary: SelfRelationship legs use Pascal `Menor` order (`Ponta.FLigacoes.IndexOf`,
+            // i.e. XML order) so diamond sides stay paired with the correct cardinality labels.
             val sameSelfRelDiamond = nonAttrSlots.size == 2 && slots.size == 2 &&
                 nonAttrSlots[0].otherElem.id == nonAttrSlots[1].otherElem.id &&
                 nonAttrSlots[0].otherElem is SchemaElement.SelfRelationship
@@ -1310,8 +1326,8 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                     { slot ->
                         val op = slot.otherElem.position
                         when (ponto) {
-                            1, 3 -> op.y + op.height / 2f
-                            else -> op.x + op.width / 2f
+                            1, 3 -> op.y          // OrdenadorLeftNegativo: rank by Top
+                            else -> op.x          // OrdenadorTop:           rank by Left
                         }
                     },
                     { slot ->
