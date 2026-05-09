@@ -241,9 +241,10 @@ sealed class SchemaElement {
      *                         Corresponds to `TAtributo.Opcional`.
      * @param cardinality      Explicit min/max cardinality for multi-valued attributes.
      *                         Corresponds to `TAtributo.MinCard` / `TAtributo.MaxCard`.
-     * @param multiValuedCount The suggested number of columns to generate in the physical model
-     *                         for this multi-valued attribute.
-     *                         Corresponds to `TAtributo.QtdeMultivalorado`.
+     * @param multiValuedCount Physical-model hint persisted as QtdeMultivalorado in binary/XML.
+     *                         Must match [canonicalMultiValuedCount]: **0** for non-composite attributes,
+     *                         and [childAttributeIds.size] for composite attributes (legacy brModelo
+     *                         files often store incorrect values; use [ConceptualSchema.withNormalizedAttributeMultiValuedCounts]).
      * @param valueType        Data type label (e.g. "VARCHAR").
      *                         Corresponds to `TAtributo.TipoDoValor`.
      * @param complement       Type complement (e.g. "100" for "VARCHAR(100)").
@@ -269,7 +270,7 @@ sealed class SchemaElement {
         val isMultiValued: Boolean = false,
         val isOptional: Boolean = false,
         val cardinality: AttributeCardinality = AttributeCardinality(0, 0),
-        val multiValuedCount: Int = 1,
+        val multiValuedCount: Int = 0,
         val valueType: String = "",
         val complement: String = "",
         val autoSize: Boolean = true,
@@ -278,6 +279,13 @@ sealed class SchemaElement {
     ) : SchemaElement() {
         /** True when [childAttributeIds] is not empty, same logic as `TAtributo.Composto`. */
         val isComposite: Boolean get() = childAttributeIds.isNotEmpty()
+
+        /**
+         * Canonical QtdeMultivalorado: non-composite attributes use **0**; composite attributes use
+         * the number of component fields ([childAttributeIds.size]).
+         */
+        val canonicalMultiValuedCount: Int
+            get() = if (!isComposite) 0 else childAttributeIds.size
     }
 
     // ── Specialization ───────────────────────────────────────────────────────

@@ -132,6 +132,22 @@ data class ConceptualSchema(
         connections = connections.filter { it.id != connectionId },
     )
 
+    /**
+     * Rewrites each attribute's [SchemaElement.Attribute.multiValuedCount] to
+     * [SchemaElement.Attribute.canonicalMultiValuedCount] (fixes bogus QtdeMultivalorado from legacy saves).
+     */
+    fun withNormalizedAttributeMultiValuedCounts(): ConceptualSchema =
+        copy(
+            elements = elements.mapValues { (_, el) ->
+                if (el is SchemaElement.Attribute) {
+                    val n = el.canonicalMultiValuedCount
+                    if (el.multiValuedCount != n) el.copy(multiValuedCount = n) else el
+                } else {
+                    el
+                }
+            },
+        )
+
     /** Returns the next available ID and increments the counter. */
     fun allocateId(): Pair<ConceptualSchema, Int> =
         copy(nextId = nextId + 1) to nextId

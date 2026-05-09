@@ -131,8 +131,9 @@ fun App() {
     // Called when an action is committed (pointer up after drag, field blur, dropdown change).
     // Pushes the new state to the undo stack.
     val onSchemaCommit: (ConceptualSchema) -> Unit = {
-        history.push(it)
-        schema = it
+        val normalized = it.withNormalizedAttributeMultiValuedCounts()
+        history.push(normalized)
+        schema = normalized
         inspectorCommittedSchema = history.current
     }
 

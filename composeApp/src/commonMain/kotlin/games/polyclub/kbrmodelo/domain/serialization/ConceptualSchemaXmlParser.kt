@@ -84,7 +84,7 @@ object ConceptualSchemaXmlParser {
             elements = elements,
             connections = connections,
             nextId = maxId + 1,
-        )
+        ).withNormalizedAttributeMultiValuedCounts()
     }
 
     // ── Entity ───────────────────────────────────────────────────────────────

@@ -149,6 +149,7 @@ class ConceptualSchemaXmlTest {
         assertNotNull(attr)
         assertEquals("Atributo2", attr.name)
         assertTrue(attr.isIdentifier, "Atributo2 Identificador=-1 → true")
+        assertEquals(0, attr.multiValuedCount, "non-composite QtdeMultivalorado must normalize to 0")
     }
 
     @Test
@@ -164,6 +165,8 @@ class ConceptualSchemaXmlTest {
         assertEquals("Atributo3", attr.name)
         assertTrue(attr.isComposite, "Composto=-1 → true")
         assertEquals(listOf(11, 14), attr.childAttributeIds)
+        assertEquals(2, attr.multiValuedCount, "composite QtdeMultivalorado must equal component count")
+        assertEquals(2, attr.canonicalMultiValuedCount)
     }
 
     @Test
