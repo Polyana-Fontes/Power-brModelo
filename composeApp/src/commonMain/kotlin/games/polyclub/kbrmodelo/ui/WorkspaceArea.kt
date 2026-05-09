@@ -26,24 +26,37 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import games.polyclub.kbrmodelo.domain.CanvasSelection
 import games.polyclub.kbrmodelo.domain.ConceptualSchema
 
 @Composable
 internal fun WorkspaceArea(
     schema: ConceptualSchema? = null,
+    selection: CanvasSelection = CanvasSelection.None,
     isDragOver: Boolean = false,
     onDragStateChange: (Boolean) -> Unit = {},
     onFileDrop: (ByteArray) -> Unit = {},
+    onSelectionChange: (CanvasSelection) -> Unit = {},
+    onSchemaPreview: (ConceptualSchema) -> Unit = {},
+    onSchemaCommit: (ConceptualSchema) -> Unit = {},
 ) {
     Row(modifier = Modifier.fillMaxSize().padding(8.dp)) {
         MainCanvasPanel(
             schema = schema,
+            selection = selection,
             isDragOver = isDragOver,
             onDragStateChange = onDragStateChange,
             onFileDrop = onFileDrop,
+            onSelectionChange = onSelectionChange,
+            onSchemaPreview = onSchemaPreview,
+            onSchemaCommit = onSchemaCommit,
             modifier = Modifier.weight(1f),
         )
         Spacer(modifier = Modifier.width(8.dp))
-        InspectorPanel()
+        InspectorPanel(
+            schema = schema,
+            selection = selection,
+            onSchemaCommit = onSchemaCommit,
+        )
     }
 }

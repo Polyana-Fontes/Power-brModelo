@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.sp
 import games.polyclub.kbrmodelo.domain.AnnotationType
 import games.polyclub.kbrmodelo.domain.ArrowDirection
+import games.polyclub.kbrmodelo.domain.CanvasSelection
 import games.polyclub.kbrmodelo.domain.Connection
 import games.polyclub.kbrmodelo.domain.ConceptualSchema
 import games.polyclub.kbrmodelo.domain.ElementPosition
@@ -77,8 +78,17 @@ private val MULTIVALUE_CARD_STYLE = TextStyle(fontSize = 11.sp, color = Color.Bl
  * 4. Inner diamonds of AssociativeEntity — redrawn on top of those connection lines.
  * 4b. Self-relationship diamonds — redrawn on top (same idea as the inner rhombus).
  * 5. Cardinality labels — floating on top of everything.
+ * 6. Selection handles (blue border + corner squares) on top of all diagram content.
+ *
+ * @param selection When not [CanvasSelection.None], draws selection handles for the
+ *   selected element or cardinality label. Defaults to [CanvasSelection.None] so that
+ *   off-screen exporters that call this function without a selection continue to work.
  */
-fun DrawScope.drawSchema(schema: ConceptualSchema, textMeasurer: TextMeasurer) {
+fun DrawScope.drawSchema(
+    schema: ConceptualSchema,
+    textMeasurer: TextMeasurer,
+    selection: CanvasSelection = CanvasSelection.None,
+) {
     val dividedPoints = computeDividedPoints(schema)
 
     // 1. Connection lines that do NOT involve an AssociativeEntity
@@ -121,6 +131,74 @@ fun DrawScope.drawSchema(schema: ConceptualSchema, textMeasurer: TextMeasurer) {
     schema.connections.forEach { conn ->
         drawCardinalityLabel(conn, schema, dividedPoints, textMeasurer)
     }
+    // 6. Selection handles — drawn last so they are always on top of diagram content
+    when (selection) {
+        is CanvasSelection.Element -> {
+            schema.elements[selection.id]?.let { drawElementSelectionHandles(it.position) }
+        }
+        is CanvasSelection.Cardinality -> {
+            val conn = schema.connections.firstOrNull { it.id == selection.connectionId }
+            if (conn?.cardinalityPosition != null) {
+                drawCardinalitySelectionHighlight(conn.cardinalityPosition)
+            }
+        }
+        CanvasSelection.None -> Unit
+    }
+}
+
+// ── Selection handles ─────────────────────────────────────────────────────────
+
+private val SELECTION_COLOR = Color(0xFF0060C0)
+private val HANDLE_FILL     = Color(0xFF0060C0)
+private val HANDLE_SIZE     = HANDLE_SIZE_PX
+
+/**
+ * Draws a blue selection border and four corner resize handles around [position].
+ *
+ * Matches the visual style shown in the brModelo 3.0 screenshots:
+ * - Thin blue dashed-style outline around the bounding box.
+ * - Four solid blue squares at the corners (resize handles).
+ */
+private fun DrawScope.drawElementSelectionHandles(position: ElementPosition) {
+    val x = position.x.toFloat()
+    val y = position.y.toFloat()
+    val w = position.width.toFloat()
+    val h = position.height.toFloat()
+
+    // Selection border
+    drawRect(
+        color    = SELECTION_COLOR,
+        topLeft  = Offset(x - 1f, y - 1f),
+        size     = Size(w + 2f, h + 2f),
+        style    = Stroke(1.5f),
+    )
+
+    // Corner handles
+    val half = HANDLE_SIZE / 2f
+    listOf(
+        Offset(x,     y),      // top-left
+        Offset(x + w, y),      // top-right
+        Offset(x,     y + h),  // bottom-left
+        Offset(x + w, y + h),  // bottom-right
+    ).forEach { center ->
+        drawRect(
+            color   = HANDLE_FILL,
+            topLeft = Offset(center.x - half, center.y - half),
+            size    = Size(HANDLE_SIZE, HANDLE_SIZE),
+        )
+    }
+}
+
+/**
+ * Draws a thin blue border around the cardinality label at [position].
+ */
+private fun DrawScope.drawCardinalitySelectionHighlight(position: ElementPosition) {
+    drawRect(
+        color   = SELECTION_COLOR,
+        topLeft = Offset(position.x.toFloat() - 1f, position.y.toFloat() - 1f),
+        size    = Size(position.width + 2f, position.height + 2f),
+        style   = Stroke(1.5f),
+    )
 }
 
 // ── Element dispatch ──────────────────────────────────────────────────────────

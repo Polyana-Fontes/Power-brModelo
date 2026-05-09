@@ -20,7 +20,8 @@ package games.polyclub.kbrmodelo.ui.canvas
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,7 +42,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import games.polyclub.kbrmodelo.domain.CanvasSelection
+import games.polyclub.kbrmodelo.domain.Connection
 import games.polyclub.kbrmodelo.domain.ConceptualSchema
+import games.polyclub.kbrmodelo.domain.ElementPosition
+import games.polyclub.kbrmodelo.domain.SchemaElement
+import kotlin.math.abs
 
 // Background colour of the canvas (light grey, matching the original brModelo canvas background)
 private val CANVAS_BG = Color(0xFFE8E8E8)
@@ -51,29 +58,188 @@ private const val GRID_STEP = 20f
 /**
  * Interactive canvas that renders a [ConceptualSchema] using Compose [Canvas].
  *
- * Supports pan (drag to scroll) and replicates the rendering logic of the original
- * Pascal brModelo via [drawSchema]. When [schema] is null an empty canvas with a
- * placeholder message is shown.
+ * Supports:
+ * - **Pan**: drag on empty space moves the viewport.
+ * - **Select**: tap on an element or cardinality label selects it.
+ * - **Move**: drag a selected element (or any element) to reposition it.
+ * - **Move cardinality label**: drag a selected cardinality label.
+ * - **Resize**: drag a corner handle of the selected element to resize it.
  *
- * @param schema          The model to render, or null for an empty canvas.
- * @param modifier        Layout modifier applied to the outer Box.
+ * Selection follows the original Pascal behaviour: clicking on an element
+ * selects it immediately on pointer-down (not pointer-up), so the user can
+ * start dragging the newly-selected element in the same gesture.
+ *
+ * @param schema              The model to render, or null for an empty canvas.
+ * @param selection           The currently selected object.
+ * @param onSelectionChange   Called when the selection should change.
+ * @param onSchemaPreview     Called with intermediate schema states during drag (no undo entry).
+ * @param onSchemaCommit      Called when a drag or resize is committed (creates undo entry).
+ * @param modifier            Layout modifier applied to the outer Box.
  */
 @Composable
 internal fun SchemaCanvas(
     schema: ConceptualSchema?,
+    selection: CanvasSelection = CanvasSelection.None,
+    onSelectionChange: (CanvasSelection) -> Unit = {},
+    onSchemaPreview: (ConceptualSchema) -> Unit = {},
+    onSchemaCommit: (ConceptualSchema) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var panOffset by remember { mutableStateOf(Offset(8f, 8f)) }
     val textMeasurer = rememberTextMeasurer()
+
+    // rememberUpdatedState lets the gesture handler always see the latest values
+    // without restarting the gesture on every recomposition.
+    val currentSchema by rememberUpdatedState(schema)
+    val currentSelection by rememberUpdatedState(selection)
+    val currentOnSelectionChange by rememberUpdatedState(onSelectionChange)
+    val currentOnSchemaPreview by rememberUpdatedState(onSchemaPreview)
+    val currentOnSchemaCommit by rememberUpdatedState(onSchemaCommit)
+    val currentPanOffset by rememberUpdatedState(panOffset)
 
     Box(
         modifier = modifier
             .clipToBounds()
             .background(CANVAS_BG)
             .pointerInput(Unit) {
-                detectDragGestures { change, dragAmount ->
-                    change.consume()
-                    panOffset += dragAmount
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val panAtGestureStart = currentPanOffset
+                    val schemaAtGestureStart = currentSchema
+                    val selAtGestureStart = currentSelection
+
+                    // Convert screen coordinates to schema/canvas coordinates.
+                    val schemaPoint = down.position - panAtGestureStart
+
+                    // Determine what is under the pointer.
+                    val hitResult = schemaAtGestureStart?.let { hitTest(it, schemaPoint) }
+                        ?: CanvasSelection.None
+
+                    // Check if the pointer is on a resize handle of the currently selected element.
+                    val selectedElem = (selAtGestureStart as? CanvasSelection.Element)
+                        ?.let { schemaAtGestureStart?.elements?.get(it.id) }
+                    val hitHandle = selectedElem?.let { getResizeHandleAt(it.position, schemaPoint) }
+
+                    // Pascal behaviour: select immediately on pointer-down, not on pointer-up.
+                    // Only skip if we're about to resize (the selection stays as-is).
+                    if (hitHandle == null && hitResult != selAtGestureStart) {
+                        currentOnSelectionChange(hitResult)
+                    }
+
+                    // Snapshot the element/connection to be dragged at gesture start,
+                    // so we can apply absolute deltas instead of cumulative per-frame ones.
+                    val dragElementId = (hitResult as? CanvasSelection.Element)?.id
+                        ?: (hitHandle?.let { (selAtGestureStart as? CanvasSelection.Element)?.id })
+                    val dragConnectionId = (hitResult as? CanvasSelection.Cardinality)?.connectionId
+
+                    val startElementPos: ElementPosition? =
+                        dragElementId?.let { schemaAtGestureStart?.elements?.get(it)?.position }
+                    val startCardPos: ElementPosition? =
+                        dragConnectionId?.let { id ->
+                            schemaAtGestureStart?.connections?.firstOrNull { it.id == id }
+                                ?.cardinalityPosition
+                        }
+
+                    val startPointer = down.position
+                    val slop = viewConfiguration.touchSlop
+                    var totalDrag = Offset.Zero
+                    var isDragging = false
+
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) {
+                            // Pointer up: commit if we were dragging.
+                            if (isDragging) {
+                                val finalSchema = currentSchema
+                                if (finalSchema != null) {
+                                    currentOnSchemaCommit(finalSchema)
+                                }
+                            } else if (hitResult == CanvasSelection.None) {
+                                // Tap on empty canvas (no drag) → deselect
+                                currentOnSelectionChange(CanvasSelection.None)
+                            }
+                            break
+                        }
+
+                        val delta = change.position - startPointer
+                        totalDrag = delta
+
+                        if (!isDragging && (abs(totalDrag.x) > slop || abs(totalDrag.y) > slop)) {
+                            isDragging = true
+                        }
+
+                        if (isDragging) {
+                            change.consume()
+                            val s = schemaAtGestureStart
+
+                            if (s == null) {
+                                panOffset = panAtGestureStart + totalDrag
+                            } else {
+                                when {
+                                    // ── Resize ───────────────────────────────────────
+                                    hitHandle != null && startElementPos != null && dragElementId != null -> {
+                                        val newPos = applyResize(
+                                            handle = hitHandle,
+                                            startPos = startElementPos,
+                                            totalDelta = totalDrag,
+                                        )
+                                        val elem = s.elements[dragElementId]
+                                        if (elem != null) {
+                                            currentOnSchemaPreview(s.withElement(elem.withPosition(newPos)))
+                                        }
+                                    }
+
+                                    // ── Move element ─────────────────────────────────
+                                    dragElementId != null && startElementPos != null -> {
+                                        val newPos = startElementPos.copy(
+                                            x = startElementPos.x + totalDrag.x.toInt(),
+                                            y = startElementPos.y + totalDrag.y.toInt(),
+                                        )
+                                        val elem = s.elements[dragElementId]
+                                        if (elem != null) {
+                                            currentOnSchemaPreview(s.withElement(elem.withPosition(newPos)))
+                                        }
+                                    }
+
+                                    // ── Move cardinality label ────────────────────────
+                                    dragConnectionId != null -> {
+                                        val conn = s.connections.firstOrNull { it.id == dragConnectionId }
+                                        if (conn != null) {
+                                            val basePos = startCardPos ?: run {
+                                                val ep = s.elements[conn.elementIdB]?.position
+                                                    ?: s.elements[conn.elementIdA]?.position
+                                                if (ep != null) {
+                                                    ElementPosition(
+                                                        x = ep.x + ep.width / 2,
+                                                        y = ep.y - 20,
+                                                        width = 50,
+                                                        height = 20,
+                                                    )
+                                                } else null
+                                            }
+                                            if (basePos != null) {
+                                                val newPos = basePos.copy(
+                                                    x = basePos.x + totalDrag.x.toInt(),
+                                                    y = basePos.y + totalDrag.y.toInt(),
+                                                )
+                                                val newConn = conn.copy(cardinalityPosition = newPos)
+                                                val newConns = s.connections.map {
+                                                    if (it.id == dragConnectionId) newConn else it
+                                                }
+                                                currentOnSchemaPreview(s.copy(connections = newConns))
+                                            }
+                                        }
+                                    }
+
+                                    // ── Pan canvas ────────────────────────────────────
+                                    else -> {
+                                        panOffset = panAtGestureStart + totalDrag
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             },
     ) {
@@ -94,9 +260,8 @@ internal fun SchemaCanvas(
             }
 
             if (schema != null) {
-                // Translate the drawing context so (0,0) of the schema maps to panOffset
                 translate(panOffset.x, panOffset.y) {
-                    drawSchema(schema, textMeasurer)
+                    drawSchema(schema, textMeasurer, selection)
                 }
             }
         }
@@ -111,5 +276,50 @@ internal fun SchemaCanvas(
                     .padding(16.dp),
             )
         }
+    }
+}
+
+// ── Resize helper ──────────────────────────────────────────────────────────────
+
+/**
+ * Applies a resize gesture to [startPos] based on which corner [handle] is being dragged
+ * and the cumulative [totalDelta] since the start of the gesture.
+ *
+ * The minimum size is clamped to 10×10 to avoid negative/zero dimensions.
+ */
+private fun applyResize(
+    handle: ResizeHandle,
+    startPos: ElementPosition,
+    totalDelta: Offset,
+): ElementPosition {
+    val dx = totalDelta.x.toInt()
+    val dy = totalDelta.y.toInt()
+    val minSize = 10
+
+    return when (handle) {
+        ResizeHandle.TOP_LEFT -> ElementPosition(
+            x      = startPos.x + dx,
+            y      = startPos.y + dy,
+            width  = (startPos.width  - dx).coerceAtLeast(minSize),
+            height = (startPos.height - dy).coerceAtLeast(minSize),
+        )
+        ResizeHandle.TOP_RIGHT -> ElementPosition(
+            x      = startPos.x,
+            y      = startPos.y + dy,
+            width  = (startPos.width  + dx).coerceAtLeast(minSize),
+            height = (startPos.height - dy).coerceAtLeast(minSize),
+        )
+        ResizeHandle.BOTTOM_LEFT -> ElementPosition(
+            x      = startPos.x + dx,
+            y      = startPos.y,
+            width  = (startPos.width  - dx).coerceAtLeast(minSize),
+            height = (startPos.height + dy).coerceAtLeast(minSize),
+        )
+        ResizeHandle.BOTTOM_RIGHT -> ElementPosition(
+            x      = startPos.x,
+            y      = startPos.y,
+            width  = (startPos.width  + dx).coerceAtLeast(minSize),
+            height = (startPos.height + dy).coerceAtLeast(minSize),
+        )
     }
 }

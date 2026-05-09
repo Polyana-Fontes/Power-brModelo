@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import games.polyclub.kbrmodelo.domain.CanvasSelection
 import games.polyclub.kbrmodelo.domain.ConceptualSchema
 import games.polyclub.kbrmodelo.ui.canvas.renderSchemaToImageBitmap
 import games.polyclub.kbrmodelo.ui.components.ribbon.HeaderRibbon
@@ -51,6 +52,7 @@ internal fun BrModeloScreen(
     activeMenu: MainMenuType?,
     selectedTab: RibbonTab,
     schema: ConceptualSchema?,
+    selection: CanvasSelection = CanvasSelection.None,
     isDragOver: Boolean = false,
     onMainMenuToggle: () -> Unit,
     onMainMenuHover: (MainMenuType) -> Unit,
@@ -59,6 +61,9 @@ internal fun BrModeloScreen(
     onOpenFile: () -> Unit,
     onDragStateChange: (Boolean) -> Unit = {},
     onFileDrop: (ByteArray) -> Unit = {},
+    onSelectionChange: (CanvasSelection) -> Unit = {},
+    onSchemaPreview: (ConceptualSchema) -> Unit = {},
+    onSchemaCommit: (ConceptualSchema) -> Unit = {},
 ) {
     // Export state: counter bumps every time a new export is requested.
     var exportCounter by remember { mutableIntStateOf(0) }
@@ -89,9 +94,13 @@ internal fun BrModeloScreen(
             )
             WorkspaceArea(
                 schema = schema,
+                selection = selection,
                 isDragOver = isDragOver,
                 onDragStateChange = onDragStateChange,
                 onFileDrop = onFileDrop,
+                onSelectionChange = onSelectionChange,
+                onSchemaPreview = onSchemaPreview,
+                onSchemaCommit = onSchemaCommit,
             )
         }
 

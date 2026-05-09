@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import games.polyclub.kbrmodelo.domain.CanvasSelection
 import games.polyclub.kbrmodelo.domain.ConceptualSchema
 import games.polyclub.kbrmodelo.ui.canvas.SchemaCanvas
 
@@ -46,9 +47,13 @@ private val DRAG_OVERLAY_BORDER = Color(0xFF1E5CC7)
 @Composable
 internal fun MainCanvasPanel(
     schema: ConceptualSchema? = null,
+    selection: CanvasSelection = CanvasSelection.None,
     isDragOver: Boolean = false,
     onDragStateChange: (Boolean) -> Unit = {},
     onFileDrop: (ByteArray) -> Unit = {},
+    onSelectionChange: (CanvasSelection) -> Unit = {},
+    onSchemaPreview: (ConceptualSchema) -> Unit = {},
+    onSchemaCommit: (ConceptualSchema) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -96,6 +101,10 @@ internal fun MainCanvasPanel(
         ) {
             SchemaCanvas(
                 schema = schema,
+                selection = selection,
+                onSelectionChange = onSelectionChange,
+                onSchemaPreview = onSchemaPreview,
+                onSchemaCommit = onSchemaCommit,
                 modifier = Modifier.fillMaxSize(),
             )
 

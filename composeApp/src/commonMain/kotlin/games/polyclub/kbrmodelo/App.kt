@@ -30,7 +30,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import games.polyclub.kbrmodelo.domain.CanvasSelection
 import games.polyclub.kbrmodelo.domain.ConceptualSchema
+import games.polyclub.kbrmodelo.domain.SchemaHistory
 import games.polyclub.kbrmodelo.domain.serialization.ConceptualSchemaBrmParser
 import games.polyclub.kbrmodelo.domain.serialization.ConceptualSchemaXmlParser
 import games.polyclub.kbrmodelo.ui.BrModeloScreen
@@ -50,7 +52,15 @@ fun App() {
     var isMainMenuOpen by remember { mutableStateOf(false) }
     var activeMenu by remember { mutableStateOf<MainMenuType?>(null) }
     var selectedTab by remember { mutableStateOf(RibbonTab.EsquemaConceitual) }
+
+    // History is the source of truth for committed schema states.
+    val history = remember { SchemaHistory(null) }
+    // Live schema state: updated both during drag previews (no history entry) and on commits.
     var schema by remember { mutableStateOf<ConceptualSchema?>(null) }
+
+    // Current selection on the canvas (element id or cardinality connection id, or None).
+    var selection by remember { mutableStateOf<CanvasSelection>(CanvasSelection.None) }
+
     // isDragOverFromPolling: set by the WASM JS polling loop (always false on Desktop).
     // isDragOverFromCallback: set by Modifier.fileDragDropTarget on Desktop (always false on WASM).
     // Keeping them separate prevents the polling from clearing the callback state and vice-versa.
@@ -65,16 +75,17 @@ fun App() {
     }
 
     // Poll for drag-over state and dropped files (effective on WASM only).
-    // On Desktop, isWindowDragActive() always returns false and consumeWindowDropDataUrl()
-    // always returns null, so this loop is a no-op and does NOT interfere with the
-    // callback-based drag state managed by Modifier.fileDragDropTarget.
     LaunchedEffect(Unit) {
         while (true) {
             delay(120)
             isDragOverFromPolling = isWindowDragActive()
             val dataUrl = consumeWindowDropDataUrl()
             if (dataUrl != null) {
-                loadFromDataUrl(dataUrl)?.let { schema = it }
+                loadFromDataUrl(dataUrl)?.let {
+                    history.push(it)
+                    schema = it
+                    selection = CanvasSelection.None
+                }
             }
         }
     }
@@ -83,14 +94,35 @@ fun App() {
         scope.launch {
             val bytes = showNativeFilePicker() ?: return@launch
             runCatching { parseModelBytes(bytes) }
-                .onSuccess { schema = it }
+                .onSuccess {
+                    history.push(it)
+                    schema = it
+                    selection = CanvasSelection.None
+                }
         }
     }
 
     val loadFileBytes: (ByteArray) -> Unit = { bytes ->
         runCatching { parseModelBytes(bytes) }
-            .onSuccess { schema = it }
+            .onSuccess {
+                history.push(it)
+                schema = it
+                selection = CanvasSelection.None
+            }
     }
+
+    // Called during live interactions (drag preview) — does NOT push to undo history.
+    val onSchemaPreview: (ConceptualSchema) -> Unit = { schema = it }
+
+    // Called when an action is committed (pointer up after drag, field blur, dropdown change).
+    // Pushes the new state to the undo stack.
+    val onSchemaCommit: (ConceptualSchema) -> Unit = {
+        history.push(it)
+        schema = it
+    }
+
+    val onUndo: () -> Unit = { schema = history.undo() }
+    val onRedo: () -> Unit = { schema = history.redo() }
 
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFE3E3E3)) {
@@ -99,6 +131,7 @@ fun App() {
                 activeMenu = activeMenu,
                 selectedTab = selectedTab,
                 schema = schema,
+                selection = selection,
                 isDragOver = isDragOver,
                 onMainMenuToggle = {
                     isMainMenuOpen = !isMainMenuOpen
@@ -113,6 +146,9 @@ fun App() {
                 onOpenFile = openFile,
                 onDragStateChange = { isDragOverFromCallback = it },
                 onFileDrop = loadFileBytes,
+                onSelectionChange = { selection = it },
+                onSchemaPreview = onSchemaPreview,
+                onSchemaCommit = onSchemaCommit,
             )
         }
     }
