@@ -21,7 +21,6 @@ package games.polyclub.kbrmodelo.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,10 +35,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,6 +56,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -129,8 +130,10 @@ private val HINTS: Map<String, String> = mapOf(
     "NOME"           to "Descrição/identificação do objeto.",
     "NOME_MODELO"    to "Nome do modelo conceitual.",
     "OBS"            to "Algo importante a ser anotado para posterior observação.",
-    "ALINHAMENTOLT"  to "Reposiciona o controle quanto a posição no modelo (esquerda ou direita).",
-    "ALINHAMENTOWH"  to "Reposiciona o controle quanto a altura ou largura.",
+    "ALINHAMENTOLT_X" to "Reposiciona o controle quanto a posição no modelo (esquerda ou direita).",
+    "ALINHAMENTOLT_Y" to "Reposiciona o controle quanto a posição vertical no modelo.",
+    "ALINHAMENTOWH_W" to "Reposiciona o controle quanto à largura.",
+    "ALINHAMENTOWH_H" to "Reposiciona o controle quanto à altura.",
     "AUTO_REL"       to "A entidade está auto relacionada.",
     "ESPECIALIZADA"  to "A entidade está especializada.",
     "EA_NOME"        to "Nome do relacionamento contido na entidade associativa.",
@@ -386,22 +389,22 @@ private fun ElementContent(
 
     SectionTitle("Posição e Tamanho")
     val p = element.position
-    EditableRow("Esquerda (Left)", p.x.toString(), "ALINHAMENTOLT", focusedKey, onFocusChange) { v ->
+    EditableRow("Esquerda (Left)", p.x.toString(), "ALINHAMENTOLT_X", focusedKey, onFocusChange) { v ->
         v.toIntOrNull()?.let {
             onSchemaCommit(schema.withElement(element.withPosition(p.copy(x = it))))
         }
     }
-    EditableRow("Acima (Top)", p.y.toString(), "ALINHAMENTOLT", focusedKey, onFocusChange) { v ->
+    EditableRow("Acima (Top)", p.y.toString(), "ALINHAMENTOLT_Y", focusedKey, onFocusChange) { v ->
         v.toIntOrNull()?.let {
             onSchemaCommit(schema.withElement(element.withPosition(p.copy(y = it))))
         }
     }
-    EditableRow("Largura (Width)", p.width.toString(), "ALINHAMENTOWH", focusedKey, onFocusChange) { v ->
+    EditableRow("Largura (Width)", p.width.toString(), "ALINHAMENTOWH_W", focusedKey, onFocusChange) { v ->
         v.toIntOrNull()?.let {
             onSchemaCommit(schema.withElement(element.withPosition(p.copy(width = it))))
         }
     }
-    EditableRow("Altura (Height)", p.height.toString(), "ALINHAMENTOWH", focusedKey, onFocusChange) { v ->
+    EditableRow("Altura (Height)", p.height.toString(), "ALINHAMENTOWH_H", focusedKey, onFocusChange) { v ->
         v.toIntOrNull()?.let {
             onSchemaCommit(schema.withElement(element.withPosition(p.copy(height = it))))
         }
@@ -893,12 +896,20 @@ private fun DropdownRow(
 ) {
     val focused = focusedKey == key
     var expanded by remember { mutableStateOf(false) }
+    val density = LocalDensity.current
+    var anchorWidth by remember { mutableStateOf(0.dp) }
 
     PropertyRow(label = label, focused = focused, onClick = {
         onFocusChange(key)
         expanded = true
     }) {
-        Box {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .onGloballyPositioned { coords ->
+                    anchorWidth = with(density) { coords.size.width.toDp() }
+                },
+        ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
@@ -917,18 +928,50 @@ private fun DropdownRow(
             DropdownMenu(
                 expanded = expanded,
                 onDismissRequest = { expanded = false },
+                modifier = Modifier.then(
+                    if (anchorWidth > 0.dp) Modifier.width(anchorWidth) else Modifier,
+                ),
             ) {
-                options.forEach { option ->
-                    DropdownMenuItem(
-                        text = { Text(option, fontSize = 11.sp) },
-                        onClick = {
-                            expanded = false
-                            onSelect(option)
-                        },
-                    )
+                // Material [DropdownMenuItem] applies minHeight = 48.dp (MenuListItemContainerHeight)
+                // after the caller's modifier, so LocalMinimumInteractiveComponentSize alone cannot
+                // shrink rows (unrelated to menu maxHeight tricks like Stack Overflow #69782653).
+                CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+                    options.forEachIndexed { index, option ->
+                        InspectorDropdownMenuItem(
+                            text = option,
+                            onClick = {
+                                expanded = false
+                                onSelect(option)
+                            },
+                        )
+                        if (index < options.lastIndex) {
+                            HorizontalDivider(color = CELL_BORDER, thickness = 0.5.dp)
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+/**
+ * Compact menu line for the inspector grid: avoids Material3 [DropdownMenuItem]'s fixed 48.dp min height.
+ */
+@Composable
+private fun InspectorDropdownMenuItem(text: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = text,
+            style = inspectorValueTextStyle(VALUE_COLOR),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
