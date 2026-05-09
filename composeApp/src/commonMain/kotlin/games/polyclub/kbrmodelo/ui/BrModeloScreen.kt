@@ -52,6 +52,8 @@ internal fun BrModeloScreen(
     activeMenu: MainMenuType?,
     selectedTab: RibbonTab,
     schema: ConceptualSchema?,
+    inspectorCommittedSchema: ConceptualSchema? = null,
+    hasUnsavedChanges: Boolean = false,
     selection: CanvasSelection = CanvasSelection.None,
     isDragOver: Boolean = false,
     onMainMenuToggle: () -> Unit,
@@ -64,6 +66,7 @@ internal fun BrModeloScreen(
     onSelectionChange: (CanvasSelection) -> Unit = {},
     onSchemaPreview: (ConceptualSchema) -> Unit = {},
     onSchemaCommit: (ConceptualSchema) -> Unit = {},
+    onRevertSchemaPreview: () -> Unit = {},
     onCloseTab: (() -> Unit)? = null,
     onSave: () -> Unit = {},
     onSaveAs: () -> Unit = {},
@@ -97,6 +100,8 @@ internal fun BrModeloScreen(
             )
             WorkspaceArea(
                 schema = schema,
+                inspectorCommittedSchema = inspectorCommittedSchema,
+                hasUnsavedChanges = hasUnsavedChanges,
                 selection = selection,
                 isDragOver = isDragOver,
                 onDragStateChange = onDragStateChange,
@@ -104,6 +109,7 @@ internal fun BrModeloScreen(
                 onSelectionChange = onSelectionChange,
                 onSchemaPreview = onSchemaPreview,
                 onSchemaCommit = onSchemaCommit,
+                onRevertSchemaPreview = onRevertSchemaPreview,
                 onCloseTab = onCloseTab,
             )
         }

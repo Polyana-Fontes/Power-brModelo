@@ -62,6 +62,7 @@ private val CANVAS_STRIP_BORDER    = Color(0xFF888888)
 @Composable
 internal fun MainCanvasPanel(
     schema: ConceptualSchema? = null,
+    hasUnsavedChanges: Boolean = false,
     selection: CanvasSelection = CanvasSelection.None,
     isDragOver: Boolean = false,
     onDragStateChange: (Boolean) -> Unit = {},
@@ -77,7 +78,11 @@ internal fun MainCanvasPanel(
             .fillMaxHeight()
             .background(Color(0xFFD7D7D7))
     ) {
-        CanvasTabStrip(schema = schema, onClose = if (schema != null) onCloseTab else null)
+        CanvasTabStrip(
+            schema = schema,
+            showDirtySuffix = hasUnsavedChanges,
+            onClose = if (schema != null) onCloseTab else null,
+        )
 
         // The fileDragDropTarget modifier must be on this outer Box — NOT on SchemaCanvas.
         // If it were on SchemaCanvas, the overlay Box appearing on top of it would cause the
@@ -125,8 +130,13 @@ internal fun MainCanvasPanel(
 }
 
 @Composable
-private fun CanvasTabStrip(schema: ConceptualSchema?, onClose: (() -> Unit)? = null) {
-    val tabLabel = schema?.name?.takeIf { it.isNotBlank() } ?: "Sem título"
+private fun CanvasTabStrip(
+    schema: ConceptualSchema?,
+    showDirtySuffix: Boolean = false,
+    onClose: (() -> Unit)? = null,
+) {
+    val baseLabel = schema?.name?.takeIf { it.isNotBlank() } ?: "Sem título"
+    val tabLabel = if (showDirtySuffix) "$baseLabel*" else baseLabel
     val modelIcon = painterResource(Res.drawable.modelo_conceitual_2s)
 
     val density = LocalDensity.current

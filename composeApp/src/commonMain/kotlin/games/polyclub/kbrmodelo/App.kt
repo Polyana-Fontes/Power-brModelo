@@ -57,6 +57,10 @@ fun App() {
     val history = remember { SchemaHistory(null) }
     // Live schema state: updated both during drag previews (no history entry) and on commits.
     var schema by remember { mutableStateOf<ConceptualSchema?>(null) }
+    // Mirrors [history.current] whenever history changes outside of live preview (load, commit, undo/redo, save sync).
+    var inspectorCommittedSchema by remember { mutableStateOf<ConceptualSchema?>(null) }
+    // Snapshot from disk after last successful load/save; used for the dirty (*) indicator on the canvas tab.
+    var savedDiskBaseline by remember { mutableStateOf<ConceptualSchema?>(null) }
 
     // Current selection on the canvas (element id or cardinality connection id, or None).
     var selection by remember { mutableStateOf<CanvasSelection>(CanvasSelection.None) }
@@ -86,6 +90,8 @@ fun App() {
                         val named = mergeLoadedModel(parsed, fromBrm, dropped)
                         history.push(named)
                         schema = named
+                        inspectorCommittedSchema = named
+                        savedDiskBaseline = named
                         selection = CanvasSelection.None
                     }
             }
@@ -100,6 +106,8 @@ fun App() {
                     val named = mergeLoadedModel(parsed, fromBrm, picked)
                     history.push(named)
                     schema = named
+                    inspectorCommittedSchema = named
+                    savedDiskBaseline = named
                     selection = CanvasSelection.None
                 }
         }
@@ -111,6 +119,8 @@ fun App() {
                 val named = mergeLoadedModel(parsed, fromBrm, picked)
                 history.push(named)
                 schema = named
+                inspectorCommittedSchema = named
+                savedDiskBaseline = named
                 selection = CanvasSelection.None
             }
     }
@@ -123,13 +133,21 @@ fun App() {
     val onSchemaCommit: (ConceptualSchema) -> Unit = {
         history.push(it)
         schema = it
+        inspectorCommittedSchema = history.current
     }
 
-    val onUndo: () -> Unit = { schema = history.undo() }
-    val onRedo: () -> Unit = { schema = history.redo() }
+    /** Drops transient canvas previews (e.g. sidebar name typing) back to the last committed history state. */
+    val onRevertSchemaPreview: () -> Unit = {
+        schema = history.current
+    }
+
+    val hasUnsavedChanges =
+        schema != null && (savedDiskBaseline == null || schema != savedDiskBaseline)
 
     val onCloseTab: () -> Unit = {
         schema = null
+        inspectorCommittedSchema = null
+        savedDiskBaseline = null
         selection = CanvasSelection.None
     }
 
@@ -144,6 +162,8 @@ fun App() {
             ) ?: return@launch
             history.syncCurrent(updated)
             schema = updated
+            inspectorCommittedSchema = updated
+            savedDiskBaseline = updated
         }
     }
 
@@ -159,6 +179,8 @@ fun App() {
                 activeMenu = activeMenu,
                 selectedTab = selectedTab,
                 schema = schema,
+                inspectorCommittedSchema = inspectorCommittedSchema,
+                hasUnsavedChanges = hasUnsavedChanges,
                 selection = selection,
                 isDragOver = isDragOver,
                 onMainMenuToggle = {
@@ -177,6 +199,7 @@ fun App() {
                 onSelectionChange = { selection = it },
                 onSchemaPreview = onSchemaPreview,
                 onSchemaCommit = onSchemaCommit,
+                onRevertSchemaPreview = onRevertSchemaPreview,
                 onCloseTab = onCloseTab,
                 onSave = { enqueueSave(saveAs = false) },
                 onSaveAs = { enqueueSave(saveAs = true) },

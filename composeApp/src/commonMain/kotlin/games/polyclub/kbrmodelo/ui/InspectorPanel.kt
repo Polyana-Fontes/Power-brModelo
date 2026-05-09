@@ -40,6 +40,7 @@ import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +49,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
@@ -58,6 +64,7 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -122,6 +129,9 @@ private val INSPECTOR_DROPDOWN_CARET_STYLE = TextStyle(
 
 private enum class InspectorTab { Selecao, AtrOcultos }
 
+/** Escapes transient canvas previews back to the last committed schema ([SchemaHistory.current]). */
+private val LocalRevertSchemaPreview = staticCompositionLocalOf<() -> Unit> { { } }
+
 // ChromiumTabShape is defined in components/ChromiumTabs.kt and imported via the same package.
 
 // ── Hint strings (sourced from ajuda.pas AutoHelp) ────────────────────────────
@@ -170,20 +180,24 @@ private val HINTS: Map<String, String> = mapOf(
 @Composable
 internal fun InspectorPanel(
     schema: ConceptualSchema? = null,
+    inspectorCommittedSchema: ConceptualSchema? = null,
     selection: CanvasSelection = CanvasSelection.None,
+    onSchemaPreview: (ConceptualSchema) -> Unit = {},
     onSchemaCommit: (ConceptualSchema) -> Unit = {},
+    onRevertSchemaPreview: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var activeTab by remember { mutableStateOf(InspectorTab.Selecao) }
     // Field key currently focused in the grid — drives the hint text at the bottom.
     var focusedKey by remember { mutableStateOf<String?>(null) }
 
-    Column(
-        modifier = modifier
-            .width(210.dp)
-            .fillMaxHeight()
-            .background(INSPECTOR_BG)
-    ) {
+    CompositionLocalProvider(LocalRevertSchemaPreview provides onRevertSchemaPreview) {
+        Column(
+            modifier = modifier
+                .width(210.dp)
+                .fillMaxHeight()
+                .background(INSPECTOR_BG)
+        ) {
         // ── Tab header ────────────────────────────────────────────────────────
         InspectorTabStrip(
             activeTab = activeTab,
@@ -194,9 +208,11 @@ internal fun InspectorPanel(
         when (activeTab) {
             InspectorTab.Selecao -> SelectionTab(
                 schema = schema,
+                committedSchema = inspectorCommittedSchema,
                 selection = selection,
                 focusedKey = focusedKey,
                 onFocusChange = { focusedKey = it },
+                onSchemaPreview = onSchemaPreview,
                 onSchemaCommit = onSchemaCommit,
                 modifier = Modifier.weight(1f),
             )
@@ -205,6 +221,7 @@ internal fun InspectorPanel(
                 selection = selection,
                 modifier = Modifier.weight(1f),
             )
+        }
         }
     }
 }
@@ -281,9 +298,11 @@ private fun InspectorTabStrip(
 @Composable
 private fun SelectionTab(
     schema: ConceptualSchema?,
+    committedSchema: ConceptualSchema?,
     selection: CanvasSelection,
     focusedKey: String?,
     onFocusChange: (String?) -> Unit,
+    onSchemaPreview: (ConceptualSchema) -> Unit,
     onSchemaCommit: (ConceptualSchema) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -300,12 +319,27 @@ private fun SelectionTab(
                 schema == null -> Unit
 
                 selection == CanvasSelection.None ->
-                    SchemaMetaContent(schema, focusedKey, onFocusChange, onSchemaCommit)
+                    SchemaMetaContent(
+                        schema = schema,
+                        committedSchema = committedSchema,
+                        focusedKey = focusedKey,
+                        onFocusChange = onFocusChange,
+                        onSchemaPreview = onSchemaPreview,
+                        onSchemaCommit = onSchemaCommit,
+                    )
 
                 selection is CanvasSelection.Element -> {
                     val elem = schema.elements[selection.id]
                     if (elem != null) {
-                        ElementContent(elem, schema, focusedKey, onFocusChange, onSchemaCommit)
+                        ElementContent(
+                            element = elem,
+                            schema = schema,
+                            committedSchema = committedSchema,
+                            focusedKey = focusedKey,
+                            onFocusChange = onFocusChange,
+                            onSchemaPreview = onSchemaPreview,
+                            onSchemaCommit = onSchemaCommit,
+                        )
                     }
                 }
 
@@ -342,12 +376,24 @@ private fun SelectionTab(
 @Composable
 private fun SchemaMetaContent(
     schema: ConceptualSchema,
+    committedSchema: ConceptualSchema?,
     focusedKey: String?,
     onFocusChange: (String?) -> Unit,
+    onSchemaPreview: (ConceptualSchema) -> Unit,
     onSchemaCommit: (ConceptualSchema) -> Unit,
 ) {
     SectionTitle("Informações: Modelo Conceitual")
-    ReadOnlyRow("Nome",    schema.name,    "NOME_MODELO",  focusedKey, onFocusChange)
+    val modelNameCommitted = committedSchema?.name ?: schema.name
+    EditableRow(
+        label = "Nome",
+        value = modelNameCommitted,
+        key = "NOME_MODELO",
+        focusedKey = focusedKey,
+        onFocusChange = onFocusChange,
+        onLiveDraftChange = { onSchemaPreview(schema.copy(name = it)) },
+    ) {
+        onSchemaCommit(schema.copy(name = it))
+    }
     ReadOnlyRow("Versão",  schema.version, "VERSAO",       focusedKey, onFocusChange)
     EditableRow("Autor(es)", schema.author, "AUTOR", focusedKey, onFocusChange) {
         onSchemaCommit(schema.copy(author = it))
@@ -363,8 +409,10 @@ private fun SchemaMetaContent(
 private fun ElementContent(
     element: SchemaElement,
     schema: ConceptualSchema,
+    committedSchema: ConceptualSchema?,
     focusedKey: String?,
     onFocusChange: (String?) -> Unit,
+    onSchemaPreview: (ConceptualSchema) -> Unit,
     onSchemaCommit: (ConceptualSchema) -> Unit,
 ) {
     val friendlyName = when (element) {
@@ -380,7 +428,17 @@ private fun ElementContent(
     SectionTitle("Edição: $friendlyName")
 
     // Common fields for all elements
-    EditableRow("Nome", element.name, "NOME", focusedKey, onFocusChange) { newName ->
+    val nameCommitted = committedSchema?.elements?.get(element.id)?.name ?: element.name
+    EditableRow(
+        label = "Nome",
+        value = nameCommitted,
+        key = "NOME",
+        focusedKey = focusedKey,
+        onFocusChange = onFocusChange,
+        onLiveDraftChange = { draft ->
+            onSchemaPreview(schema.withElement(element.withName(draft)))
+        },
+    ) { newName ->
         onSchemaCommit(schema.withElement(element.withName(newName)))
     }
     EditableRow("Observação", element.observations, "OBS", focusedKey, onFocusChange) { v ->
@@ -845,26 +903,56 @@ private fun EditableRow(
     focusedKey: String?,
     onFocusChange: (String?) -> Unit,
     enabled: Boolean = true,
+    onLiveDraftChange: ((String) -> Unit)? = null,
     onCommit: (String) -> Unit,
 ) {
+    val revertPreview = LocalRevertSchemaPreview.current
+    val focusManager = LocalFocusManager.current
     val focused = focusedKey == key
-    // Local draft so typing doesn't trigger schema mutations on every keystroke.
+    // Local draft so typing doesn't trigger schema commits on every keystroke.
     var draft by remember(value) { mutableStateOf(value) }
+    // BasicTextField emits an initial unfocused event before it ever gains focus; ignoring blur until
+    // we have seen a real focus avoids clearing [focusedKey] immediately (row would "flash" unselected).
+    var hadRealFocusInSession by remember(key, value) { mutableStateOf(false) }
 
     PropertyRow(label = label, focused = focused, onClick = { if (enabled) onFocusChange(key) }) {
         if (focused && enabled) {
             BasicTextField(
                 value = draft,
-                onValueChange = { draft = it },
+                onValueChange = {
+                    draft = it
+                    onLiveDraftChange?.invoke(it)
+                },
                 textStyle = inspectorValueTextStyle(VALUE_COLOR),
                 cursorBrush = SolidColor(VALUE_COLOR),
                 singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 4.dp, vertical = 1.dp)
+                    .onPreviewKeyEvent { evt ->
+                        if (evt.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        when (evt.key) {
+                            Key.Enter, Key.NumPadEnter -> {
+                                focusManager.clearFocus()
+                                true
+                            }
+                            Key.Escape -> {
+                                draft = value
+                                if (onLiveDraftChange != null) revertPreview()
+                                focusManager.clearFocus()
+                                true
+                            }
+                            else -> false
+                        }
+                    }
                     .onFocusChanged { fs ->
-                        if (!fs.isFocused && draft != value) {
-                            onCommit(draft)
+                        when {
+                            fs.isFocused -> hadRealFocusInSession = true
+                            hadRealFocusInSession -> {
+                                hadRealFocusInSession = false
+                                if (draft != value) onCommit(draft)
+                                onFocusChange(null)
+                            }
                         }
                     },
                 decorationBox = { inner -> inner() },
