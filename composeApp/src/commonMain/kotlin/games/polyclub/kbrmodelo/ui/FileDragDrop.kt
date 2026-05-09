@@ -35,10 +35,10 @@ import androidx.compose.ui.Modifier
  *
  * @param onDragStateChange called with `true` when a drag enters the window and
  *                          `false` when it exits or a drop (successful or not) occurs.
- * @param onFileDrop        called with the raw bytes of the first dropped file.
+ * @param onFileDrop        called with the [PickedFile] (name + bytes) of the first dropped file.
  */
 @Composable
 internal expect fun Modifier.fileDragDropTarget(
     onDragStateChange: (Boolean) -> Unit,
-    onFileDrop: (ByteArray) -> Unit,
+    onFileDrop: (PickedFile) -> Unit,
 ): Modifier

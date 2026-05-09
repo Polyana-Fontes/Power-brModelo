@@ -50,7 +50,7 @@ import java.net.URI
 @OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
 internal actual fun Modifier.fileDragDropTarget(
     onDragStateChange: (Boolean) -> Unit,
-    onFileDrop: (ByteArray) -> Unit,
+    onFileDrop: (PickedFile) -> Unit,
 ): Modifier {
     // rememberUpdatedState ensures the callbacks always point to the latest lambda
     // without making the DragAndDropTarget instance itself change.
@@ -78,7 +78,7 @@ internal actual fun Modifier.fileDragDropTarget(
                     val uri = files.firstOrNull() ?: return false
                     val file = File(URI.create(uri))
                     if (!file.exists()) return false
-                    fileDropRef.value(file.readBytes())
+                    fileDropRef.value(PickedFile(name = file.nameWithoutExtension, bytes = file.readBytes()))
                     true
                 }.getOrDefault(false)
             }

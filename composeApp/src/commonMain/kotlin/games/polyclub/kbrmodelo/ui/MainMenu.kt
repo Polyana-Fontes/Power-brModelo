@@ -79,13 +79,19 @@ internal fun FunctionalMainMenu(
     activeMenu: MainMenuType?,
     onMenuHover: (MainMenuType) -> Unit,
     onOpenFile: () -> Unit = {},
+    onCloseCurrentModel: () -> Unit = {},
     onExportJpeg: () -> Unit = {},
     onExportPng: () -> Unit = {},
 ) {
     Row(
         modifier = modifier.border(1.dp, MENU_BORDER)
     ) {
-        MainMenuItems(activeMenu = activeMenu, onMenuHover = onMenuHover, onOpenFile = onOpenFile)
+        MainMenuItems(
+            activeMenu = activeMenu,
+            onMenuHover = onMenuHover,
+            onOpenFile = onOpenFile,
+            onCloseCurrentModel = onCloseCurrentModel,
+        )
         // The right panel always shows; content varies by hovered item
         when (activeMenu) {
             MainMenuType.NewModel -> NewModelSubmenu()
@@ -96,7 +102,12 @@ internal fun FunctionalMainMenu(
 }
 
 @Composable
-private fun MainMenuItems(activeMenu: MainMenuType?, onMenuHover: (MainMenuType) -> Unit, onOpenFile: () -> Unit) {
+private fun MainMenuItems(
+    activeMenu: MainMenuType?,
+    onMenuHover: (MainMenuType) -> Unit,
+    onOpenFile: () -> Unit,
+    onCloseCurrentModel: () -> Unit = {},
+) {
     Column(
         modifier = Modifier
             .width(170.dp)
@@ -113,7 +124,7 @@ private fun MainMenuItems(activeMenu: MainMenuType?, onMenuHover: (MainMenuType)
         MainMenuItem("Abrir", Res.drawable.abrir_2s, onClick = onOpenFile)
         MainMenuItem("Salvar", Res.drawable.salvar_s)
         MainMenuItem("Salvar Como...", Res.drawable.salvar_como_s)
-        MainMenuItem("Fechar Modelo Atual", Res.drawable.fechar_2s)
+        MainMenuItem("Fechar Modelo Atual", Res.drawable.fechar_2s, onClick = onCloseCurrentModel)
 
         HorizontalDivider(color = SEPARATOR, thickness = 1.dp, modifier = Modifier.padding(horizontal = 4.dp))
 

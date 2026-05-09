@@ -31,24 +31,30 @@ import kotlin.io.encoding.ExperimentalEncodingApi
  * to a ByteArray in Kotlin. Suspends until the user selects a file or
  * closes the dialog.
  */
-internal actual suspend fun showNativeFilePicker(): ByteArray? =
+internal actual suspend fun showNativeFilePicker(): PickedFile? =
     suspendCancellableCoroutine { cont ->
-        triggerFileInput { dataUrl ->
-            if (dataUrl == null) {
+        // The JS callback receives "filename\x00dataUrl", or null on cancel/error.
+        triggerFileInput { encoded ->
+            if (encoded == null) {
                 cont.resume(null)
             } else {
+                val separatorIdx = encoded.indexOf('\u0000')
+                val rawName  = if (separatorIdx >= 0) encoded.substring(0, separatorIdx) else ""
+                val dataUrl  = if (separatorIdx >= 0) encoded.substring(separatorIdx + 1) else encoded
+                val nameNoExt = rawName.substringBeforeLast('.')
                 @OptIn(ExperimentalEncodingApi::class)
                 val bytes = runCatching {
                     Base64.Default.decode(dataUrl.substringAfter(","))
                 }.getOrNull()
-                cont.resume(bytes)
+                cont.resume(bytes?.let { PickedFile(name = nameNoExt, bytes = it) })
             }
         }
     }
 
 /**
  * Creates a hidden `<input type="file">` in the DOM, triggers it, reads
- * the selected file as a data URL and calls [callback] with the result.
+ * the selected file as a data URL and calls [callback] with the result
+ * encoded as `"filename\x00dataUrl"`, or null on cancel/error.
  *
  * The [callback] parameter is a Kotlin lambda; Kotlin/Wasm JS exposes it
  * as a callable JavaScript function inside the `js()` block.
@@ -67,8 +73,9 @@ private fun triggerFileInput(callback: (String?) -> Unit): Unit = js(
         input.addEventListener('change', function() {
             var file = input.files && input.files[0];
             if (file) {
+                var name = file.name;
                 var reader = new FileReader();
-                reader.onload  = function(e) { cleanup(); cb(e.target.result); };
+                reader.onload  = function(e) { cleanup(); cb(name + '\x00' + e.target.result); };
                 reader.onerror = function()  { cleanup(); cb(null); };
                 reader.readAsDataURL(file);
             } else {

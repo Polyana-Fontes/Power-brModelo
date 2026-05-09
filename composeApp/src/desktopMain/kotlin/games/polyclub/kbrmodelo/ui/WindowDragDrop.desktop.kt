@@ -23,4 +23,4 @@ package games.polyclub.kbrmodelo.ui
 // is effectively a no-op on Desktop.
 internal actual fun setupWindowDragDrop(): Unit = Unit
 internal actual fun isWindowDragActive(): Boolean = false
-internal actual fun consumeWindowDropDataUrl(): String? = null
+internal actual fun consumeWindowDropFile(): PickedFile? = null

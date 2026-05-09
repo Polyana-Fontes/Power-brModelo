@@ -42,10 +42,13 @@ internal actual fun setupWindowDragDrop(): Unit = js(
             window._kbrDragOver = false;
             var files = e.dataTransfer && e.dataTransfer.files;
             if (!files || files.length === 0) return;
+            var file = files[0];
+            var name = file.name;
             var reader = new FileReader();
-            reader.onload  = function(evt) { window._kbrDropFile = evt.target.result; };
+            // Store as "filename\x00dataUrl" so Kotlin can extract both.
+            reader.onload  = function(evt) { window._kbrDropFile = name + '\x00' + evt.target.result; };
             reader.onerror = function()    { window._kbrDropFile = null; };
-            reader.readAsDataURL(files[0]);
+            reader.readAsDataURL(file);
         });
     })()
     """
@@ -55,9 +58,21 @@ internal actual fun isWindowDragActive(): Boolean = js("window._kbrDragOver === 
 
 /**
  * Reads and atomically clears `window._kbrDropFile`.
- * Returns the data-URL of the dropped file, or null if no file was dropped.
+ * Returns a [PickedFile] with the filename (no extension) and decoded bytes,
+ * or null if no file was dropped since the last call.
  */
-internal actual fun consumeWindowDropDataUrl(): String? = readAndClearDropFile()
+internal actual fun consumeWindowDropFile(): PickedFile? {
+    val encoded = readAndClearDropFile() ?: return null
+    val separatorIdx = encoded.indexOf('\u0000')
+    val rawName = if (separatorIdx >= 0) encoded.substring(0, separatorIdx) else ""
+    val dataUrl = if (separatorIdx >= 0) encoded.substring(separatorIdx + 1) else encoded
+    val nameNoExt = rawName.substringBeforeLast('.')
+    @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+    val bytes = runCatching {
+        kotlin.io.encoding.Base64.Default.decode(dataUrl.substringAfter(","))
+    }.getOrNull() ?: return null
+    return PickedFile(name = nameNoExt, bytes = bytes)
+}
 
 // Single-expression helper — performs the read+clear in one js() call.
 private fun readAndClearDropFile(): String? = js(

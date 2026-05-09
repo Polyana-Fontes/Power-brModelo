@@ -38,12 +38,11 @@ import games.polyclub.kbrmodelo.domain.serialization.ConceptualSchemaXmlParser
 import games.polyclub.kbrmodelo.ui.BrModeloScreen
 import games.polyclub.kbrmodelo.ui.MainMenuType
 import games.polyclub.kbrmodelo.ui.RibbonTab
-import games.polyclub.kbrmodelo.ui.consumeWindowDropDataUrl
+import games.polyclub.kbrmodelo.ui.PickedFile
+import games.polyclub.kbrmodelo.ui.consumeWindowDropFile
 import games.polyclub.kbrmodelo.ui.isWindowDragActive
 import games.polyclub.kbrmodelo.ui.setupWindowDragDrop
 import games.polyclub.kbrmodelo.ui.showNativeFilePicker
-import kotlin.io.encoding.Base64
-import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -79,34 +78,38 @@ fun App() {
         while (true) {
             delay(120)
             isDragOverFromPolling = isWindowDragActive()
-            val dataUrl = consumeWindowDropDataUrl()
-            if (dataUrl != null) {
-                loadFromDataUrl(dataUrl)?.let {
-                    history.push(it)
-                    schema = it
-                    selection = CanvasSelection.None
-                }
+            val dropped = consumeWindowDropFile()
+            if (dropped != null) {
+                runCatching { parseModelBytes(dropped.bytes) }
+                    .onSuccess {
+                        val named = it.copy(name = dropped.name)
+                        history.push(named)
+                        schema = named
+                        selection = CanvasSelection.None
+                    }
             }
         }
     }
 
     val openFile: () -> Unit = {
         scope.launch {
-            val bytes = showNativeFilePicker() ?: return@launch
-            runCatching { parseModelBytes(bytes) }
+            val picked = showNativeFilePicker() ?: return@launch
+            runCatching { parseModelBytes(picked.bytes) }
                 .onSuccess {
-                    history.push(it)
-                    schema = it
+                    val named = it.copy(name = picked.name)
+                    history.push(named)
+                    schema = named
                     selection = CanvasSelection.None
                 }
         }
     }
 
-    val loadFileBytes: (ByteArray) -> Unit = { bytes ->
-        runCatching { parseModelBytes(bytes) }
+    val loadPickedFile: (PickedFile) -> Unit = { picked ->
+        runCatching { parseModelBytes(picked.bytes) }
             .onSuccess {
-                history.push(it)
-                schema = it
+                val named = it.copy(name = picked.name)
+                history.push(named)
+                schema = named
                 selection = CanvasSelection.None
             }
     }
@@ -123,6 +126,11 @@ fun App() {
 
     val onUndo: () -> Unit = { schema = history.undo() }
     val onRedo: () -> Unit = { schema = history.redo() }
+
+    val onCloseTab: () -> Unit = {
+        schema = null
+        selection = CanvasSelection.None
+    }
 
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFE3E3E3)) {
@@ -145,10 +153,11 @@ fun App() {
                 },
                 onOpenFile = openFile,
                 onDragStateChange = { isDragOverFromCallback = it },
-                onFileDrop = loadFileBytes,
+                onFileDrop = loadPickedFile,
                 onSelectionChange = { selection = it },
                 onSchemaPreview = onSchemaPreview,
                 onSchemaCommit = onSchemaCommit,
+                onCloseTab = onCloseTab,
             )
         }
     }
@@ -170,9 +179,3 @@ internal fun parseModelBytes(bytes: ByteArray): ConceptualSchema {
     else ConceptualSchemaXmlParser.parse(bytes)
 }
 
-@OptIn(ExperimentalEncodingApi::class)
-private fun loadFromDataUrl(dataUrl: String): ConceptualSchema? =
-    runCatching {
-        val bytes = Base64.Default.decode(dataUrl.substringAfter(","))
-        parseModelBytes(bytes)
-    }.getOrNull()

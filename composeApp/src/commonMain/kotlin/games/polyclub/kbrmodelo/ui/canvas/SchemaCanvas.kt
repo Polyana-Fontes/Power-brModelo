@@ -178,7 +178,7 @@ internal fun SchemaCanvas(
                             } else {
                                 when {
                                     // ── Resize ───────────────────────────────────────
-                                    hitHandle != null && startElementPos != null && dragElementId != null -> {
+                                    hitHandle != null && startElementPos != null -> {
                                         val newPos = applyResize(
                                             handle = hitHandle,
                                             startPos = startElementPos,

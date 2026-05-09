@@ -30,7 +30,7 @@ internal expect fun setupWindowDragDrop()
 internal expect fun isWindowDragActive(): Boolean
 
 /**
- * Returns and clears the data URL of the last file dropped on the window,
- * or null if nothing has been dropped since the last call (WASM only).
+ * Returns and clears a [PickedFile] (name + bytes) for the last file dropped on the
+ * window, or null if nothing has been dropped since the last call (WASM only).
  */
-internal expect fun consumeWindowDropDataUrl(): String?
+internal expect fun consumeWindowDropFile(): PickedFile?

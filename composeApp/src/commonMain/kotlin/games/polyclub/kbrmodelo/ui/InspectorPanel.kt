@@ -21,6 +21,7 @@ package games.polyclub.kbrmodelo.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -46,13 +47,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import games.polyclub.kbrmodelo.domain.AnnotationType
 import games.polyclub.kbrmodelo.domain.ArrowDirection
 import games.polyclub.kbrmodelo.domain.CanvasSelection
@@ -65,15 +76,20 @@ import games.polyclub.kbrmodelo.domain.SchemaElement
 import games.polyclub.kbrmodelo.domain.SpecializationType
 import games.polyclub.kbrmodelo.domain.TextAlignment
 import games.polyclub.kbrmodelo.ui.canvas.withPosition
+import games.polyclub.kbrmodelo.ui.components.CHROMIUM_TAB_ACTIVE_HEIGHT
+import games.polyclub.kbrmodelo.ui.components.CHROMIUM_TAB_INACTIVE_HEIGHT
+import games.polyclub.kbrmodelo.ui.components.CHROMIUM_TAB_STRIP_HEIGHT
+import games.polyclub.kbrmodelo.ui.components.ChromiumTab
+import games.polyclub.kbrmodelo.ui.components.ChromiumTabShape
 
 // ── Colour palette ────────────────────────────────────────────────────────────
 
 private val INSPECTOR_BG       = Color(0xFFF0F2F5)
 private val INSPECTOR_BORDER   = Color(0xFF8090A0)
-private val HEADER_BG          = Color(0xFFD8DDE4)
-private val HEADER_BORDER      = Color(0xFFB0BAC4)
+private val HEADER_BG          = Color(0xFFD8D8D8)  // neutral gray strip background
 private val TAB_ACTIVE_BG      = Color(0xFFFFFFFF)
-private val TAB_INACTIVE_BG    = Color(0xFFC4CED8)
+private val TAB_INACTIVE_BG    = Color(0xFFBBBBBB)  // neutral gray for inactive tab
+private val TAB_STRIP_BORDER   = Color(0xFF8C8C8C)  // neutral gray border
 private val SECTION_HEADER_BG  = Color(0xFFD4DCE8)
 private val CELL_LABEL_BG      = Color(0xFFE0E8F0)
 private val CELL_LABEL_FOCUSED = Color(0xFF1050A0)
@@ -90,6 +106,8 @@ private val ROW_TEXT_SIZE    = 10.sp
 private val VALUE_TEXT_SIZE  = 10.sp
 
 private enum class InspectorTab { Selecao, AtrOcultos }
+
+// ChromiumTabShape is defined in components/ChromiumTabs.kt and imported via the same package.
 
 // ── Hint strings (sourced from ajuda.pas AutoHelp) ────────────────────────────
 
@@ -147,29 +165,13 @@ internal fun InspectorPanel(
         modifier = modifier
             .width(210.dp)
             .fillMaxHeight()
-            .border(1.dp, INSPECTOR_BORDER)
             .background(INSPECTOR_BG)
     ) {
         // ── Tab header ────────────────────────────────────────────────────────
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(24.dp)
-                .background(HEADER_BG),
-            verticalAlignment = Alignment.Bottom
-        ) {
-            TabHeader(
-                label = "Seleção",
-                selected = activeTab == InspectorTab.Selecao,
-                modifier = Modifier.weight(1f),
-            ) { activeTab = InspectorTab.Selecao }
-
-            TabHeader(
-                label = "Atr. ocultos",
-                selected = activeTab == InspectorTab.AtrOcultos,
-                modifier = Modifier.width(80.dp),
-            ) { activeTab = InspectorTab.AtrOcultos }
-        }
+        InspectorTabStrip(
+            activeTab = activeTab,
+            onTabChange = { activeTab = it },
+        )
 
         // ── Tab content ───────────────────────────────────────────────────────
         when (activeTab) {
@@ -190,30 +192,72 @@ internal fun InspectorPanel(
     }
 }
 
-// ── Tab header ────────────────────────────────────────────────────────────────
+// ── Chromium-style tab strip ──────────────────────────────────────────────────
 
 @Composable
-private fun TabHeader(
-    label: String,
-    selected: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
+private fun InspectorTabStrip(
+    activeTab: InspectorTab,
+    onTabChange: (InspectorTab) -> Unit,
 ) {
-    val bg        = if (selected) TAB_ACTIVE_BG else TAB_INACTIVE_BG
-    val textColor = if (selected) Color(0xFF1B2B3B) else Color(0xFF4A5A6A)
-    val weight    = if (selected) FontWeight.Bold else FontWeight.Normal
+    val density = LocalDensity.current
+    val topCornerPx   = with(density) { 5.dp.toPx() }
+    val bottomCurvePx = with(density) { 4.dp.toPx() }
+    val tabShape = remember(topCornerPx, bottomCurvePx) {
+        ChromiumTabShape(topCornerRadius = topCornerPx, bottomCurveRadius = bottomCurvePx)
+    }
+
     Box(
-        modifier = modifier
-            .fillMaxHeight()
-            .background(bg)
-            .border(width = 1.dp, color = HEADER_BORDER)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 4.dp),
-        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(CHROMIUM_TAB_STRIP_HEIGHT)
+            .background(HEADER_BG),
     ) {
-        Text(label, fontSize = 10.sp, fontWeight = weight, color = textColor)
+        HorizontalDivider(
+            color = TAB_STRIP_BORDER,
+            thickness = 1.dp,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .zIndex(1.5f),
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                // Horizontal insets give the tab curves room so they don't overflow outside the strip.
+                .padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            ChromiumTab(
+                label = "Seleção",
+                selected = activeTab == InspectorTab.Selecao,
+                tabShape = tabShape,
+                activeTabBg = TAB_ACTIVE_BG,
+                inactiveTabBg = TAB_INACTIVE_BG,
+                borderColor = TAB_STRIP_BORDER,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(if (activeTab == InspectorTab.Selecao) CHROMIUM_TAB_ACTIVE_HEIGHT else CHROMIUM_TAB_INACTIVE_HEIGHT)
+                    .zIndex(if (activeTab == InspectorTab.Selecao) 2f else 1f),
+                onClick = { onTabChange(InspectorTab.Selecao) },
+            )
+            ChromiumTab(
+                label = "Atr. ocultos",
+                selected = activeTab == InspectorTab.AtrOcultos,
+                tabShape = tabShape,
+                activeTabBg = TAB_ACTIVE_BG,
+                inactiveTabBg = TAB_INACTIVE_BG,
+                borderColor = TAB_STRIP_BORDER,
+                modifier = Modifier
+                    .width(84.dp)
+                    .height(if (activeTab == InspectorTab.AtrOcultos) CHROMIUM_TAB_ACTIVE_HEIGHT else CHROMIUM_TAB_INACTIVE_HEIGHT)
+                    .zIndex(if (activeTab == InspectorTab.AtrOcultos) 2f else 1f),
+                onClick = { onTabChange(InspectorTab.AtrOcultos) },
+            )
+        }
     }
 }
+
+// ChromiumTab is defined in components/ChromiumTabs.kt.
 
 // ── Selection tab ─────────────────────────────────────────────────────────────
 

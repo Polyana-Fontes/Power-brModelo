@@ -18,9 +18,18 @@
 
 package games.polyclub.kbrmodelo.ui
 
+/** File selected by the user via the native file picker. */
+internal data class PickedFile(
+    /** Filename without extension, used as the model title. */
+    val name: String,
+    /** Raw file bytes. */
+    val bytes: ByteArray,
+)
+
 /**
  * Opens a native file picker dialog to select a brModelo XML file.
  * Suspends until the user selects a file or cancels.
- * Returns the raw file bytes, or null if the user cancelled.
+ * Returns a [PickedFile] with the filename (no extension) and raw bytes,
+ * or null if the user cancelled.
  */
-internal expect suspend fun showNativeFilePicker(): ByteArray?
+internal expect suspend fun showNativeFilePicker(): PickedFile?

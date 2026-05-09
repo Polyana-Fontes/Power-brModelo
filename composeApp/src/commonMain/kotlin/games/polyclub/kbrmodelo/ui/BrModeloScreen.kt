@@ -60,10 +60,11 @@ internal fun BrModeloScreen(
     onDismissMenu: () -> Unit,
     onOpenFile: () -> Unit,
     onDragStateChange: (Boolean) -> Unit = {},
-    onFileDrop: (ByteArray) -> Unit = {},
+    onFileDrop: (PickedFile) -> Unit = {},
     onSelectionChange: (CanvasSelection) -> Unit = {},
     onSchemaPreview: (ConceptualSchema) -> Unit = {},
     onSchemaCommit: (ConceptualSchema) -> Unit = {},
+    onCloseTab: (() -> Unit)? = null,
 ) {
     // Export state: counter bumps every time a new export is requested.
     var exportCounter by remember { mutableIntStateOf(0) }
@@ -101,6 +102,7 @@ internal fun BrModeloScreen(
                 onSelectionChange = onSelectionChange,
                 onSchemaPreview = onSchemaPreview,
                 onSchemaCommit = onSchemaCommit,
+                onCloseTab = onCloseTab,
             )
         }
 
@@ -124,6 +126,10 @@ internal fun BrModeloScreen(
                 onOpenFile = {
                     onDismissMenu()
                     onOpenFile()
+                },
+                onCloseCurrentModel = {
+                    onDismissMenu()
+                    onCloseTab?.invoke()
                 },
                 onExportJpeg = {
                     onDismissMenu()

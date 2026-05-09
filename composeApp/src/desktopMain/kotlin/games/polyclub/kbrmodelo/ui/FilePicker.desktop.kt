@@ -23,8 +23,8 @@ import kotlinx.coroutines.withContext
 import javax.swing.JFileChooser
 import javax.swing.filechooser.FileNameExtensionFilter
 
-internal actual suspend fun showNativeFilePicker(): ByteArray? = withContext(Dispatchers.IO) {
-    var result: ByteArray? = null
+internal actual suspend fun showNativeFilePicker(): PickedFile? = withContext(Dispatchers.IO) {
+    var result: PickedFile? = null
     val latch = java.util.concurrent.CountDownLatch(1)
     javax.swing.SwingUtilities.invokeLater {
         val chooser = JFileChooser().apply {
@@ -34,7 +34,11 @@ internal actual suspend fun showNativeFilePicker(): ByteArray? = withContext(Dis
         }
         val status = chooser.showOpenDialog(null)
         if (status == JFileChooser.APPROVE_OPTION) {
-            result = chooser.selectedFile.readBytes()
+            val file = chooser.selectedFile
+            result = PickedFile(
+                name = file.nameWithoutExtension,
+                bytes = file.readBytes(),
+            )
         }
         latch.countDown()
     }
