@@ -31,7 +31,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -41,9 +40,7 @@ import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.ui.canvas.renderSchemaToImageBitmap
 import games.polyclub.power.brmodelo.ui.components.ribbon.HeaderRibbon
-import kotlinx.coroutines.launch
 
-// TopBar height (30dp) + ribbon content (90dp) = 120dp to place menu just below the TopBar button
 private val MENU_TOP_OFFSET = 30.dp
 
 @Composable
@@ -51,9 +48,12 @@ internal fun BrModeloScreen(
     isMainMenuOpen: Boolean,
     activeMenu: MainMenuType?,
     selectedTab: RibbonTab,
+    canvasTabs: List<EditorTabSession>,
+    selectedCanvasTabIndex: Int,
+    onSelectCanvasTab: (Int) -> Unit,
+    onRequestCloseCanvasTab: (Int) -> Unit,
     schema: ConceptualSchema?,
     inspectorCommittedSchema: ConceptualSchema? = null,
-    hasUnsavedChanges: Boolean = false,
     selection: CanvasSelection = CanvasSelection.None,
     isDragOver: Boolean = false,
     onMainMenuToggle: () -> Unit,
@@ -61,25 +61,23 @@ internal fun BrModeloScreen(
     onTabSelect: (RibbonTab) -> Unit,
     onDismissMenu: () -> Unit,
     onOpenFile: () -> Unit,
+    onNewConceptualModel: () -> Unit = {},
     onDragStateChange: (Boolean) -> Unit = {},
     onFileDrop: (PickedFile) -> Unit = {},
     onSelectionChange: (CanvasSelection) -> Unit = {},
     onSchemaPreview: (ConceptualSchema) -> Unit = {},
     onSchemaCommit: (ConceptualSchema) -> Unit = {},
     onRevertSchemaPreview: () -> Unit = {},
-    onCloseTab: (() -> Unit)? = null,
+    onCloseCurrentModel: () -> Unit = {},
     onSave: () -> Unit = {},
     onSaveAs: () -> Unit = {},
 ) {
-    // Export state: counter bumps every time a new export is requested.
     var exportCounter by remember { mutableIntStateOf(0) }
-    var exportIsJpeg  by remember { mutableStateOf(true) }
+    var exportIsJpeg by remember { mutableStateOf(true) }
 
     val textMeasurer = rememberTextMeasurer()
-    val density      = LocalDensity.current
-    val scope        = rememberCoroutineScope()
+    val density = LocalDensity.current
 
-    // Perform off-screen render + platform save whenever exportCounter changes.
     LaunchedEffect(exportCounter) {
         if (exportCounter == 0 || schema == null) return@LaunchedEffect
         val bitmap = renderSchemaToImageBitmap(
@@ -96,12 +94,15 @@ internal fun BrModeloScreen(
             HeaderRibbon(
                 selectedTab = selectedTab,
                 onMainMenuClick = onMainMenuToggle,
-                onTabSelect = onTabSelect
+                onTabSelect = onTabSelect,
             )
             WorkspaceArea(
+                canvasTabs = canvasTabs,
+                selectedCanvasTabIndex = selectedCanvasTabIndex,
+                onSelectCanvasTab = onSelectCanvasTab,
+                onRequestCloseCanvasTab = onRequestCloseCanvasTab,
                 schema = schema,
                 inspectorCommittedSchema = inspectorCommittedSchema,
-                hasUnsavedChanges = hasUnsavedChanges,
                 selection = selection,
                 isDragOver = isDragOver,
                 onDragStateChange = onDragStateChange,
@@ -110,21 +111,18 @@ internal fun BrModeloScreen(
                 onSchemaPreview = onSchemaPreview,
                 onSchemaCommit = onSchemaCommit,
                 onRevertSchemaPreview = onRevertSchemaPreview,
-                onCloseTab = onCloseTab,
             )
         }
 
-        // Dismiss overlay behind the menu
         if (isMainMenuOpen) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { onDismissMenu() }
+                        indication = null,
+                    ) { onDismissMenu() },
             )
-            // Menu floats just below the TopBar (button height = 30dp), left edge aligned with button
             FunctionalMainMenu(
                 modifier = Modifier
                     .padding(start = 4.dp, top = MENU_TOP_OFFSET)
@@ -135,9 +133,13 @@ internal fun BrModeloScreen(
                     onDismissMenu()
                     onOpenFile()
                 },
+                onNewConceptualModel = {
+                    onDismissMenu()
+                    onNewConceptualModel()
+                },
                 onCloseCurrentModel = {
                     onDismissMenu()
-                    onCloseTab?.invoke()
+                    onCloseCurrentModel()
                 },
                 onExportJpeg = {
                     onDismissMenu()

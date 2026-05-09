@@ -47,10 +47,14 @@ fun main() {
         }
     }
     application {
+        DesktopApplicationScopeHolder.applicationScope = this
         val windowState = rememberWindowState(width = 1366.dp, height = 768.dp)
         var windowTitle by remember { mutableStateOf(formatApplicationWindowTitle(null)) }
         Window(
-            onCloseRequest = ::exitApplication,
+            onCloseRequest = {
+                val h = DesktopMainWindowCloseRegistry.handler
+                if (h != null) h() else DesktopApplicationScopeHolder.applicationScope.exitApplication()
+            },
             title = windowTitle,
             state = windowState,
             icon = painterResource(Res.drawable.app_icon),

@@ -18,6 +18,7 @@
 
 package games.polyclub.power.brmodelo
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -25,22 +26,28 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
-import games.polyclub.power.brmodelo.domain.SchemaHistory
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaBrmParser
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaXmlParser
 import games.polyclub.power.brmodelo.ui.BrModeloScreen
+import games.polyclub.power.brmodelo.ui.CloseTabUnsavedDialog
+import games.polyclub.power.brmodelo.ui.EditorTabSession
 import games.polyclub.power.brmodelo.ui.MainMenuType
-import games.polyclub.power.brmodelo.ui.RibbonTab
 import games.polyclub.power.brmodelo.ui.PickedFile
+import games.polyclub.power.brmodelo.ui.QuitApplicationUnsavedDialog
+import games.polyclub.power.brmodelo.ui.RibbonTab
 import games.polyclub.power.brmodelo.ui.consumeWindowDropFile
+import games.polyclub.power.brmodelo.ui.isDesktopTarget
 import games.polyclub.power.brmodelo.ui.isWindowDragActive
 import games.polyclub.power.brmodelo.ui.setupWindowDragDrop
 import games.polyclub.power.brmodelo.ui.showNativeFilePicker
@@ -51,34 +58,133 @@ import kotlinx.coroutines.launch
 fun App(onApplicationTitleChange: (String) -> Unit = {}) {
     var isMainMenuOpen by remember { mutableStateOf(false) }
     var activeMenu by remember { mutableStateOf<MainMenuType?>(null) }
-    var selectedTab by remember { mutableStateOf(RibbonTab.EsquemaConceitual) }
+    var selectedRibbonTab by remember { mutableStateOf(RibbonTab.EsquemaConceitual) }
 
-    // History is the source of truth for committed schema states.
-    val history = remember { SchemaHistory(null) }
-    // Live schema state: updated both during drag previews (no history entry) and on commits.
-    var schema by remember { mutableStateOf<ConceptualSchema?>(null) }
-    // Mirrors [history.current] whenever history changes outside of live preview (load, commit, undo/redo, save sync).
-    var inspectorCommittedSchema by remember { mutableStateOf<ConceptualSchema?>(null) }
-    // Snapshot from disk after last successful load/save; used for the dirty (*) indicator on the canvas tab.
-    var savedDiskBaseline by remember { mutableStateOf<ConceptualSchema?>(null) }
+    val initialTabId = 1L
+    var nextTabId by remember { mutableLongStateOf(initialTabId + 1) }
+    var tabSessions by remember {
+        mutableStateOf(listOf(EditorTabSession.blank(initialTabId)))
+    }
+    var selectedTabIndex by remember { mutableIntStateOf(0) }
 
-    // Current selection on the canvas (element id or cardinality connection id, or None).
-    var selection by remember { mutableStateOf<CanvasSelection>(CanvasSelection.None) }
+    var pendingCloseTabIndex by remember { mutableStateOf<Int?>(null) }
+    var pendingApplicationQuit by remember { mutableStateOf(false) }
 
-    // isDragOverFromPolling: set by the WASM JS polling loop (always false on Desktop).
-    // isDragOverFromCallback: set by Modifier.fileDragDropTarget on Desktop (always false on WASM).
-    // Keeping them separate prevents the polling from clearing the callback state and vice-versa.
-    var isDragOverFromPolling  by remember { mutableStateOf(false) }
+    fun selectedSession(): EditorTabSession = tabSessions[selectedTabIndex]
+
+    fun replaceTabAt(index: Int, session: EditorTabSession) {
+        tabSessions = tabSessions.toMutableList().also { it[index] = session }
+    }
+
+    fun mutateSelectedTab(mutator: (EditorTabSession) -> EditorTabSession) {
+        replaceTabAt(selectedTabIndex, mutator(selectedSession()))
+    }
+
+    /** Each tab owns its [EditorTabSession.history]; mutations always target the selected tab. */
+    fun pushCommitOnSelected(normalized: ConceptualSchema) {
+        val idx = selectedTabIndex
+        val tab = tabSessions[idx]
+        tab.history.push(normalized)
+        replaceTabAt(
+            idx,
+            tab.copy(
+                schema = normalized,
+                inspectorCommittedSchema = tab.history.current,
+            ),
+        )
+    }
+
+    fun performRemoveTab(index: Int) {
+        if (tabSessions.size == 1) {
+            tabSessions = listOf(EditorTabSession.blank(nextTabId++))
+            selectedTabIndex = 0
+            return
+        }
+        val oldSel = selectedTabIndex
+        val newList = tabSessions.filterIndexed { i, _ -> i != index }
+        tabSessions = newList
+        selectedTabIndex = when {
+            index < oldSel -> oldSel - 1
+            index == oldSel -> minOf(oldSel, newList.lastIndex)
+            else -> oldSel
+        }
+    }
+
+    fun requestCloseTab(index: Int) {
+        if (index !in tabSessions.indices) return
+        if (tabSessions[index].needsCloseConfirmation()) {
+            pendingCloseTabIndex = index
+        } else {
+            performRemoveTab(index)
+        }
+    }
+
+    fun openLoadedModel(model: ConceptualSchema) {
+        val incomingPath = model.filePath.trim()
+        if (incomingPath.isNotEmpty()) {
+            val dupIdx = tabSessions.indexOfFirst { tab ->
+                val existing = tab.schema.filePath.trim()
+                existing.isNotEmpty() && diskPathsReferToSameFile(existing, incomingPath)
+            }
+            if (dupIdx >= 0) {
+                selectedTabIndex = dupIdx
+                return
+            }
+        }
+
+        if (tabSessions.size == 1 && tabSessions[0].isReplaceableBlankStarter()) {
+            val soleId = tabSessions[0].id
+            tabSessions = listOf(EditorTabSession.fromLoadedModel(soleId, model))
+            selectedTabIndex = 0
+            return
+        }
+
+        val session = EditorTabSession.fromLoadedModel(nextTabId++, model)
+        tabSessions = tabSessions + session
+        selectedTabIndex = tabSessions.lastIndex
+    }
+
+    fun addBlankTab() {
+        val session = EditorTabSession.blank(nextTabId++)
+        tabSessions = tabSessions + session
+        selectedTabIndex = tabSessions.lastIndex
+    }
+
+    var isDragOverFromPolling by remember { mutableStateOf(false) }
     var isDragOverFromCallback by remember { mutableStateOf(false) }
     val isDragOver = isDragOverFromPolling || isDragOverFromCallback
     val scope = rememberCoroutineScope()
 
-    // Register window-level drag-and-drop once (no-op on Desktop)
+    suspend fun saveTabAt(index: Int, saveAs: Boolean): Boolean {
+        val tab = tabSessions.getOrNull(index) ?: return true
+        val s = tab.schema
+        val pickLocation = saveAs || s.filePath.isBlank() || s.openedFromBrm
+        val updated = saveConceptualSchemaXml(
+            schema = s,
+            suggestedBaseName = s.name.ifBlank { "modelo" },
+            pickLocation = pickLocation,
+        ) ?: return false
+        tab.history.syncCurrent(updated)
+        replaceTabAt(
+            index,
+            tab.copy(
+                schema = updated,
+                inspectorCommittedSchema = updated,
+                savedDiskBaseline = updated,
+            ),
+        )
+        return true
+    }
+
     LaunchedEffect(Unit) {
         setupWindowDragDrop()
     }
 
-    // Poll for drag-over state and dropped files (effective on WASM only).
+    LaunchedEffect(tabSessions) {
+        val warn = tabSessions.any { it.needsCloseConfirmation() }
+        setBrowserUnloadWarningEnabled(warn)
+    }
+
     LaunchedEffect(Unit) {
         while (true) {
             delay(120)
@@ -87,13 +193,7 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
             if (dropped != null) {
                 runCatching { parseModelBytesWithSource(dropped.bytes) }
                     .onSuccess { (parsed, fromBrm) ->
-                        val named =
-                            mergeLoadedModel(parsed, fromBrm, dropped)
-                        history.push(named)
-                        schema = named
-                        inspectorCommittedSchema = named
-                        savedDiskBaseline = named
-                        selection = CanvasSelection.None
+                        openLoadedModel(mergeLoadedModel(parsed, fromBrm, dropped))
                     }
             }
         }
@@ -104,13 +204,7 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
             val picked = showNativeFilePicker() ?: return@launch
             runCatching { parseModelBytesWithSource(picked.bytes) }
                 .onSuccess { (parsed, fromBrm) ->
-                    val named =
-                        mergeLoadedModel(parsed, fromBrm, picked)
-                    history.push(named)
-                    schema = named
-                    inspectorCommittedSchema = named
-                    savedDiskBaseline = named
-                    selection = CanvasSelection.None
+                    openLoadedModel(mergeLoadedModel(parsed, fromBrm, picked))
                 }
         }
     }
@@ -118,99 +212,140 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
     val loadPickedFile: (PickedFile) -> Unit = { picked ->
         runCatching { parseModelBytesWithSource(picked.bytes) }
             .onSuccess { (parsed, fromBrm) ->
-                val named = mergeLoadedModel(parsed, fromBrm, picked)
-                history.push(named)
-                schema = named
-                inspectorCommittedSchema = named
-                savedDiskBaseline = named
-                selection = CanvasSelection.None
+                openLoadedModel(mergeLoadedModel(parsed, fromBrm, picked))
             }
     }
 
-    // Called during live interactions (drag preview) — does NOT push to undo history.
-    val onSchemaPreview: (ConceptualSchema) -> Unit = { schema = it }
+    val onSchemaPreview: (ConceptualSchema) -> Unit = { preview ->
+        mutateSelectedTab { it.copy(schema = preview) }
+    }
 
-    // Called when an action is committed (pointer up after drag, field blur, dropdown change).
-    // Pushes the new state to the undo stack.
     val onSchemaCommit: (ConceptualSchema) -> Unit = {
-        val normalized = it.withNormalizedAttributeMultiValuedCounts()
-        history.push(normalized)
-        schema = normalized
-        inspectorCommittedSchema = history.current
+        pushCommitOnSelected(it.withNormalizedAttributeMultiValuedCounts())
     }
 
-    /** Drops transient canvas previews (e.g. sidebar name typing) back to the last committed history state. */
     val onRevertSchemaPreview: () -> Unit = {
-        schema = history.current
-    }
-
-    val hasUnsavedChanges =
-        schema != null && (savedDiskBaseline == null || schema != savedDiskBaseline)
-
-    val onCloseTab: () -> Unit = {
-        schema = null
-        inspectorCommittedSchema = null
-        savedDiskBaseline = null
-        selection = CanvasSelection.None
-    }
-
-    fun enqueueSave(saveAs: Boolean) {
-        scope.launch {
-            val s = schema ?: return@launch
-            val pickLocation = saveAs || s.filePath.isBlank() || s.openedFromBrm
-            val updated = saveConceptualSchemaXml(
-                schema = s,
-                suggestedBaseName = s.name.ifBlank { "modelo" },
-                pickLocation = pickLocation,
-            ) ?: return@launch
-            history.syncCurrent(updated)
-            schema = updated
-            inspectorCommittedSchema = updated
-            savedDiskBaseline = updated
+        mutateSelectedTab { tab ->
+            val committed = tab.history.current ?: tab.schema
+            tab.copy(schema = committed)
         }
     }
 
-    DisposableEffect(schema) {
+    fun enqueueSave(saveAs: Boolean) {
+        scope.launch { saveTabAt(selectedTabIndex, saveAs) }
+    }
+
+    DisposableEffect(selectedTabIndex, tabSessions) {
         bindDesktopSaveShortcut { enqueueSave(saveAs = false) }
         onDispose { bindDesktopSaveShortcut(null) }
     }
 
-    LaunchedEffect(schema?.name) {
-        onApplicationTitleChange(formatApplicationWindowTitle(schema?.name))
+    val tabsState = rememberUpdatedState(tabSessions)
+    DisposableEffect(scope) {
+        registerDesktopMainWindowCloseHandler {
+            scope.launch {
+                if (tabsState.value.any { it.needsCloseConfirmation() }) {
+                    pendingApplicationQuit = true
+                } else {
+                    quitApplicationCompletely()
+                }
+            }
+        }
+        onDispose { registerDesktopMainWindowCloseHandler(null) }
     }
+
+    val currentName = selectedSession().schema.name
+    LaunchedEffect(currentName, selectedTabIndex) {
+        onApplicationTitleChange(formatApplicationWindowTitle(currentName))
+    }
+
+    val sel = selectedSession()
 
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFE3E3E3)) {
-            BrModeloScreen(
-                isMainMenuOpen = isMainMenuOpen,
-                activeMenu = activeMenu,
-                selectedTab = selectedTab,
-                schema = schema,
-                inspectorCommittedSchema = inspectorCommittedSchema,
-                hasUnsavedChanges = hasUnsavedChanges,
-                selection = selection,
-                isDragOver = isDragOver,
-                onMainMenuToggle = {
-                    isMainMenuOpen = !isMainMenuOpen
-                    if (!isMainMenuOpen) activeMenu = null
-                },
-                onMainMenuHover = { activeMenu = it },
-                onTabSelect = { selectedTab = it },
-                onDismissMenu = {
-                    isMainMenuOpen = false
-                    activeMenu = null
-                },
-                onOpenFile = openFile,
-                onDragStateChange = { isDragOverFromCallback = it },
-                onFileDrop = loadPickedFile,
-                onSelectionChange = { selection = it },
-                onSchemaPreview = onSchemaPreview,
-                onSchemaCommit = onSchemaCommit,
-                onRevertSchemaPreview = onRevertSchemaPreview,
-                onCloseTab = onCloseTab,
-                onSave = { enqueueSave(saveAs = false) },
-                onSaveAs = { enqueueSave(saveAs = true) },
-            )
+            Box(modifier = Modifier.fillMaxSize()) {
+                BrModeloScreen(
+                    isMainMenuOpen = isMainMenuOpen,
+                    activeMenu = activeMenu,
+                    selectedTab = selectedRibbonTab,
+                    canvasTabs = tabSessions,
+                    selectedCanvasTabIndex = selectedTabIndex,
+                    onSelectCanvasTab = { selectedTabIndex = it },
+                    onRequestCloseCanvasTab = { requestCloseTab(it) },
+                    schema = sel.schema,
+                    inspectorCommittedSchema = sel.inspectorCommittedSchema,
+                    selection = sel.selection,
+                    isDragOver = isDragOver,
+                    onMainMenuToggle = {
+                        isMainMenuOpen = !isMainMenuOpen
+                        if (!isMainMenuOpen) activeMenu = null
+                    },
+                    onMainMenuHover = { activeMenu = it },
+                    onTabSelect = { selectedRibbonTab = it },
+                    onDismissMenu = {
+                        isMainMenuOpen = false
+                        activeMenu = null
+                    },
+                    onOpenFile = openFile,
+                    onNewConceptualModel = { addBlankTab() },
+                    onDragStateChange = { isDragOverFromCallback = it },
+                    onFileDrop = loadPickedFile,
+                    onSelectionChange = { selNew ->
+                        mutateSelectedTab { it.copy(selection = selNew) }
+                    },
+                    onSchemaPreview = onSchemaPreview,
+                    onSchemaCommit = onSchemaCommit,
+                    onRevertSchemaPreview = onRevertSchemaPreview,
+                    onCloseCurrentModel = { requestCloseTab(selectedTabIndex) },
+                    onSave = { enqueueSave(saveAs = false) },
+                    onSaveAs = { enqueueSave(saveAs = true) },
+                )
+
+                pendingCloseTabIndex?.let { closeIdx ->
+                    if (closeIdx in tabSessions.indices) {
+                        val title = tabSessions[closeIdx].displayTitle()
+                        CloseTabUnsavedDialog(
+                            documentTitle = title,
+                            onSave = {
+                                scope.launch {
+                                    if (saveTabAt(closeIdx, false)) {
+                                        pendingCloseTabIndex = null
+                                        performRemoveTab(closeIdx)
+                                    }
+                                }
+                            },
+                            onDiscard = {
+                                pendingCloseTabIndex = null
+                                performRemoveTab(closeIdx)
+                            },
+                            onCancel = { pendingCloseTabIndex = null },
+                        )
+                    } else {
+                        pendingCloseTabIndex = null
+                    }
+                }
+
+                if (pendingApplicationQuit) {
+                    QuitApplicationUnsavedDialog(
+                        showSaveAll = isDesktopTarget,
+                        onSaveAll = {
+                            scope.launch {
+                                val indices = tabSessions.indices.filter { tabSessions[it].needsCloseConfirmation() }
+                                for (i in indices) {
+                                    if (!saveTabAt(i, false)) return@launch
+                                }
+                                pendingApplicationQuit = false
+                                quitApplicationCompletely()
+                            }
+                        },
+                        onQuitWithoutSaving = {
+                            pendingApplicationQuit = false
+                            quitApplicationCompletely()
+                        },
+                        onCancel = { pendingApplicationQuit = false },
+                    )
+                }
+            }
         }
     }
 }
@@ -231,12 +366,6 @@ private fun mergeLoadedModel(parsed: ConceptualSchema, openedFromBrm: Boolean, p
         openedFromBrm = openedFromBrm,
     )
 
-/**
- * Detects the model format from the byte content and routes to the correct parser.
- *
- * Delphi binary DFM files start with a ShortString version prefix (e.g. `\x05 "2.0.0"`)
- * immediately followed by the 4-byte magic `"TPF0"`. All other content is treated as XML.
- */
 internal fun parseModelBytes(bytes: ByteArray): ConceptualSchema =
     parseModelBytesWithSource(bytes).first
 
@@ -250,4 +379,3 @@ internal fun parseModelBytesWithSource(bytes: ByteArray): Pair<ConceptualSchema,
     else ConceptualSchemaXmlParser.parse(bytes)
     return schema to isBrm
 }
-

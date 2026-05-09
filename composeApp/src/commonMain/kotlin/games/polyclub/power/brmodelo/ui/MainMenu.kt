@@ -79,6 +79,7 @@ internal fun FunctionalMainMenu(
     activeMenu: MainMenuType?,
     onMenuHover: (MainMenuType) -> Unit,
     onOpenFile: () -> Unit = {},
+    onNewConceptualModel: () -> Unit = {},
     onCloseCurrentModel: () -> Unit = {},
     onExportJpeg: () -> Unit = {},
     onExportPng: () -> Unit = {},
@@ -98,7 +99,7 @@ internal fun FunctionalMainMenu(
         )
         // The right panel always shows; content varies by hovered item
         when (activeMenu) {
-            MainMenuType.NewModel -> NewModelSubmenu()
+            MainMenuType.NewModel -> NewModelSubmenu(onNewConceptualModel = onNewConceptualModel)
             MainMenuType.Print    -> PrintSubmenu(
                 onExportJpeg = onExportJpeg,
                 onExportPng = onExportPng
@@ -135,13 +136,11 @@ private fun MainMenuItems(
             Res.drawable.abrir_2s,
             onClick = onOpenFile
         )
-        if (isDesktopTarget) {
-            MainMenuItem(
-                "Salvar",
-                Res.drawable.salvar_s,
-                onClick = onSave
-            )
-        }
+        MainMenuItem(
+            "Salvar",
+            Res.drawable.salvar_s,
+            onClick = onSave,
+        )
         MainMenuItem(
             "Salvar Como...",
             Res.drawable.salvar_como_s,
@@ -262,7 +261,7 @@ private fun RecentModelsPanel() {
 // ─── Submenu: Novo Modelo ─────────────────────────────────────────────────────
 
 @Composable
-private fun NewModelSubmenu() {
+private fun NewModelSubmenu(onNewConceptualModel: () -> Unit = {}) {
     Column(
         modifier = Modifier
             .width(230.dp)
@@ -276,7 +275,8 @@ private fun NewModelSubmenu() {
         SubmenuCard(
             title = "Modelo Conceitual",
             description = "Criar um novo modelo conceitual",
-            icon = Res.drawable.modelo_conceitual_2s
+            icon = Res.drawable.modelo_conceitual_2s,
+            onClick = onNewConceptualModel,
         )
         Spacer(modifier = Modifier.height(6.dp))
         SubmenuCard(

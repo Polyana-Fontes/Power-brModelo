@@ -31,9 +31,12 @@ import games.polyclub.power.brmodelo.domain.ConceptualSchema
 
 @Composable
 internal fun WorkspaceArea(
-    schema: ConceptualSchema? = null,
+    canvasTabs: List<EditorTabSession>,
+    selectedCanvasTabIndex: Int,
+    onSelectCanvasTab: (Int) -> Unit,
+    onRequestCloseCanvasTab: (Int) -> Unit,
+    schema: ConceptualSchema?,
     inspectorCommittedSchema: ConceptualSchema? = null,
-    hasUnsavedChanges: Boolean = false,
     selection: CanvasSelection = CanvasSelection.None,
     isDragOver: Boolean = false,
     onDragStateChange: (Boolean) -> Unit = {},
@@ -42,12 +45,14 @@ internal fun WorkspaceArea(
     onSchemaPreview: (ConceptualSchema) -> Unit = {},
     onSchemaCommit: (ConceptualSchema) -> Unit = {},
     onRevertSchemaPreview: () -> Unit = {},
-    onCloseTab: (() -> Unit)? = null,
 ) {
     Row(modifier = Modifier.fillMaxSize().padding(8.dp)) {
         MainCanvasPanel(
+            canvasTabs = canvasTabs,
+            selectedCanvasTabIndex = selectedCanvasTabIndex,
+            onSelectCanvasTab = onSelectCanvasTab,
+            onRequestCloseCanvasTab = onRequestCloseCanvasTab,
             schema = schema,
-            hasUnsavedChanges = hasUnsavedChanges,
             selection = selection,
             isDragOver = isDragOver,
             onDragStateChange = onDragStateChange,
@@ -55,7 +60,6 @@ internal fun WorkspaceArea(
             onSelectionChange = onSelectionChange,
             onSchemaPreview = onSchemaPreview,
             onSchemaCommit = onSchemaCommit,
-            onCloseTab = onCloseTab,
             modifier = Modifier.weight(1f),
         )
         Spacer(modifier = Modifier.width(8.dp))
