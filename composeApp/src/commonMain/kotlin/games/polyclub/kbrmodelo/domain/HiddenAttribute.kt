@@ -53,4 +53,11 @@ data class HiddenAttribute(
 
     /** True when [children] is not empty, same logic as [TAtributoOculto.Composto]. */
     val isComposite: Boolean get() = children.isNotEmpty()
+
+    /**
+     * Number of leaf fields represented by this hidden subtree (used when totaling composite QtdeMultivalorado).
+     * Simple oculto counts as one column; composite ocultos sum their children recursively.
+     */
+    fun physicalFieldLeafCount(): Int =
+        if (children.isEmpty()) 1 else children.sumOf { it.physicalFieldLeafCount() }
 }

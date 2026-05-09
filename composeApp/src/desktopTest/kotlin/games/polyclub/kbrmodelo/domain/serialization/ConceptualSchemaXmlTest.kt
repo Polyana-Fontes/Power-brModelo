@@ -166,7 +166,7 @@ class ConceptualSchemaXmlTest {
         assertTrue(attr.isComposite, "Composto=-1 → true")
         assertEquals(listOf(11, 14), attr.childAttributeIds)
         assertEquals(2, attr.multiValuedCount, "composite QtdeMultivalorado must equal component count")
-        assertEquals(2, attr.canonicalMultiValuedCount)
+        assertEquals(2, schema.canonicalQtdeMultivalorado(attr))
     }
 
     @Test

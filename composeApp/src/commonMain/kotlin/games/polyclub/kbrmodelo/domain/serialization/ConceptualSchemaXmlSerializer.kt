@@ -227,7 +227,7 @@ object ConceptualSchemaXmlSerializer {
             boolValor("Identificador", attr.isIdentifier)
             valor("Tipo", attr.valueType)
             boolValor("Multivalorado", attr.isMultiValued)
-            valor("QtdeMultivalorado", attr.canonicalMultiValuedCount)
+            valor("QtdeMultivalorado", schema.canonicalQtdeMultivalorado(attr))
             valor("Orientacao", 3)           // default: OrientacaoE (left)
             boolValor("TamAuto", attr.autoSize)
             valor("Desvio", attr.deviationAngle)

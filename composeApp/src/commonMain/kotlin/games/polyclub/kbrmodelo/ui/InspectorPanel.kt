@@ -666,7 +666,7 @@ private fun AttributeFields(
         onFocusChange = onFocusChange,
     ) { v -> onSchemaCommit(schema.withElement(element.copy(isMultiValued = v == "Sim"))) }
 
-    ReadOnlyRow("Qtd. Campos", element.canonicalMultiValuedCount.toString(), "QTD_CAMPOS", focusedKey, onFocusChange)
+    ReadOnlyRow("Qtd. Campos", schema.canonicalQtdeMultivalorado(element).toString(), "QTD_CAMPOS", focusedKey, onFocusChange)
 
     val attrCommitted = committedSchema?.elements?.get(element.id) as? SchemaElement.Attribute ?: element
     val minCardinalityCommitted = attrCommitted.cardinality.minCardinality.toString()

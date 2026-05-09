@@ -133,14 +133,38 @@ data class ConceptualSchema(
     )
 
     /**
-     * Rewrites each attribute's [SchemaElement.Attribute.multiValuedCount] to
-     * [SchemaElement.Attribute.canonicalMultiValuedCount] (fixes bogus QtdeMultivalorado from legacy saves).
+     * Leaf columns contributed by the subtree rooted at this canvas attribute ([attributeId]):
+     * **1** if simple; if composite, recursive sum over [SchemaElement.Attribute.childAttributeIds]
+     * plus [SchemaElement.Attribute.hiddenAttributes] leaves on each composite node.
+     */
+    fun attributeSubtreePhysicalFieldCount(attributeId: Int): Int {
+        val attr = elements[attributeId] as? SchemaElement.Attribute ?: return 0
+        if (!attr.isComposite) return 1
+        var n = attr.childAttributeIds.sumOf { attributeSubtreePhysicalFieldCount(it) }
+        n += attr.hiddenAttributes.sumOf { it.physicalFieldLeafCount() }
+        return n
+    }
+
+    /**
+     * Canonical QtdeMultivalorado: **0** if [attr] is not composite; otherwise totals leaf columns from every
+     * visible composite child subtree **and** from [SchemaElement.Attribute.hiddenAttributes] on [attr] only.
+     */
+    fun canonicalQtdeMultivalorado(attr: SchemaElement.Attribute): Int {
+        if (!attr.isComposite) return 0
+        var total = attr.childAttributeIds.sumOf { attributeSubtreePhysicalFieldCount(it) }
+        total += attr.hiddenAttributes.sumOf { it.physicalFieldLeafCount() }
+        return total
+    }
+
+    /**
+     * Rewrites each attribute's [SchemaElement.Attribute.multiValuedCount] to [canonicalQtdeMultivalorado]
+     * (fixes bogus QtdeMultivalorado from legacy saves).
      */
     fun withNormalizedAttributeMultiValuedCounts(): ConceptualSchema =
         copy(
             elements = elements.mapValues { (_, el) ->
                 if (el is SchemaElement.Attribute) {
-                    val n = el.canonicalMultiValuedCount
+                    val n = canonicalQtdeMultivalorado(el)
                     if (el.multiValuedCount != n) el.copy(multiValuedCount = n) else el
                 } else {
                     el

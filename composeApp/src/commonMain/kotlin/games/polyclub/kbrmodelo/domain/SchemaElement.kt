@@ -242,9 +242,8 @@ sealed class SchemaElement {
      * @param cardinality      Explicit min/max cardinality for multi-valued attributes.
      *                         Corresponds to `TAtributo.MinCard` / `TAtributo.MaxCard`.
      * @param multiValuedCount Physical-model hint persisted as QtdeMultivalorado in binary/XML.
-     *                         Must match [canonicalMultiValuedCount]: **0** for non-composite attributes,
-     *                         and [childAttributeIds.size] for composite attributes (legacy brModelo
-     *                         files often store incorrect values; use [ConceptualSchema.withNormalizedAttributeMultiValuedCounts]).
+     *                         Must match [ConceptualSchema.canonicalQtdeMultivalorado] after normalization
+     *                         (see that function for visible vs oculto subtree rules; legacy saves often disagree).
      * @param valueType        Data type label (e.g. "VARCHAR").
      *                         Corresponds to `TAtributo.TipoDoValor`.
      * @param complement       Type complement (e.g. "100" for "VARCHAR(100)").
@@ -279,13 +278,6 @@ sealed class SchemaElement {
     ) : SchemaElement() {
         /** True when [childAttributeIds] is not empty, same logic as `TAtributo.Composto`. */
         val isComposite: Boolean get() = childAttributeIds.isNotEmpty()
-
-        /**
-         * Canonical QtdeMultivalorado: non-composite attributes use **0**; composite attributes use
-         * the number of component fields ([childAttributeIds.size]).
-         */
-        val canonicalMultiValuedCount: Int
-            get() = if (!isComposite) 0 else childAttributeIds.size
     }
 
     // ── Specialization ───────────────────────────────────────────────────────
