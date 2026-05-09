@@ -106,6 +106,19 @@ private val CELL_LABEL_WIDTH = 96.dp
 private val ROW_TEXT_SIZE    = 10.sp
 private val VALUE_TEXT_SIZE  = 10.sp
 
+/** Same font size as line height removes Compose Text's default extra vertical padding (critical for compact rows). */
+private fun inspectorValueTextStyle(color: Color): TextStyle = TextStyle(
+    fontSize = VALUE_TEXT_SIZE,
+    lineHeight = VALUE_TEXT_SIZE,
+    color = color,
+)
+
+private val INSPECTOR_DROPDOWN_CARET_STYLE = TextStyle(
+    fontSize = 8.sp,
+    lineHeight = 8.sp,
+    color = Color(0xFF606070),
+)
+
 private enum class InspectorTab { Selecao, AtrOcultos }
 
 // ChromiumTabShape is defined in components/ChromiumTabs.kt and imported via the same package.
@@ -787,9 +800,12 @@ private fun SectionTitle(text: String) {
     ) {
         Text(
             text = text,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF1C2D3E),
+            style = TextStyle(
+                fontSize = 10.sp,
+                lineHeight = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1C2D3E),
+            ),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -809,8 +825,9 @@ private fun ReadOnlyRow(
     PropertyRow(label = label, focused = focused, onClick = { onFocusChange(key) }) {
         Text(
             text = value,
-            fontSize = VALUE_TEXT_SIZE,
-            color = if (focused) Color(0xFF80A0C0) else VALUE_COLOR,
+            style = inspectorValueTextStyle(if (focused) Color(0xFF80A0C0) else VALUE_COLOR),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
         )
     }
@@ -836,7 +853,7 @@ private fun EditableRow(
             BasicTextField(
                 value = draft,
                 onValueChange = { draft = it },
-                textStyle = TextStyle(fontSize = VALUE_TEXT_SIZE, color = VALUE_COLOR),
+                textStyle = inspectorValueTextStyle(VALUE_COLOR),
                 cursorBrush = SolidColor(VALUE_COLOR),
                 singleLine = true,
                 modifier = Modifier
@@ -847,12 +864,16 @@ private fun EditableRow(
                             onCommit(draft)
                         }
                     },
+                decorationBox = { inner -> inner() },
             )
         } else {
             Text(
                 text = if (enabled) value else "",
-                fontSize = VALUE_TEXT_SIZE,
-                color = if (enabled) VALUE_COLOR else Color(0xFF9AA0A8),
+                style = inspectorValueTextStyle(
+                    if (enabled) VALUE_COLOR else Color(0xFF9AA0A8),
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
             )
         }
@@ -886,11 +907,12 @@ private fun DropdownRow(
             ) {
                 Text(
                     text = selected,
-                    fontSize = VALUE_TEXT_SIZE,
-                    color = VALUE_COLOR,
+                    style = inspectorValueTextStyle(VALUE_COLOR),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                Text("▾", fontSize = 8.sp, color = Color(0xFF606070))
+                Text(text = "▾", style = INSPECTOR_DROPDOWN_CARET_STYLE)
             }
             DropdownMenu(
                 expanded = expanded,
