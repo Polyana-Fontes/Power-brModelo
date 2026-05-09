@@ -23,7 +23,15 @@ import androidx.compose.ui.window.CanvasBasedWindow
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
+    setDocumentTitle("Power brModelo ${BuildInfo.displayVersion} - [teste-em-xml]")
     CanvasBasedWindow(canvasElementId = "ComposeTarget") {
         App()
     }
 }
+
+/**
+ * Updates the browser tab title from the running Kotlin/Wasm application so the
+ * Gradle project version (and any CI build metadata) is reflected at runtime,
+ * regardless of the static `<title>` baked into `index.html`.
+ */
+private fun setDocumentTitle(title: String): Unit = js("document.title = title")

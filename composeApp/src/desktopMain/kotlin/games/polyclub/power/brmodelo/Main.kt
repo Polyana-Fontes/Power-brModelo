@@ -46,7 +46,7 @@ fun main() {
         val windowState = rememberWindowState(width = 1366.dp, height = 768.dp)
         Window(
             onCloseRequest = ::exitApplication,
-            title = "Power brModelo 3.0 - [teste-em-xml]",
+            title = "Power brModelo ${BuildInfo.displayVersion} - [teste-em-xml]",
             state = windowState,
             icon = painterResource(Res.drawable.app_icon),
         ) {
