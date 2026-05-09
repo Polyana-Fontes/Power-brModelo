@@ -40,14 +40,17 @@ import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -65,6 +68,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -883,7 +888,12 @@ private fun ReadOnlyRow(
     onFocusChange: (String?) -> Unit,
 ) {
     val focused = focusedKey == key
-    PropertyRow(label = label, focused = focused, onClick = { onFocusChange(key) }) {
+    PropertyRow(
+        label = label,
+        focused = focused,
+        onLabelClick = { onFocusChange(key) },
+        valueCellModifier = Modifier.clickable { onFocusChange(key) },
+    ) {
         Text(
             text = value,
             style = inspectorValueTextStyle(if (focused) Color(0xFF80A0C0) else VALUE_COLOR),
@@ -908,20 +918,46 @@ private fun EditableRow(
 ) {
     val revertPreview = LocalRevertSchemaPreview.current
     val focusManager = LocalFocusManager.current
+    val focusRequester = remember { FocusRequester() }
     val focused = focusedKey == key
-    // Local draft so typing doesn't trigger schema commits on every keystroke.
-    var draft by remember(value) { mutableStateOf(value) }
+
+    var textFieldValue by remember(key, value) {
+        mutableStateOf(TextFieldValue(text = value, selection = TextRange(value.length)))
+    }
     // BasicTextField emits an initial unfocused event before it ever gains focus; ignoring blur until
     // we have seen a real focus avoids clearing [focusedKey] immediately (row would "flash" unselected).
     var hadRealFocusInSession by remember(key, value) { mutableStateOf(false) }
 
-    PropertyRow(label = label, focused = focused, onClick = { if (enabled) onFocusChange(key) }) {
+    LaunchedEffect(value, focused) {
+        if (!focused) {
+            textFieldValue = TextFieldValue(text = value, selection = TextRange(value.length))
+        }
+    }
+
+    LaunchedEffect(focused, key, enabled) {
+        if (focused && enabled) {
+            focusRequester.requestFocus()
+            val len = textFieldValue.text.length
+            textFieldValue = textFieldValue.copy(selection = TextRange(len))
+        }
+    }
+
+    val activateRow = { if (enabled) onFocusChange(key) }
+    val valueCellModifier =
+        if (focused && enabled) Modifier else Modifier.clickable(onClick = activateRow)
+
+    PropertyRow(
+        label = label,
+        focused = focused,
+        onLabelClick = activateRow,
+        valueCellModifier = valueCellModifier,
+    ) {
         if (focused && enabled) {
             BasicTextField(
-                value = draft,
-                onValueChange = {
-                    draft = it
-                    onLiveDraftChange?.invoke(it)
+                value = textFieldValue,
+                onValueChange = { new ->
+                    textFieldValue = new
+                    onLiveDraftChange?.invoke(new.text)
                 },
                 textStyle = inspectorValueTextStyle(VALUE_COLOR),
                 cursorBrush = SolidColor(VALUE_COLOR),
@@ -929,6 +965,7 @@ private fun EditableRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 4.dp, vertical = 1.dp)
+                    .focusRequester(focusRequester)
                     .onPreviewKeyEvent { evt ->
                         if (evt.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                         when (evt.key) {
@@ -937,7 +974,8 @@ private fun EditableRow(
                                 true
                             }
                             Key.Escape -> {
-                                draft = value
+                                textFieldValue =
+                                    TextFieldValue(text = value, selection = TextRange(value.length))
                                 if (onLiveDraftChange != null) revertPreview()
                                 focusManager.clearFocus()
                                 true
@@ -950,7 +988,8 @@ private fun EditableRow(
                             fs.isFocused -> hadRealFocusInSession = true
                             hadRealFocusInSession -> {
                                 hadRealFocusInSession = false
-                                if (draft != value) onCommit(draft)
+                                val text = textFieldValue.text
+                                if (text != value) onCommit(text)
                                 onFocusChange(null)
                             }
                         }
@@ -971,7 +1010,7 @@ private fun EditableRow(
     }
 }
 
-/** A dropdown grid row. */
+/** A dropdown grid row (menu opens when the label or value cell is activated). */
 @Composable
 private fun DropdownRow(
     label: String,
@@ -987,21 +1026,51 @@ private fun DropdownRow(
     val density = LocalDensity.current
     var anchorWidth by remember { mutableStateOf(0.dp) }
 
-    PropertyRow(label = label, focused = focused, onClick = {
+    val openMenu = {
         onFocusChange(key)
         expanded = true
-    }) {
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+            .border(width = 0.5.dp, color = CELL_BORDER),
+        verticalAlignment = Alignment.Top,
+    ) {
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .onGloballyPositioned { coords ->
-                    anchorWidth = with(density) { coords.size.width.toDp() }
-                },
+                .width(CELL_LABEL_WIDTH)
+                .fillMaxHeight()
+                .clickable(onClick = openMenu)
+                .background(if (focused) CELL_LABEL_FOCUSED else CELL_LABEL_BG)
+                .padding(horizontal = 4.dp, vertical = 1.dp),
+        ) {
+            Text(
+                text = label,
+                fontSize = ROW_TEXT_SIZE,
+                lineHeight = ROW_TEXT_SIZE,
+                color = if (focused) LABEL_FOCUSED_COLOR else LABEL_COLOR,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .background(CELL_VALUE_BG),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .fillMaxHeight()
+                    .onGloballyPositioned { coords ->
+                        anchorWidth = with(density) { coords.size.width.toDp() }
+                    }
+                    .clickable(onClick = openMenu)
                     .padding(horizontal = 4.dp, vertical = 1.dp),
             ) {
                 Text(
@@ -1013,6 +1082,7 @@ private fun DropdownRow(
                 )
                 Text(text = "▾", style = INSPECTOR_DROPDOWN_CARET_STYLE)
             }
+
             DropdownMenu(
                 expanded = expanded,
                 onDismissRequest = { expanded = false },
@@ -1020,9 +1090,6 @@ private fun DropdownRow(
                     if (anchorWidth > 0.dp) Modifier.width(anchorWidth) else Modifier,
                 ),
             ) {
-                // Material [DropdownMenuItem] applies minHeight = 48.dp (MenuListItemContainerHeight)
-                // after the caller's modifier, so LocalMinimumInteractiveComponentSize alone cannot
-                // shrink rows (unrelated to menu maxHeight tricks like Stack Overflow #69782653).
                 CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
                     options.forEachIndexed { index, option ->
                         InspectorDropdownMenuItem(
@@ -1068,7 +1135,8 @@ private fun InspectorDropdownMenuItem(text: String, onClick: () -> Unit) {
 private fun PropertyRow(
     label: String,
     focused: Boolean,
-    onClick: () -> Unit,
+    onLabelClick: () -> Unit,
+    valueCellModifier: Modifier,
     valueContent: @Composable () -> Unit,
 ) {
     Row(
@@ -1078,8 +1146,7 @@ private fun PropertyRow(
             // so the value cell background always fills the full row height even when the
             // label wraps to multiple lines.
             .height(IntrinsicSize.Min)
-            .border(width = 0.5.dp, color = CELL_BORDER)
-            .clickable(onClick = onClick),
+            .border(width = 0.5.dp, color = CELL_BORDER),
         verticalAlignment = Alignment.Top,
     ) {
         // Label cell
@@ -1087,6 +1154,7 @@ private fun PropertyRow(
             modifier = Modifier
                 .width(CELL_LABEL_WIDTH)
                 .fillMaxHeight()
+                .clickable(onClick = onLabelClick)
                 .background(if (focused) CELL_LABEL_FOCUSED else CELL_LABEL_BG)
                 .padding(horizontal = 4.dp, vertical = 1.dp),
         ) {
@@ -1104,7 +1172,8 @@ private fun PropertyRow(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight()
-                .background(CELL_VALUE_BG),
+                .background(CELL_VALUE_BG)
+                .then(valueCellModifier),
         ) {
             valueContent()
         }
