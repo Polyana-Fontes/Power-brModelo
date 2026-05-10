@@ -478,18 +478,20 @@ private fun processLinkObjectsTap(
                 onToolChange(ConceptualCanvasTool.LinkObjects.AwaitingFirst)
                 return
             }
-            val (schemaWithId, newConnId) = schema.allocateId()
-            when (val r = validateAndBuildConceptualLink(schema, toolState.first, pick, newConnId)) {
+            when (val r = validateAndBuildConceptualLink(schema, toolState.first, pick)) {
                 is ConceptualLinkValidationResult.Ok -> {
-                    val added = schemaWithId.withConnection(r.connection)
-                    val enriched = enrichConnectionWithInitialCardinalityPosition(added, r.connection, textMeasurer)
-                    onSchemaCommit(
-                        added.copy(
-                            connections = added.connections.map {
-                                if (it.id == enriched.id) enriched else it
+                    val beforeConnIds = schema.connections.map { it.id }.toSet()
+                    var committed = r.schema
+                    for (conn in committed.connections.filter { it.id !in beforeConnIds }) {
+                        val enriched =
+                            enrichConnectionWithInitialCardinalityPosition(committed, conn, textMeasurer)
+                        committed = committed.copy(
+                            connections = committed.connections.map {
+                                if (it.id == conn.id) enriched else it
                             },
-                        ),
-                    )
+                        )
+                    }
+                    onSchemaCommit(committed)
                     onSelectionChange(CanvasSelection.None)
                     onToolChange(ConceptualCanvasTool.LinkObjects.AwaitingFirst)
                 }

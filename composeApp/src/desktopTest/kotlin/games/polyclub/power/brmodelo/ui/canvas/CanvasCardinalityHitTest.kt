@@ -27,6 +27,7 @@ import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualLinkPick
 import games.polyclub.power.brmodelo.domain.ConceptualLinkValidationResult
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
+import games.polyclub.power.brmodelo.domain.Connection
 import games.polyclub.power.brmodelo.domain.ElementPosition
 import games.polyclub.power.brmodelo.domain.SchemaElement
 import games.polyclub.power.brmodelo.domain.validateAndBuildConceptualLink
@@ -39,6 +40,13 @@ private fun headlessTextMeasurer(): TextMeasurer {
     val density = Density(density = 1f, fontScale = 1f)
     val resolver = createFontFamilyResolver()
     return TextMeasurer(resolver, density, LayoutDirection.Ltr)
+}
+
+/** Single new connection from entity–relationship link (not entity–entity, which adds two). */
+private fun singleNewConnection(before: ConceptualSchema, ok: ConceptualLinkValidationResult.Ok): Connection {
+    val after = ok.schema
+    val newIds = after.connections.map { it.id }.toSet() - before.connections.map { it.id }.toSet()
+    return after.connections.single { it.id in newIds }
 }
 
 class CanvasCardinalityHitTest {
@@ -57,9 +65,8 @@ class CanvasCardinalityHitTest {
             base,
             ConceptualLinkPick(2),
             ConceptualLinkPick(1),
-            newConnectionId = 50,
         )
-        val conn = assertIs<ConceptualLinkValidationResult.Ok>(ok).connection
+        val conn = singleNewConnection(base, assertIs<ConceptualLinkValidationResult.Ok>(ok))
         val schemaRaw = base.copy(connections = listOf(conn))
         val enriched = enrichConnectionWithInitialCardinalityPosition(schemaRaw, conn, textMeasurer)
         assertTrue(enriched.cardinalityPosition != null)
@@ -91,9 +98,8 @@ class CanvasCardinalityHitTest {
             base,
             ConceptualLinkPick(2),
             ConceptualLinkPick(1),
-            newConnectionId = 51,
         )
-        val conn = assertIs<ConceptualLinkValidationResult.Ok>(ok).connection
+        val conn = singleNewConnection(base, assertIs<ConceptualLinkValidationResult.Ok>(ok))
         val schemaRaw = base.copy(connections = listOf(conn))
         val enriched = enrichConnectionWithInitialCardinalityPosition(schemaRaw, conn, textMeasurer)
         val schema = schemaRaw.copy(connections = listOf(enriched))
@@ -120,9 +126,8 @@ class CanvasCardinalityHitTest {
             base,
             ConceptualLinkPick(2),
             ConceptualLinkPick(1),
-            newConnectionId = 52,
         )
-        val conn = assertIs<ConceptualLinkValidationResult.Ok>(ok).connection
+        val conn = singleNewConnection(base, assertIs<ConceptualLinkValidationResult.Ok>(ok))
         val schema = base.copy(connections = listOf(conn))
         assertTrue(conn.cardinalityPosition == null)
 

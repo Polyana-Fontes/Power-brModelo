@@ -51,8 +51,22 @@ private fun usedEntAssocIndices(schema: ConceptualSchema): Set<Int> =
 private fun nextEntidadeName(schema: ConceptualSchema): String =
     "Entidade${nextFreeIndex(usedEntidadeIndices(schema))}"
 
-private fun nextRelacaoName(schema: ConceptualSchema): String =
-    "Relacao${nextFreeIndex(usedRelacaoIndices(schema))}"
+private fun nextRelacaoName(schema: ConceptualSchema): String {
+    val patternUsed = usedRelacaoIndices(schema)
+    var n = nextFreeIndex(patternUsed)
+    while (true) {
+        val candidate = "Relacao$n"
+        val inUse = schema.relationships.any { it.name == candidate } ||
+            schema.associativeEntities.any { it.relationshipName == candidate }
+        if (!inUse) return candidate
+        n++
+    }
+}
+
+/**
+ * Next unused conceptual relationship name (`RelacaoN`), for tools that mirror Pascal [GeraBaseNome]('Relacao').
+ */
+internal fun ConceptualSchema.nextUnusedRelationshipName(): String = nextRelacaoName(this)
 
 private fun nextEntAssocName(schema: ConceptualSchema): String =
     "EntAssoc${nextFreeIndex(usedEntAssocIndices(schema))}"

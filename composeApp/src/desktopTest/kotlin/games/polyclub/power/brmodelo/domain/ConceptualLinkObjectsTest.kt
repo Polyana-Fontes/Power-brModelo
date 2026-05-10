@@ -19,6 +19,7 @@
 package games.polyclub.power.brmodelo.domain
 
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -43,7 +44,7 @@ class ConceptualLinkObjectsTest {
         val outer = ConceptualLinkPick(1, isAssociativeOuterEntitySide = true)
 
         // Act
-        val r = validateAndBuildConceptualLink(schema, inner, outer, newConnectionId = 99)
+        val r = validateAndBuildConceptualLink(schema, inner, outer)
 
         // Assert
         val err = assertIs<ConceptualLinkValidationResult.Error>(r)
@@ -63,13 +64,57 @@ class ConceptualLinkObjectsTest {
         val relPick = ConceptualLinkPick(2, isAssociativeOuterEntitySide = false)
 
         // Act
-        val r = validateAndBuildConceptualLink(schema, outer, relPick, newConnectionId = 50)
+        val r = validateAndBuildConceptualLink(schema, outer, relPick)
 
         // Assert
         val ok = assertIs<ConceptualLinkValidationResult.Ok>(r)
-        assertTrue(ok.connection.useAssociativeOuterForEndB)
-        assertTrue(!ok.connection.useAssociativeOuterForEndA)
-        assertTrue(ok.connection.elementIdA == 2)
-        assertTrue(ok.connection.elementIdB == 1)
+        val conn = ok.schema.connections.single { it.id !in schema.connections.map { c -> c.id } }
+        assertTrue(conn.useAssociativeOuterForEndB)
+        assertTrue(!conn.useAssociativeOuterForEndA)
+        assertTrue(conn.elementIdA == 2)
+        assertTrue(conn.elementIdB == 1)
+    }
+
+    @Test
+    fun `entity to entity creates relationship at midpoint and two connections`() {
+        // Arrange
+        val e1 = SchemaElement.Entity(id = 1, name = "A", position = ElementPosition(0, 0, 100, 80))
+        val e2 = SchemaElement.Entity(id = 2, name = "B", position = ElementPosition(200, 100, 100, 80))
+        val schema = ConceptualSchema(elements = mapOf(1 to e1, 2 to e2), nextId = 10)
+
+        // Act
+        val r = validateAndBuildConceptualLink(schema, ConceptualLinkPick(1), ConceptualLinkPick(2))
+
+        // Assert
+        val ok = assertIs<ConceptualLinkValidationResult.Ok>(r)
+        val s = ok.schema
+        val rel = s.relationships.single()
+        assertEquals("Relacao1", rel.name)
+        assertEquals(100, rel.position.x)
+        assertEquals(50, rel.position.y)
+        assertEquals(2, s.connections.size)
+        assertTrue(s.connections.all { it.elementIdA == rel.id })
+        assertEquals(setOf(1, 2), s.connections.map { it.elementIdB }.toSet())
+    }
+
+    @Test
+    fun `entity to entity skips taken Relacao names`() {
+        // Arrange
+        val e1 = SchemaElement.Entity(id = 1, name = "A", position = ElementPosition(0, 0, 50, 50))
+        val e2 = SchemaElement.Entity(id = 2, name = "B", position = ElementPosition(100, 0, 50, 50))
+        val existing = SchemaElement.Relationship(id = 3, name = "Relacao1", position = ElementPosition(40, 80, 80, 40))
+        val schema = ConceptualSchema(
+            elements = mapOf(1 to e1, 2 to e2, 3 to existing),
+            nextId = 20,
+        )
+
+        // Act
+        val ok = assertIs<ConceptualLinkValidationResult.Ok>(
+            validateAndBuildConceptualLink(schema, ConceptualLinkPick(1), ConceptualLinkPick(2)),
+        )
+
+        // Assert
+        val newRel = ok.schema.relationships.filter { it.id != 3 }.single()
+        assertEquals("Relacao2", newRel.name)
     }
 }

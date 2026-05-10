@@ -61,8 +61,12 @@ fun conceptualLinkEndpointKind(
 }
 
 sealed class ConceptualLinkValidationResult {
+    /**
+     * Schema after applying the link tool: new [Connection]s (and optionally a new [SchemaElement.Relationship])
+     * are already merged; IDs and [ConceptualSchema.nextId] are updated.
+     */
     data class Ok(
-        val connection: Connection,
+        val schema: ConceptualSchema,
     ) : ConceptualLinkValidationResult()
 
     data class Error(
@@ -71,15 +75,19 @@ sealed class ConceptualLinkValidationResult {
 }
 
 /**
- * Validates [first] and [second] as ends of a new conceptual link and builds a [Connection]
- * with [elementIdA] on the relationship side and [elementIdB] on the entity side (Ponta),
- * matching [Connection] documentation and the XML / brM conventions.
+ * Validates [first] and [second] as ends of a new conceptual link and returns an updated [ConceptualSchema].
+ *
+ * - **Entity + relationship** (in any order): one new [Connection] with [Connection.elementIdA] on the
+ *   relationship side and [Connection.elementIdB] on the entity side (Ponta), as in XML / brM.
+ * - **Entity + entity** (including two outers of associative entities): mirrors Pascal `Tool_Ligacao` when
+ *   both ends are [TBaseEntidade]: temporarily switches to `Tool_Relacionamento`, places a new [TRelacao]
+ *   at the midpoint of the two bases' `Left`/`Top`, then calls `Relacione` for each entity (`mer.pas` ~2961–2967,
+ *   `Tool_Relacionamento` block ~2297–2317).
  */
 fun validateAndBuildConceptualLink(
     schema: ConceptualSchema,
     first: ConceptualLinkPick,
     second: ConceptualLinkPick,
-    newConnectionId: Int,
 ): ConceptualLinkValidationResult {
     val elA = schema.elements[first.elementId]
     val elB = schema.elements[second.elementId]
@@ -95,12 +103,6 @@ fun validateAndBuildConceptualLink(
         )
     }
 
-    if (kindA == kindB) {
-        return ConceptualLinkValidationResult.Error(
-            "Uma ligação conceitual deve ser entre uma entidade e um relacionamento.",
-        )
-    }
-
     if (first.elementId == second.elementId) {
         if (elA is SchemaElement.AssociativeEntity &&
             first.isAssociativeOuterEntitySide != second.isAssociativeOuterEntitySide
@@ -110,6 +112,18 @@ fun validateAndBuildConceptualLink(
             )
         }
         return ConceptualLinkValidationResult.Error("Não é possível ligar um objeto a si mesmo.")
+    }
+
+    if (kindA == ConceptualLinkEndpointKind.ENTITY_SIDE &&
+        kindB == ConceptualLinkEndpointKind.ENTITY_SIDE
+    ) {
+        return buildEntityEntityLinkThroughRelationship(schema, first, second, elA, elB)
+    }
+
+    if (kindA == kindB) {
+        return ConceptualLinkValidationResult.Error(
+            "Uma ligação conceitual deve ser entre uma entidade e um relacionamento.",
+        )
     }
 
     val duplicate = schema.connections.any { conn ->
@@ -132,11 +146,13 @@ fun validateAndBuildConceptualLink(
 
     val entElem = schema.elements[entPick.elementId]!!
 
-    // Relationship-side picks always target the inner diamond of an associative entity; entity-side may be outer.
     val useOuterB = entElem is SchemaElement.AssociativeEntity && entPick.isAssociativeOuterEntitySide
 
+    var work = schema
+    val (w1, newConnId) = work.allocateId()
+    work = w1
     val conn = Connection(
-        id = newConnectionId,
+        id = newConnId,
         elementIdA = relPick.elementId,
         elementIdB = entPick.elementId,
         cardinality = Cardinality.ZERO_TO_MANY,
@@ -145,5 +161,81 @@ fun validateAndBuildConceptualLink(
         useAssociativeOuterForEndA = false,
         useAssociativeOuterForEndB = useOuterB,
     )
-    return ConceptualLinkValidationResult.Ok(conn)
+    return ConceptualLinkValidationResult.Ok(work.withConnection(conn))
+}
+
+/**
+ * Pascal: `Clicado := Point(UsrSelA.Left - ((UsrSelA.Left - UsrSelb.Left) div 2), ...)`.
+ */
+private fun relationshipTopLeftBetweenEntities(posA: ElementPosition, posB: ElementPosition): ElementPosition {
+    val x = posA.x - (posA.x - posB.x) / 2
+    val y = posA.y - (posA.y - posB.y) / 2
+    return ElementPosition(
+        x = x,
+        y = y,
+        width = ConceptualPlacementDefaults.relationshipWidth,
+        height = ConceptualPlacementDefaults.relationshipHeight,
+    )
+}
+
+private fun connectionFromRelationshipToEntity(
+    relId: Int,
+    newConnectionId: Int,
+    entityPick: ConceptualLinkPick,
+    entityElement: SchemaElement,
+): Connection {
+    val useOuterB =
+        entityElement is SchemaElement.AssociativeEntity && entityPick.isAssociativeOuterEntitySide
+    return Connection(
+        id = newConnectionId,
+        elementIdA = relId,
+        elementIdB = entityPick.elementId,
+        cardinality = Cardinality.ZERO_TO_MANY,
+        showCardinality = true,
+        orientation = LineOrientation.HORIZONTAL,
+        useAssociativeOuterForEndA = false,
+        useAssociativeOuterForEndB = useOuterB,
+    )
+}
+
+private fun buildEntityEntityLinkThroughRelationship(
+    schema: ConceptualSchema,
+    first: ConceptualLinkPick,
+    second: ConceptualLinkPick,
+    elA: SchemaElement,
+    elB: SchemaElement,
+): ConceptualLinkValidationResult {
+    val name = schema.nextUnusedRelationshipName()
+    val pos = relationshipTopLeftBetweenEntities(elA.position, elB.position)
+    val style = ConceptualPlacementDefaults.labelStyle
+
+    var work = schema
+    val (w1, relId) = work.allocateId()
+    work = w1
+    val rel = SchemaElement.Relationship(
+        id = relId,
+        name = name,
+        position = pos,
+        observations = "",
+        dictionary = "",
+        labelStyle = style,
+        hiddenAttributes = emptyList(),
+        arrowDirection = ArrowDirection.NONE,
+        showName = true,
+    )
+    work = work.withElement(rel)
+
+    val (w2, connId1) = work.allocateId()
+    work = w2
+    work = work.withConnection(
+        connectionFromRelationshipToEntity(relId, connId1, first, elA),
+    )
+
+    val (w3, connId2) = work.allocateId()
+    work = w3
+    work = work.withConnection(
+        connectionFromRelationshipToEntity(relId, connId2, second, elB),
+    )
+
+    return ConceptualLinkValidationResult.Ok(work)
 }
