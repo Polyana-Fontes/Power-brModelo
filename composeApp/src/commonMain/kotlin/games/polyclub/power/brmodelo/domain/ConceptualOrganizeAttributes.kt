@@ -35,31 +35,178 @@ private fun linkedAttributesOrdered(schema: ConceptualSchema, ownerId: Int): Lis
     return out
 }
 
+private fun isOrganizeOwnerKind(el: SchemaElement): Boolean =
+    el is SchemaElement.Entity ||
+        el is SchemaElement.Relationship ||
+        el is SchemaElement.AssociativeEntity ||
+        el is SchemaElement.SelfRelationship
+
+private fun isDirectOrganizeOwner(schema: ConceptualSchema, ownerId: Int): Boolean =
+    schema.elements[ownerId]?.let { isOrganizeOwnerKind(it) } == true
+
+/**
+ * Walks attribute → owner until the conceptual canvas owner (entity / relationship / associative / self-rel).
+ */
+private fun canvasOwnerForOrganizeRoot(schema: ConceptualSchema, attributeElementId: Int): Int? {
+    var cur = attributeElementId
+    repeat(schema.elements.size + 2) {
+        val el = schema.elements[cur] ?: return null
+        when (el) {
+            is SchemaElement.Attribute -> cur = el.ownerId
+            is SchemaElement.Entity,
+            is SchemaElement.Relationship,
+            is SchemaElement.AssociativeEntity,
+            is SchemaElement.SelfRelationship,
+            -> return el.id
+            else -> return null
+        }
+    }
+    return null
+}
+
+private fun canvasSelectionElementIds(selection: CanvasSelection): Set<Int> = when (selection) {
+    CanvasSelection.None -> emptySet()
+    is CanvasSelection.Element -> setOf(selection.id)
+    is CanvasSelection.Multiple -> selection.elementIds
+    is CanvasSelection.Cardinality -> emptySet()
+}
+
+private data class OwnerRepositionTask(val ownerId: Int, val attributeIdFilter: Set<Int>?)
+
+private data class CompositeBarTask(val compositeId: Int, val childIdFilter: Set<Int>?)
+
+private data class OrganizePlan(
+    val ownerTasks: List<OwnerRepositionTask>,
+    val compositeTasks: List<CompositeBarTask>,
+)
+
+private fun compositeBarDepthFromCanvasOwner(schema: ConceptualSchema, compositeId: Int): Int {
+    var depth = 0
+    var cur = compositeId
+    while (true) {
+        val a = schema.elements[cur] as? SchemaElement.Attribute ?: return depth
+        val owner = schema.elements[a.ownerId] ?: return depth
+        when (owner) {
+            is SchemaElement.Entity,
+            is SchemaElement.Relationship,
+            is SchemaElement.AssociativeEntity,
+            is SchemaElement.SelfRelationship,
+            -> return depth
+            is SchemaElement.Attribute -> {
+                depth++
+                cur = owner.id
+            }
+            else -> return depth
+        }
+    }
+}
+
+private fun buildOrganizePlan(schema: ConceptualSchema, selected: Set<Int>): OrganizePlan {
+    if (selected.isEmpty()) return OrganizePlan(emptyList(), emptyList())
+
+    val selectedOwnerIds = selected.filter { id ->
+        schema.elements[id]?.let { isOrganizeOwnerKind(it) } == true
+    }.toSet()
+
+    val fullOwners = LinkedHashSet<Int>()
+    for (o in selectedOwnerIds) {
+        val anyAttrUnderSelected = selected.any { sid ->
+            schema.elements[sid] is SchemaElement.Attribute &&
+                canvasOwnerForOrganizeRoot(schema, sid) == o
+        }
+        if (!anyAttrUnderSelected) {
+            fullOwners.add(o)
+        }
+    }
+
+    val partialFilters = mutableMapOf<Int, MutableSet<Int>>()
+    for (sid in selected) {
+        val a = schema.elements[sid] as? SchemaElement.Attribute ?: continue
+        if (!isDirectOrganizeOwner(schema, a.ownerId)) continue
+        val o = a.ownerId
+        if (o in fullOwners) continue
+        partialFilters.getOrPut(o) { mutableSetOf() }.add(sid)
+    }
+
+    val ownerTasks = ArrayList<OwnerRepositionTask>()
+    for (o in fullOwners) {
+        ownerTasks.add(OwnerRepositionTask(o, attributeIdFilter = null))
+    }
+    for ((o, ids) in partialFilters) {
+        if (ids.isNotEmpty()) {
+            ownerTasks.add(OwnerRepositionTask(o, attributeIdFilter = ids.toSet()))
+        }
+    }
+
+    val compositeTasks = ArrayList<CompositeBarTask>()
+    for (el in schema.elements.values) {
+        val c = el as? SchemaElement.Attribute ?: continue
+        if (!c.isComposite || c.childAttributeIds.isEmpty()) continue
+        val selCh = c.childAttributeIds.filter { it in selected }.toSet()
+        when {
+            selCh.isNotEmpty() -> compositeTasks.add(CompositeBarTask(c.id, selCh))
+            c.id in selected -> compositeTasks.add(CompositeBarTask(c.id, childIdFilter = null))
+            else -> Unit
+        }
+    }
+
+    val dedupedComposites = compositeTasks.filterNot { task ->
+        task.childIdFilter == null &&
+            compositeBarAlreadyRelayoutedByOwnerTasks(schema, ownerTasks, task.compositeId)
+    }
+
+    return OrganizePlan(ownerTasks, dedupedComposites)
+}
+
+private fun compositeBarAlreadyRelayoutedByOwnerTasks(
+    schema: ConceptualSchema,
+    ownerTasks: List<OwnerRepositionTask>,
+    compositeId: Int,
+): Boolean {
+    val c = schema.elements[compositeId] as? SchemaElement.Attribute ?: return false
+    if (!isDirectOrganizeOwner(schema, c.ownerId)) return false
+    val o = c.ownerId
+    for (t in ownerTasks) {
+        if (t.ownerId != o) continue
+        if (t.attributeIdFilter == null) return true
+        if (compositeId in t.attributeIdFilter) return true
+    }
+    return false
+}
+
 /**
  * Repositions direct attributes of [ownerId] following [TBase.OrganizeAtributos] in `mer.pas`
  * (Divida-style spacing on left/right, stacked gaps on top/bottom).
  *
  * When [sideFilter] is non-null, only attributes whose **current** attach side matches are moved;
  * others keep their positions.
+ *
+ * When [attributeIdFilter] is non-null, only those direct attributes (by id) are repositioned;
+ * spacing counts use that subset per side. Others keep their positions.
  */
 private fun repositionDirectAttributesOfOwner(
     schema: ConceptualSchema,
     ownerId: Int,
     sideFilter: ConceptualAttributeAttachPonto?,
+    attributeIdFilter: Set<Int>?,
 ): ConceptualSchema {
     val owner = schema.elements[ownerId] ?: return schema
+    if (!isOrganizeOwnerKind(owner)) return schema
     val ownerPos = owner.position
     val linked = linkedAttributesOrdered(schema, ownerId)
     if (linked.isEmpty()) return schema
 
+    val active = if (attributeIdFilter == null) linked else linked.filter { it.id in attributeIdFilter }
+    if (active.isEmpty()) return schema
+
     val initialTotais = IntArray(5)
-    for (a in linked) {
+    for (a in active) {
         val p = conceptualAttributeAttachPonto(ownerPos, a.position)
         if (p in 1..4) initialTotais[p]++
     }
     if (sideFilter != null && initialTotais[sideFilter.pascalCode] == 0) return schema
 
-    val distancia = max(16, linked.maxOf { it.position.height })
+    val distancia = max(16, active.maxOf { it.position.height })
     val gh = ConceptualPlacementDefaults.attributeHorizontalGap
     val gv = ConceptualPlacementDefaults.attributeVerticalGapBase
 
@@ -74,6 +221,7 @@ private fun repositionDirectAttributesOfOwner(
     for (a in linked) {
         val p = conceptualAttributeAttachPonto(ownerPos, a.position)
         if (sideFilter != null && p != sideFilter.pascalCode) continue
+        if (attributeIdFilter != null && a.id !in attributeIdFilter) continue
 
         val ap = a.position
         val newPos = when (p) {
@@ -118,8 +266,13 @@ private fun repositionDirectAttributesOfOwner(
 
 /**
  * Lays out composite child attributes along [TBarraDeAtributos] (`mer.pas`), generalized to N children.
+ * When [childIdFilter] is non-null, only those children are repositioned along the bar (subset spacing).
  */
-internal fun organizeCompositeBarChildren(schema: ConceptualSchema, compositeId: Int): ConceptualSchema {
+internal fun organizeCompositeBarChildren(
+    schema: ConceptualSchema,
+    compositeId: Int,
+    childIdFilter: Set<Int>? = null,
+): ConceptualSchema {
     val parent = schema.elements[compositeId] as? SchemaElement.Attribute ?: return schema
     if (!parent.isComposite || parent.childAttributeIds.isEmpty()) return schema
     val ownerElem = schema.elements[parent.ownerId] ?: return schema
@@ -128,7 +281,8 @@ internal fun organizeCompositeBarChildren(schema: ConceptualSchema, compositeId:
     val orientD = attachPonto == 1
 
     val p = parent.position
-    val children = parent.childAttributeIds.mapNotNull { schema.elements[it] as? SchemaElement.Attribute }
+    val allChildren = parent.childAttributeIds.mapNotNull { schema.elements[it] as? SchemaElement.Attribute }
+    val children = if (childIdFilter == null) allChildren else allChildren.filter { it.id in childIdFilter }
     if (children.isEmpty()) return schema
 
     val n = children.size
@@ -158,7 +312,7 @@ internal fun organizeCompositeBarChildren(schema: ConceptualSchema, compositeId:
 
 /** Recursively reorganizes composite bars (Pascal `TAtributo.OrganizeAtributos` → `TBarraDeAtributos.OrganizeAtributos`). */
 internal fun relayoutCompositeSubtree(schema: ConceptualSchema, compositeId: Int): ConceptualSchema {
-    var s = organizeCompositeBarChildren(schema, compositeId)
+    var s = organizeCompositeBarChildren(schema, compositeId, childIdFilter = null)
     val parent = s.elements[compositeId] as? SchemaElement.Attribute ?: return s
     for (cid in parent.childAttributeIds) {
         val child = s.elements[cid] as? SchemaElement.Attribute ?: continue
@@ -167,16 +321,13 @@ internal fun relayoutCompositeSubtree(schema: ConceptualSchema, compositeId: Int
     return s
 }
 
-/** Full [TBase.OrganizeAtributos] for an entity / relationship / associative entity owner. */
+/** Full [TBase.OrganizeAtributos] for an entity / relationship / associative entity / self-relationship owner. */
 fun organizeAttributesForConceptualOwner(schema: ConceptualSchema, ownerId: Int): ConceptualSchema {
     val owner = schema.elements[ownerId] ?: return schema
-    if (owner !is SchemaElement.Entity &&
-        owner !is SchemaElement.Relationship &&
-        owner !is SchemaElement.AssociativeEntity
-    ) {
+    if (!isOrganizeOwnerKind(owner)) {
         return schema
     }
-    var s = repositionDirectAttributesOfOwner(schema, ownerId, sideFilter = null)
+    var s = repositionDirectAttributesOfOwner(schema, ownerId, sideFilter = null, attributeIdFilter = null)
     for (a in s.attributesOf(ownerId)) {
         if (a.isComposite) s = relayoutCompositeSubtree(s, a.id)
     }
@@ -190,14 +341,10 @@ fun organizeAttributesOnOwnerSide(
     side: ConceptualAttributeAttachPonto,
 ): ConceptualSchema {
     val owner = schema.elements[ownerId] ?: return schema
-    if (owner !is SchemaElement.Entity &&
-        owner !is SchemaElement.Relationship &&
-        owner !is SchemaElement.AssociativeEntity &&
-        owner !is SchemaElement.Attribute
-    ) {
+    if (!isOrganizeOwnerKind(owner)) {
         return schema
     }
-    var s = repositionDirectAttributesOfOwner(schema, ownerId, sideFilter = side)
+    var s = repositionDirectAttributesOfOwner(schema, ownerId, sideFilter = side, attributeIdFilter = null)
     val onSide = linkedAttributesOrdered(schema, ownerId).filter {
         conceptualAttributeAttachPonto(owner.position, it.position) == side.pascalCode
     }
@@ -208,35 +355,80 @@ fun organizeAttributesOnOwnerSide(
     return s
 }
 
-/** Whether the ribbon "Organizar Atributos" action applies (canvas-visible attributes only). */
-fun canOrganizeAttributesMenu(schema: ConceptualSchema, selectedElementId: Int): Boolean {
-    return when (val e = schema.elements[selectedElementId]) {
-        is SchemaElement.Entity,
-        is SchemaElement.Relationship,
-        is SchemaElement.AssociativeEntity,
-        -> schema.attributesOf(selectedElementId).isNotEmpty()
-        is SchemaElement.Attribute -> e.isComposite && schema.childAttributesOf(selectedElementId).isNotEmpty()
-        else -> false
+private fun applyOwnerRepositionTask(schema: ConceptualSchema, task: OwnerRepositionTask): ConceptualSchema {
+    val filter = task.attributeIdFilter
+    var s = repositionDirectAttributesOfOwner(schema, task.ownerId, sideFilter = null, attributeIdFilter = filter)
+    val compositesUnder = s.attributesOf(task.ownerId).filter { it.isComposite }
+    for (c in compositesUnder) {
+        val relayout = when {
+            filter == null -> true
+            c.id in filter -> true
+            else -> false
+        }
+        if (relayout) s = relayoutCompositeSubtree(s, c.id)
     }
+    return s
 }
 
-/** Applies the conceptual **Operações → Organizar Atributos** command for the current selection. */
-fun applyOrganizeAttributesMenuAction(schema: ConceptualSchema, selectedElementId: Int): ConceptualSchema? {
-    if (!canOrganizeAttributesMenu(schema, selectedElementId)) return null
-    return when (val e = schema.elements[selectedElementId]) {
-        is SchemaElement.Entity,
-        is SchemaElement.Relationship,
-        is SchemaElement.AssociativeEntity,
-        -> organizeAttributesForConceptualOwner(schema, selectedElementId)
-        is SchemaElement.Attribute -> {
-            var s = organizeCompositeBarChildren(schema, selectedElementId)
-            val parent = s.elements[selectedElementId] as? SchemaElement.Attribute ?: return null
-            for (cid in parent.childAttributeIds) {
-                val child = s.elements[cid] as? SchemaElement.Attribute ?: continue
-                if (child.isComposite) s = relayoutCompositeSubtree(s, child.id)
-            }
-            s
-        }
-        else -> null
+private fun applyCompositeBarTask(schema: ConceptualSchema, task: CompositeBarTask): ConceptualSchema {
+    var s = organizeCompositeBarChildren(schema, task.compositeId, task.childIdFilter)
+    val parent = s.elements[task.compositeId] as? SchemaElement.Attribute ?: return s
+    val childIds: Iterable<Int> = if (task.childIdFilter == null) {
+        parent.childAttributeIds
+    } else {
+        task.childIdFilter
     }
+    for (cid in childIds) {
+        val ch = s.elements[cid] as? SchemaElement.Attribute ?: continue
+        if (ch.isComposite) s = relayoutCompositeSubtree(s, ch.id)
+    }
+    return s
 }
+
+private fun applyOrganizePlan(schema: ConceptualSchema, plan: OrganizePlan): ConceptualSchema {
+    val depthSchema = schema
+    var s = schema
+    for (task in plan.ownerTasks) {
+        s = applyOwnerRepositionTask(s, task)
+    }
+    val sortedComposites = plan.compositeTasks.sortedBy { compositeBarDepthFromCanvasOwner(depthSchema, it.compositeId) }
+    for (task in sortedComposites) {
+        s = applyCompositeBarTask(s, task)
+    }
+    return s
+}
+
+/** Whether **Operações → Organizar Atributos** applies to the current [CanvasSelection]. */
+fun canOrganizeAttributesMenuSelection(schema: ConceptualSchema, selection: CanvasSelection): Boolean {
+    val selected = canvasSelectionElementIds(selection)
+    if (selected.isEmpty()) return false
+    val plan = buildOrganizePlan(schema, selected)
+    for (t in plan.ownerTasks) {
+        if (t.attributeIdFilter == null) {
+            if (schema.attributesOf(t.ownerId).isNotEmpty()) return true
+        } else if (t.attributeIdFilter.isNotEmpty()) {
+            return true
+        }
+    }
+    for (t in plan.compositeTasks) {
+        val c = schema.elements[t.compositeId] as? SchemaElement.Attribute ?: continue
+        if (t.childIdFilter == null && c.childAttributeIds.isNotEmpty()) return true
+        if (t.childIdFilter?.isNotEmpty() == true) return true
+    }
+    return false
+}
+
+/** Whether the ribbon "Organizar Atributos" action applies (canvas-visible attributes only). */
+fun canOrganizeAttributesMenu(schema: ConceptualSchema, selectedElementId: Int): Boolean =
+    canOrganizeAttributesMenuSelection(schema, CanvasSelection.Element(selectedElementId))
+
+/** Applies **Operações → Organizar Atributos** for the current [CanvasSelection] (multi-select aware). */
+fun applyOrganizeAttributesMenuAction(schema: ConceptualSchema, selection: CanvasSelection): ConceptualSchema? {
+    if (!canOrganizeAttributesMenuSelection(schema, selection)) return null
+    val plan = buildOrganizePlan(schema, canvasSelectionElementIds(selection))
+    return applyOrganizePlan(schema, plan)
+}
+
+/** Applies the conceptual **Operações → Organizar Atributos** command for a single selected element id. */
+fun applyOrganizeAttributesMenuAction(schema: ConceptualSchema, selectedElementId: Int): ConceptualSchema? =
+    applyOrganizeAttributesMenuAction(schema, CanvasSelection.Element(selectedElementId))

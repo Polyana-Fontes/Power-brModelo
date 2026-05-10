@@ -38,7 +38,7 @@ import androidx.compose.ui.graphics.Color
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolVariant
 import games.polyclub.power.brmodelo.domain.applyOrganizeAttributesMenuAction
-import games.polyclub.power.brmodelo.domain.canOrganizeAttributesMenu
+import games.polyclub.power.brmodelo.domain.canOrganizeAttributesMenuSelection
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolVariant
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaBrmParser
@@ -428,13 +428,10 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         },
     )
 
-    val selElementId = (sel.selection as? CanvasSelection.Element)?.id
-    val organizeAttrsEnabled =
-        selElementId != null && canOrganizeAttributesMenu(sel.schema, selElementId)
+    val organizeAttrsEnabled = canOrganizeAttributesMenuSelection(sel.schema, sel.selection)
     val onOrganizeAttributes: () -> Unit = organize@{
         val tab = tabSessions.getOrNull(selectedTabIndex) ?: return@organize
-        val id = (tab.selection as? CanvasSelection.Element)?.id ?: return@organize
-        val updated = applyOrganizeAttributesMenuAction(tab.schema, id) ?: return@organize
+        val updated = applyOrganizeAttributesMenuAction(tab.schema, tab.selection) ?: return@organize
         pushCommitOnSelected(updated.withNormalizedAttributeMultiValuedCounts())
     }
     val operationsMenuBinding = OperationsMenuRibbonBinding(

@@ -110,4 +110,62 @@ class ConceptualOrganizeAttributesTest {
         val moved = out.elements[2] as SchemaElement.Attribute
         assertTrue(moved.position.x < a.position.x || moved.position.y != a.position.y)
     }
+
+    @Test
+    fun `multi-select entity alone runs full organize like single selection`() {
+        // Arrange
+        val ent = SchemaElement.Entity(1, "E", ElementPosition(100, 100, 102, 66))
+        val a = SchemaElement.Attribute(2, "A", ElementPosition(300, 125, 73, 16), ownerId = 1)
+        val schema = ConceptualSchema(
+            elements = mapOf(1 to ent, 2 to a),
+            connections = listOf(Connection(1, 2, 1, null, showCardinality = false, orientation = LineOrientation.VERTICAL)),
+            nextId = 3,
+        )
+        val multi = CanvasSelection.Multiple(elementIds = setOf(1))
+
+        // Act & Assert
+        assertTrue(canOrganizeAttributesMenuSelection(schema, multi))
+        val out = applyOrganizeAttributesMenuAction(schema, multi)
+        assertNotNull(out)
+        val moved = out.elements[2] as SchemaElement.Attribute
+        assertTrue(moved.position.x < a.position.x || moved.position.y != a.position.y)
+    }
+
+    @Test
+    fun `multi-select only one direct attribute reorganizes that attribute only`() {
+        // Arrange
+        val ent = SchemaElement.Entity(1, "E", ElementPosition(100, 100, 102, 66))
+        val a1 = SchemaElement.Attribute(2, "A1", ElementPosition(300, 125, 73, 16), ownerId = 1)
+        val a2 = SchemaElement.Attribute(3, "A2", ElementPosition(300, 200, 73, 16), ownerId = 1)
+        val schema = ConceptualSchema(
+            elements = mapOf(1 to ent, 2 to a1, 3 to a2),
+            connections = listOf(
+                Connection(1, 2, 1, null, showCardinality = false, orientation = LineOrientation.VERTICAL),
+                Connection(2, 3, 1, null, showCardinality = false, orientation = LineOrientation.VERTICAL),
+            ),
+            nextId = 4,
+        )
+        val multi = CanvasSelection.Multiple(elementIds = setOf(2))
+
+        // Act
+        val out = applyOrganizeAttributesMenuAction(schema, multi)
+
+        // Assert
+        assertNotNull(out)
+        val after1 = out.elements[2] as SchemaElement.Attribute
+        val after2 = out.elements[3] as SchemaElement.Attribute
+        assertTrue(after1.position != a1.position)
+        assertEquals(a2.position, after2.position)
+    }
+
+    @Test
+    fun `canOrganize false when multi-select has no organizable picks`() {
+        // Arrange
+        val ent = SchemaElement.Entity(1, "E", ElementPosition(0, 0, 10, 10))
+        val schema = ConceptualSchema(elements = mapOf(1 to ent), nextId = 2)
+        val multi = CanvasSelection.Multiple(elementIds = setOf(1))
+
+        // Act & Assert
+        assertFalse(canOrganizeAttributesMenuSelection(schema, multi))
+    }
 }

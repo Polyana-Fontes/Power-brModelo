@@ -56,7 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import games.polyclub.power.brmodelo.domain.CanvasSelection
-import games.polyclub.power.brmodelo.domain.canOrganizeAttributesMenu
+import games.polyclub.power.brmodelo.domain.canOrganizeAttributesMenuSelection
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.domain.expandBulkDeleteClosure
 import games.polyclub.power.brmodelo.domain.singleElementDeletionClosure
@@ -145,8 +145,7 @@ internal fun MainCanvasPanel(
                             event.isCtrlPressed &&
                             event.key == Key.O
                         ) {
-                            val elemId = (selection as? CanvasSelection.Element)?.id
-                            if (elemId != null && canOrganizeAttributesMenu(sch, elemId)) {
+                            if (canOrganizeAttributesMenuSelection(sch, selection)) {
                                 onOrganizeAttributes()
                                 return@onPreviewKeyEvent true
                             }
