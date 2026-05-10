@@ -229,6 +229,10 @@ fun applyConceptualAttributeTool(
     }
 }
 
+/**
+ * New attributes placed on another attribute always attach on the **right** (no edge-proximity pick),
+ * then [relayoutCompositeSubtree] runs on the parent so composite bars stay aligned (same as **Organizar Atributos** bar layout).
+ */
 private fun placeChildAttributeOnParent(
     schema: ConceptualSchema,
     parentAttr: SchemaElement.Attribute,
@@ -236,13 +240,11 @@ private fun placeChildAttributeOnParent(
     variant: ConceptualAttributeToolVariant,
 ): ConceptualAttributeToolResult {
     if (variant == ConceptualAttributeToolVariant.Composite) {
-        return ConceptualAttributeToolResult.Error(
-            "Atributo composto deve ser criado sobre entidade ou relacionamento.",
-        )
+        return placeCompositeAttributeUnderParentAttribute(schema, parentAttr, clickSchema)
     }
     val attrW = ConceptualPlacementDefaults.attributeWidth
     val attrH = ConceptualPlacementDefaults.attributeHeight
-    val side = closestConceptualAttributeAttachPonto(parentAttr.position, clickSchema)
+    val side = ConceptualAttributeAttachPonto.RIGHT
     val stack = countAttributesOnSide(schema, parentAttr.id, side) + 1
     val pos = positionSingleAttributeRect(parentAttr.position, side, attrW, attrH, clickSchema, stack)
     val props = propsForSimpleVariant(variant)
@@ -256,7 +258,59 @@ private fun placeChildAttributeOnParent(
     val updatedParent = parentAttr.copy(childAttributeIds = parentAttr.childAttributeIds + newId)
     s = s.withElement(updatedParent)
     s = s.withNormalizedAttributeMultiValuedCounts()
+    s = relayoutCompositeSubtree(s, parentAttr.id)
     return ConceptualAttributeToolResult.Ok(s, newId, parentAttr.id, side)
+}
+
+/** Composite tool on an attribute: same as on entity/relationship, but owner is the parent attribute (always RIGHT). */
+private fun placeCompositeAttributeUnderParentAttribute(
+    schema: ConceptualSchema,
+    parentAttr: SchemaElement.Attribute,
+    clickSchema: Offset,
+): ConceptualAttributeToolResult {
+    val attrW = ConceptualPlacementDefaults.attributeWidth
+    val attrH = ConceptualPlacementDefaults.attributeHeight
+    val side = ConceptualAttributeAttachPonto.RIGHT
+    val ownerPos = parentAttr.position
+    val ownerId = parentAttr.id
+
+    val stackParent = countAttributesOnSide(schema, ownerId, side) + 1
+    val parentPos = positionSingleAttributeRect(ownerPos, side, attrW, attrH, clickSchema, stackParent)
+    val orientD = isOrientacaoD(side)
+    val (child0Pos, child1Pos) = layoutTwoCompositeChildPositions(parentPos, orientD, attrW, attrH)
+    val names = schema.allocateConsecutiveAttributeNames(3)
+
+    var s = schema
+    val (s0, childId0) = s.allocateId()
+    s = s0
+    val (s1, childId1) = s.allocateId()
+    s = s1
+    val (s2, compositeParentId) = s.allocateId()
+    s = s2
+
+    val child0 = baseNewAttribute(childId0, names[1], child0Pos, compositeParentId, AttributeVariantProps())
+    val child1 = baseNewAttribute(childId1, names[2], child1Pos, compositeParentId, AttributeVariantProps())
+    val compositeAttr = baseNewAttribute(
+        compositeParentId,
+        names[0],
+        parentPos,
+        ownerId,
+        AttributeVariantProps(
+            childAttributeIds = listOf(childId0, childId1),
+            multiValuedCount = 2,
+        ),
+    )
+    s = s.withElement(child0)
+    s = s.withElement(child1)
+    s = s.withElement(compositeAttr)
+    s = s.withAttributeOwnerConnection(attributeId = compositeParentId, ownerId = ownerId)
+    s = s.withAttributeOwnerConnection(attributeId = childId0, ownerId = compositeParentId)
+    s = s.withAttributeOwnerConnection(attributeId = childId1, ownerId = compositeParentId)
+    val updatedParent = parentAttr.copy(childAttributeIds = parentAttr.childAttributeIds + compositeParentId)
+    s = s.withElement(updatedParent)
+    s = s.withNormalizedAttributeMultiValuedCounts()
+    s = relayoutCompositeSubtree(s, parentAttr.id)
+    return ConceptualAttributeToolResult.Ok(s, compositeParentId, ownerId, side)
 }
 
 private fun placeAttributeOnOwner(

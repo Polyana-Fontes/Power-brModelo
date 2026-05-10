@@ -146,4 +146,86 @@ class ConceptualAttributeToolTest {
         // Assert
         assertIs<ConceptualAttributeToolResult.Error>(r)
     }
+
+    @Test
+    fun `child attribute on parent attribute always attaches on RIGHT`() {
+        // Arrange
+        val ent = SchemaElement.Entity(
+            id = 1,
+            name = "Entidade1",
+            position = ElementPosition(100, 100, 102, 66),
+        )
+        val parentAttr = SchemaElement.Attribute(
+            id = 2,
+            name = "A1",
+            position = ElementPosition(210, 117, 80, 32),
+            ownerId = 1,
+        )
+        val schema = ConceptualSchema(
+            elements = mapOf(1 to ent, 2 to parentAttr),
+            connections = listOf(
+                Connection(
+                    id = 10,
+                    elementIdA = 2,
+                    elementIdB = 1,
+                    cardinality = null,
+                    showCardinality = false,
+                    orientation = LineOrientation.VERTICAL,
+                ),
+            ),
+            nextId = 20,
+        )
+        val clickLeftOfParent = Offset(180f, 130f)
+
+        // Act
+        val r = applyConceptualAttributeTool(schema, 2, clickLeftOfParent, ConceptualAttributeToolVariant.Basic)
+
+        // Assert
+        val ok = assertIs<ConceptualAttributeToolResult.Ok>(r)
+        assertEquals(ConceptualAttributeAttachPonto.RIGHT, ok.attachSide)
+        val child = ok.schema.elements[ok.newPrimaryAttributeId] as SchemaElement.Attribute
+        assertTrue(child.position.x >= parentAttr.position.x + parentAttr.position.width)
+    }
+
+    @Test
+    fun `composite variant on another attribute creates composite owned by that attribute`() {
+        // Arrange
+        val ent = SchemaElement.Entity(
+            id = 1,
+            name = "Entidade1",
+            position = ElementPosition(100, 100, 102, 66),
+        )
+        val hostAttr = SchemaElement.Attribute(
+            id = 2,
+            name = "Host",
+            position = ElementPosition(220, 117, 80, 32),
+            ownerId = 1,
+        )
+        val schema = ConceptualSchema(
+            elements = mapOf(1 to ent, 2 to hostAttr),
+            connections = listOf(
+                Connection(
+                    id = 10,
+                    elementIdA = 2,
+                    elementIdB = 1,
+                    cardinality = null,
+                    showCardinality = false,
+                    orientation = LineOrientation.VERTICAL,
+                ),
+            ),
+            nextId = 20,
+        )
+        val click = Offset(310f, 130f)
+
+        // Act
+        val r = applyConceptualAttributeTool(schema, 2, click, ConceptualAttributeToolVariant.Composite)
+
+        // Assert
+        val ok = assertIs<ConceptualAttributeToolResult.Ok>(r)
+        val composite = ok.schema.elements[ok.newPrimaryAttributeId] as SchemaElement.Attribute
+        assertEquals(2, composite.ownerId)
+        assertEquals(2, composite.childAttributeIds.size)
+        val updatedHost = ok.schema.elements[2] as SchemaElement.Attribute
+        assertTrue(ok.newPrimaryAttributeId in updatedHost.childAttributeIds)
+    }
 }

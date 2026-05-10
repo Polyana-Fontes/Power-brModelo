@@ -123,6 +123,10 @@ private fun buildOrganizePlan(schema: ConceptualSchema, selected: Set<Int>): Org
     for (sid in selected) {
         val a = schema.elements[sid] as? SchemaElement.Attribute ?: continue
         if (!isDirectOrganizeOwner(schema, a.ownerId)) continue
+        // Composite parents are laid out only via [CompositeBarTask] (bar + nested composites), never via
+        // [repositionDirectAttributesOfOwner], so "Organizar" with only a composite selected does not snap
+        // the composite box back along Divida relative to the entity.
+        if (a.isComposite) continue
         val o = a.ownerId
         if (o in fullOwners) continue
         partialFilters.getOrPut(o) { mutableSetOf() }.add(sid)

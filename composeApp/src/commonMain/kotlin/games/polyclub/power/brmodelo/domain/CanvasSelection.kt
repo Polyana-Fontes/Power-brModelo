@@ -102,6 +102,13 @@ fun canvasSelectionFromPickSets(
 }
 
 /**
+ * Selects every [ConceptualSchema.elements] id in [schema]. Cardinality-only picks are omitted.
+ * Empty model → [CanvasSelection.None].
+ */
+fun canvasSelectionSelectAllElements(schema: ConceptualSchema): CanvasSelection =
+    canvasSelectionFromPickSets(schema.elements.keys.toSet(), emptySet())
+
+/**
  * Splits the current selection into sets used for Shift additive multi-select.
  * [Element] and [Cardinality] each contribute one pick; [Multiple] is merged as-is.
  */

@@ -168,4 +168,99 @@ class ConceptualOrganizeAttributesTest {
         // Act & Assert
         assertFalse(canOrganizeAttributesMenuSelection(schema, multi))
     }
+
+    @Test
+    fun `organize with only composite selected relayouts children without moving composite`() {
+        // Arrange
+        val ent = SchemaElement.Entity(
+            id = 1,
+            name = "E",
+            position = ElementPosition(100, 100, 102, 66),
+        )
+        val compPos = ElementPosition(220, 115, 80, 32)
+        val child1 = SchemaElement.Attribute(
+            id = 3,
+            name = "C1",
+            position = ElementPosition(500, 500, 73, 16),
+            ownerId = 5,
+        )
+        val child2 = SchemaElement.Attribute(
+            id = 4,
+            name = "C2",
+            position = ElementPosition(600, 600, 73, 16),
+            ownerId = 5,
+        )
+        val composite = SchemaElement.Attribute(
+            id = 5,
+            name = "Comp",
+            position = compPos,
+            ownerId = 1,
+            childAttributeIds = listOf(3, 4),
+            multiValuedCount = 2,
+        )
+        val schema = ConceptualSchema(
+            elements = mapOf(1 to ent, 3 to child1, 4 to child2, 5 to composite),
+            connections = listOf(
+                Connection(10, 5, 1, null, showCardinality = false, orientation = LineOrientation.VERTICAL),
+                Connection(11, 3, 5, null, showCardinality = false, orientation = LineOrientation.VERTICAL),
+                Connection(12, 4, 5, null, showCardinality = false, orientation = LineOrientation.VERTICAL),
+            ),
+            nextId = 20,
+        )
+
+        // Act
+        val out = applyOrganizeAttributesMenuAction(schema, 5)
+
+        // Assert
+        assertNotNull(out)
+        val compAfter = out.elements[5] as SchemaElement.Attribute
+        assertEquals(compPos, compAfter.position)
+        val c1After = out.elements[3] as SchemaElement.Attribute
+        val c2After = out.elements[4] as SchemaElement.Attribute
+        assertTrue(
+            c1After.position != child1.position || c2After.position != child2.position,
+            "Children should be repositioned along the composite bar",
+        )
+    }
+
+    @Test
+    fun `organize composite only leaves sibling direct attributes unmoved on entity`() {
+        // Arrange
+        val ent = SchemaElement.Entity(1, "E", ElementPosition(100, 100, 102, 66))
+        val sibling = SchemaElement.Attribute(
+            id = 2,
+            name = "Sib",
+            position = ElementPosition(220, 50, 73, 16),
+            ownerId = 1,
+        )
+        val compPos = ElementPosition(400, 200, 80, 32)
+        val child1 = SchemaElement.Attribute(3, "C1", ElementPosition(900, 900, 73, 16), ownerId = 5)
+        val child2 = SchemaElement.Attribute(4, "C2", ElementPosition(910, 910, 73, 16), ownerId = 5)
+        val composite = SchemaElement.Attribute(
+            id = 5,
+            name = "Comp",
+            position = compPos,
+            ownerId = 1,
+            childAttributeIds = listOf(3, 4),
+            multiValuedCount = 2,
+        )
+        val schema = ConceptualSchema(
+            elements = mapOf(1 to ent, 2 to sibling, 3 to child1, 4 to child2, 5 to composite),
+            connections = listOf(
+                Connection(10, 2, 1, null, showCardinality = false, orientation = LineOrientation.VERTICAL),
+                Connection(11, 5, 1, null, showCardinality = false, orientation = LineOrientation.VERTICAL),
+                Connection(12, 3, 5, null, showCardinality = false, orientation = LineOrientation.VERTICAL),
+                Connection(13, 4, 5, null, showCardinality = false, orientation = LineOrientation.VERTICAL),
+            ),
+            nextId = 20,
+        )
+
+        // Act
+        val out = applyOrganizeAttributesMenuAction(schema, 5)
+
+        // Assert
+        assertNotNull(out)
+        assertEquals(compPos, (out.elements[5] as SchemaElement.Attribute).position)
+        assertEquals(sibling.position, (out.elements[2] as SchemaElement.Attribute).position)
+    }
 }
