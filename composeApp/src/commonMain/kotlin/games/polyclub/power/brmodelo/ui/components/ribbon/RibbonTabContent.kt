@@ -30,7 +30,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import games.polyclub.power.brmodelo.ui.DropdownEntry
+import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.MenuEntry
+import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.components.AppColors
 import games.polyclub.power.brmodelo.generated.resources.Res
 import games.polyclub.power.brmodelo.generated.resources.apagar_s
@@ -69,7 +71,10 @@ private val RIBBON_HEIGHT = 92.dp
 private val WIDE_BUTTON_W = 114.dp
 
 @Composable
-internal fun RibbonEsquemaConceitual() {
+internal fun RibbonEsquemaConceitual(
+    entityToolBinding: EntityToolRibbonBinding? = null,
+    observationToolBinding: ObservationToolRibbonBinding? = null,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -80,26 +85,15 @@ internal fun RibbonEsquemaConceitual() {
     ) {
         RibbonGroupWithSeparators(
             title = "Ferramentas",
+            entityToolBinding = entityToolBinding,
+            observationToolBinding = observationToolBinding,
             groups = listOf(
                 listOf(MenuEntry("Seleção", Res.drawable.cursor_l)),
                 listOf(
                     MenuEntry(
                         title = "Entidade",
                         icon = Res.drawable.entidade_l,
-                        dropdown = listOf(
-                            DropdownEntry(
-                                "Entidade",
-                                Res.drawable.entidade_s
-                            ),
-                            DropdownEntry(
-                                "Relação",
-                                Res.drawable.entidade_associativa_s
-                            ),
-                            DropdownEntry(
-                                "Entidade Associativa",
-                                Res.drawable.relacao_s
-                            )
-                        )
+                        dropdown = conceptualEntityDropdownEntries(),
                     ),
                     MenuEntry(
                         title = "Especialização",
@@ -158,11 +152,13 @@ internal fun RibbonEsquemaConceitual() {
                 ),
                 listOf(
                     MenuEntry("Observação", Res.drawable.texto_l),
+                ),
+                listOf(
                     MenuEntry(
                         "Excluir\nObjeto",
                         Res.drawable.excluir_2l
-                    )
-                )
+                    ),
+                ),
             )
         )
         Spacer(modifier = Modifier.width(5.dp))

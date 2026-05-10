@@ -71,6 +71,10 @@ internal fun BrModeloScreen(
     onCloseCurrentModel: () -> Unit = {},
     onSave: () -> Unit = {},
     onSaveAs: () -> Unit = {},
+    entityToolBinding: EntityToolRibbonBinding? = null,
+    observationToolBinding: ObservationToolRibbonBinding? = null,
+    conceptualCanvasTool: ConceptualCanvasTool = ConceptualCanvasTool.None,
+    onClearConceptualCanvasTool: () -> Unit = {},
 ) {
     var exportCounter by remember { mutableIntStateOf(0) }
     var exportIsJpeg by remember { mutableStateOf(true) }
@@ -93,6 +97,8 @@ internal fun BrModeloScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             HeaderRibbon(
                 selectedTab = selectedTab,
+                entityToolBinding = entityToolBinding,
+                observationToolBinding = observationToolBinding,
                 onMainMenuClick = onMainMenuToggle,
                 onTabSelect = onTabSelect,
             )
@@ -111,6 +117,8 @@ internal fun BrModeloScreen(
                 onSchemaPreview = onSchemaPreview,
                 onSchemaCommit = onSchemaCommit,
                 onRevertSchemaPreview = onRevertSchemaPreview,
+                conceptualCanvasTool = conceptualCanvasTool,
+                onClearConceptualCanvasTool = onClearConceptualCanvasTool,
             )
         }
 

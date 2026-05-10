@@ -45,6 +45,10 @@ internal object AppColors {
     /** Split button: extra highlight on the main (tool) hit target while hovered. */
     val ribbonSplitMainSegmentHover = Color(0xFFFFE078)
 
+    /** Split ribbon button: soft chrome when the tool is armed but the pointer is not over the control. */
+    val ribbonToolArmedIdleFill = Color(0xFFFFF6D8)
+    val ribbonToolArmedBorder = Color(0xFFC9A94A)
+
     /** Split button: extra highlight on the arrow strip while hovered (distinct from [ribbonSplitMainSegmentHover]). */
     val ribbonSplitArrowSegmentHover = Color(0xFFF0C85A)
 

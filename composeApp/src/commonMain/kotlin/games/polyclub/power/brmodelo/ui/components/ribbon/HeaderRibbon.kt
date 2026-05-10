@@ -26,14 +26,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
+import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.RibbonTab
 import games.polyclub.power.brmodelo.ui.components.AppColors
 
 @Composable
 internal fun HeaderRibbon(
     selectedTab: RibbonTab,
+    entityToolBinding: EntityToolRibbonBinding? = null,
+    observationToolBinding: ObservationToolRibbonBinding? = null,
     onMainMenuClick: () -> Unit,
-    onTabSelect: (RibbonTab) -> Unit
+    onTabSelect: (RibbonTab) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -49,7 +53,10 @@ internal fun HeaderRibbon(
             onTabSelect = onTabSelect
         )
         when (selectedTab) {
-            RibbonTab.EsquemaConceitual -> RibbonEsquemaConceitual()
+            RibbonTab.EsquemaConceitual -> RibbonEsquemaConceitual(
+                entityToolBinding = entityToolBinding,
+                observationToolBinding = observationToolBinding,
+            )
             RibbonTab.Opcoes            -> RibbonOpcoes()
         }
     }

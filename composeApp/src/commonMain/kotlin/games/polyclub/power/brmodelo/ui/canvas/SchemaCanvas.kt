@@ -36,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -47,6 +48,9 @@ import games.polyclub.power.brmodelo.domain.Connection
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.domain.ElementPosition
 import games.polyclub.power.brmodelo.domain.SchemaElement
+import games.polyclub.power.brmodelo.domain.placeConceptualItem
+import games.polyclub.power.brmodelo.ui.ConceptualCanvasTool
+import games.polyclub.power.brmodelo.ui.toPlacementKindOrNull
 import games.polyclub.power.brmodelo.ui.canvas.drawSchema
 import games.polyclub.power.brmodelo.ui.canvas.withPosition
 import kotlin.math.abs
@@ -76,6 +80,10 @@ private const val GRID_STEP = 20f
  * @param onSelectionChange   Called when the selection should change.
  * @param onSchemaPreview     Called with intermediate schema states during drag (no undo entry).
  * @param onSchemaCommit      Called when a drag or resize is committed (creates undo entry).
+ * @param conceptualCanvasTool When set to an entity placement variant, a tap on empty canvas
+ *                             inserts an element ([games.polyclub.power.brmodelo.domain.placeConceptualItem])
+ *                             with incremental names and default geometry from [games.polyclub.power.brmodelo.domain.ConceptualPlacementDefaults].
+ * @param canvasFocusRequester When set, receives focus on pointer down so parent shortcuts (e.g. Escape) apply after interacting with the canvas.
  * @param modifier            Layout modifier applied to the outer Box.
  */
 @Composable
@@ -85,6 +93,8 @@ internal fun SchemaCanvas(
     onSelectionChange: (CanvasSelection) -> Unit = {},
     onSchemaPreview: (ConceptualSchema) -> Unit = {},
     onSchemaCommit: (ConceptualSchema) -> Unit = {},
+    conceptualCanvasTool: ConceptualCanvasTool = ConceptualCanvasTool.None,
+    canvasFocusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier,
 ) {
     var panOffset by remember { mutableStateOf(Offset(8f, 8f)) }
@@ -98,6 +108,8 @@ internal fun SchemaCanvas(
     val currentOnSchemaPreview by rememberUpdatedState(onSchemaPreview)
     val currentOnSchemaCommit by rememberUpdatedState(onSchemaCommit)
     val currentPanOffset by rememberUpdatedState(panOffset)
+    val currentCanvasFocusRequester by rememberUpdatedState(canvasFocusRequester)
+    val currentConceptualTool by rememberUpdatedState(conceptualCanvasTool)
 
     Box(
         modifier = modifier
@@ -106,6 +118,8 @@ internal fun SchemaCanvas(
             .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
+                    currentCanvasFocusRequester?.requestFocus()
+
                     val panAtGestureStart = currentPanOffset
                     val schemaAtGestureStart = currentSchema
                     val selAtGestureStart = currentSelection
@@ -168,8 +182,22 @@ internal fun SchemaCanvas(
                                     currentOnSchemaCommit(finalSchema)
                                 }
                             } else if (hitResult == CanvasSelection.None) {
-                                // Tap on empty canvas (no drag) → deselect
-                                currentOnSelectionChange(CanvasSelection.None)
+                                val placementKind = currentConceptualTool.toPlacementKindOrNull()
+                                val baseSchema = schemaAtGestureStart
+                                if (placementKind != null && baseSchema != null) {
+                                    val topLeftX = schemaPoint.x.toInt()
+                                    val topLeftY = schemaPoint.y.toInt()
+                                    val (newSchema, newId) = baseSchema.placeConceptualItem(
+                                        placementKind,
+                                        topLeftX,
+                                        topLeftY,
+                                    )
+                                    currentOnSchemaCommit(newSchema)
+                                    currentOnSelectionChange(CanvasSelection.Element(newId))
+                                } else {
+                                    // Tap on empty canvas (no tool or no model) → deselect
+                                    currentOnSelectionChange(CanvasSelection.None)
+                                }
                             }
                             break
                         }

@@ -34,7 +34,26 @@ internal data class DropdownEntry(
     val label: String,
     val icon: DrawableResource,
     val enabled: Boolean = true,
-    val isSeparatorAbove: Boolean = false
+    val isSeparatorAbove: Boolean = false,
+    /** When set, choosing this row selects an entity placement variant on the canvas. */
+    val entityVariant: EntityToolVariant? = null,
+    /** Shorter label for the ribbon split button when this variant is selected (optional). */
+    val ribbonShortTitle: String? = null,
+)
+
+internal data class EntityToolRibbonBinding(
+    val variant: EntityToolVariant,
+    val isArmed: Boolean,
+    val displayTitle: String,
+    val displayIcon: DrawableResource,
+    val onMainClick: () -> Unit,
+    val onDropdownVariant: (EntityToolVariant) -> Unit,
+)
+
+/** Toggle for the conceptual-schema “Observação” placement tool (single ribbon button). */
+internal data class ObservationToolRibbonBinding(
+    val isArmed: Boolean,
+    val onClick: () -> Unit,
 )
 
 internal data class MenuEntry(

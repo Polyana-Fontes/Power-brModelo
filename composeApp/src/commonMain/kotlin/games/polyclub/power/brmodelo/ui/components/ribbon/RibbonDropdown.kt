@@ -67,7 +67,8 @@ private const val MENU_VPAD_DP = 8
 internal fun RibbonDropdownMenu(
     items: List<DropdownEntry>,
     expanded: Boolean,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onItemSelected: (DropdownEntry) -> Unit = {},
 ) {
     DropdownMenu(
         expanded = expanded,
@@ -95,7 +96,10 @@ internal fun RibbonDropdownMenu(
                 }
                 RibbonDropdownItem(
                     item = item,
-                    onClick = onDismiss
+                    onClick = {
+                        onItemSelected(item)
+                        onDismiss()
+                    },
                 )
             }
         }

@@ -41,7 +41,11 @@ import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaBrmPar
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaXmlParser
 import games.polyclub.power.brmodelo.ui.BrModeloScreen
 import games.polyclub.power.brmodelo.ui.CloseTabUnsavedDialog
+import games.polyclub.power.brmodelo.ui.ConceptualCanvasTool
 import games.polyclub.power.brmodelo.ui.EditorTabSession
+import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.EntityToolVariant
 import games.polyclub.power.brmodelo.ui.MainMenuType
 import games.polyclub.power.brmodelo.ui.PickedFile
 import games.polyclub.power.brmodelo.ui.QuitApplicationUnsavedDialog
@@ -51,6 +55,9 @@ import games.polyclub.power.brmodelo.ui.isDesktopTarget
 import games.polyclub.power.brmodelo.ui.isWindowDragActive
 import games.polyclub.power.brmodelo.ui.setupWindowDragDrop
 import games.polyclub.power.brmodelo.ui.showNativeFilePicker
+import games.polyclub.power.brmodelo.ui.components.ribbon.entityVariantRibbonPresentation
+import games.polyclub.power.brmodelo.ui.matchesEntityVariant
+import games.polyclub.power.brmodelo.ui.toConceptualTool
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -59,6 +66,9 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
     var isMainMenuOpen by remember { mutableStateOf(false) }
     var activeMenu by remember { mutableStateOf<MainMenuType?>(null) }
     var selectedRibbonTab by remember { mutableStateOf(RibbonTab.EsquemaConceitual) }
+
+    var conceptualCanvasTool by remember { mutableStateOf<ConceptualCanvasTool>(ConceptualCanvasTool.None) }
+    var entityToolVariant by remember { mutableStateOf(EntityToolVariant.Plain) }
 
     val initialTabId = 1L
     var nextTabId by remember { mutableLongStateOf(initialTabId + 1) }
@@ -261,6 +271,37 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
 
     val sel = selectedSession()
 
+    val (entityTitle, entityIcon) = entityVariantRibbonPresentation(entityToolVariant)
+    val entityToolBinding = EntityToolRibbonBinding(
+        variant = entityToolVariant,
+        isArmed = conceptualCanvasTool.matchesEntityVariant(entityToolVariant),
+        displayTitle = entityTitle,
+        displayIcon = entityIcon,
+        onMainClick = {
+            if (conceptualCanvasTool.matchesEntityVariant(entityToolVariant)) {
+                conceptualCanvasTool = ConceptualCanvasTool.None
+            } else {
+                conceptualCanvasTool = entityToolVariant.toConceptualTool()
+            }
+        },
+        onDropdownVariant = { v ->
+            entityToolVariant = v
+            conceptualCanvasTool = v.toConceptualTool()
+        },
+    )
+
+    val observationToolBinding = ObservationToolRibbonBinding(
+        isArmed = conceptualCanvasTool is ConceptualCanvasTool.Observation,
+        onClick = {
+            conceptualCanvasTool =
+                if (conceptualCanvasTool is ConceptualCanvasTool.Observation) {
+                    ConceptualCanvasTool.None
+                } else {
+                    ConceptualCanvasTool.Observation
+                }
+        },
+    )
+
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFE3E3E3)) {
             Box(modifier = Modifier.fillMaxSize()) {
@@ -299,6 +340,10 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                     onCloseCurrentModel = { requestCloseTab(selectedTabIndex) },
                     onSave = { enqueueSave(saveAs = false) },
                     onSaveAs = { enqueueSave(saveAs = true) },
+                    entityToolBinding = entityToolBinding,
+                    observationToolBinding = observationToolBinding,
+                    conceptualCanvasTool = conceptualCanvasTool,
+                    onClearConceptualCanvasTool = { conceptualCanvasTool = ConceptualCanvasTool.None },
                 )
 
                 pendingCloseTabIndex?.let { closeIdx ->

@@ -45,6 +45,8 @@ internal fun WorkspaceArea(
     onSchemaPreview: (ConceptualSchema) -> Unit = {},
     onSchemaCommit: (ConceptualSchema) -> Unit = {},
     onRevertSchemaPreview: () -> Unit = {},
+    conceptualCanvasTool: ConceptualCanvasTool = ConceptualCanvasTool.None,
+    onClearConceptualCanvasTool: () -> Unit = {},
 ) {
     Row(modifier = Modifier.fillMaxSize().padding(8.dp)) {
         MainCanvasPanel(
@@ -60,6 +62,8 @@ internal fun WorkspaceArea(
             onSelectionChange = onSelectionChange,
             onSchemaPreview = onSchemaPreview,
             onSchemaCommit = onSchemaCommit,
+            conceptualCanvasTool = conceptualCanvasTool,
+            onClearConceptualCanvasTool = onClearConceptualCanvasTool,
             modifier = Modifier.weight(1f),
         )
         Spacer(modifier = Modifier.width(8.dp))

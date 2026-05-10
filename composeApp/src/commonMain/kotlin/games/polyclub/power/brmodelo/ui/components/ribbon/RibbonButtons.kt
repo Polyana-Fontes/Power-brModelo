@@ -57,8 +57,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import games.polyclub.power.brmodelo.ui.DropdownEntry
+import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.MenuEntry
+import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.components.AppColors
+import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
 private val SPLIT_ARROW_STRIP_H = 14.dp
@@ -79,7 +83,11 @@ private val RIBBON_SPLIT_DROPDOWN_TITLES = setOf(
 @Composable
 internal fun RibbonSplitDropdownButton(
     entry: MenuEntry,
+    displayTitle: String = entry.title,
+    displayIcon: DrawableResource = entry.icon,
+    isPrimaryToolArmed: Boolean = false,
     onMainClick: () -> Unit = {},
+    onDropdownItemSelected: (DropdownEntry) -> Unit = {},
 ) {
     val dropdownItems = entry.dropdown ?: return
     var showDropdown by remember { mutableStateOf(false) }
@@ -93,17 +101,29 @@ internal fun RibbonSplitDropdownButton(
     val isControlActive =
         isOuterHovered || isMainHovered || isArrowHovered || showDropdown
 
+    val outerBg = when {
+        isControlActive -> AppColors.hoverBg
+        isPrimaryToolArmed -> AppColors.ribbonToolArmedIdleFill
+        else -> Color.Transparent
+    }
+    val outerBorder = when {
+        isControlActive -> AppColors.hoverBorder
+        isPrimaryToolArmed -> AppColors.ribbonToolArmedBorder
+        else -> Color.Transparent
+    }
+
     Box {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Top,
             modifier = Modifier
-                // HorizontalDivider uses fillMaxWidth(); without intrinsic width the column would grow to the Row's max width.
-                .width(IntrinsicSize.Min)
+                // Min collapses to icon width when the main segment uses fillMaxWidth(); Max uses the
+                // widest child's intrinsic width (full short title e.g. "Ent. Assoc.").
+                .width(IntrinsicSize.Max)
                 .fillMaxHeight()
                 .hoverable(outerInteraction)
-                .background(if (isControlActive) AppColors.hoverBg else Color.Transparent, AppColors.hoverShape)
-                .border(1.dp, if (isControlActive) AppColors.hoverBorder else Color.Transparent, AppColors.hoverShape)
+                .background(outerBg, AppColors.hoverShape)
+                .border(1.dp, outerBorder, AppColors.hoverShape)
                 .padding(horizontal = 3.dp, vertical = 3.dp),
         ) {
             Column(
@@ -130,18 +150,23 @@ internal fun RibbonSplitDropdownButton(
                     },
             ) {
                 Image(
-                    painter = painterResource(entry.icon),
-                    contentDescription = entry.title,
+                    painter = painterResource(displayIcon),
+                    contentDescription = displayTitle,
                     modifier = Modifier.size(32.dp),
                     contentScale = ContentScale.Fit,
                 )
                 Text(
-                    text = entry.title,
+                    text = displayTitle,
                     fontSize = 9.sp,
                     color = Color(0xFF2C3E50),
                     textAlign = TextAlign.Center,
                     lineHeight = 10.sp,
-                    modifier = Modifier.padding(top = 3.dp),
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 3.dp),
                 )
                 Spacer(modifier = Modifier.weight(1f))
             }
@@ -193,6 +218,65 @@ internal fun RibbonSplitDropdownButton(
             items = dropdownItems,
             expanded = showDropdown,
             onDismiss = { showDropdown = false },
+            onItemSelected = onDropdownItemSelected,
+        )
+    }
+}
+
+/**
+ * Single conceptual-schema tool button with optional “armed” chrome (same family as the entity split).
+ */
+@Composable
+internal fun RibbonArmedToolButton(
+    entry: MenuEntry,
+    isArmed: Boolean,
+    onClick: () -> Unit,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
+    val isActive = isHovered
+    val bg = when {
+        isActive -> AppColors.hoverBg
+        isArmed -> AppColors.ribbonToolArmedIdleFill
+        else -> Color.Transparent
+    }
+    val border = when {
+        isActive -> AppColors.hoverBorder
+        isArmed -> AppColors.ribbonToolArmedBorder
+        else -> Color.Transparent
+    }
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Top,
+        modifier = Modifier
+            .wrapContentWidth()
+            .fillMaxHeight()
+            .hoverable(interactionSource)
+            .background(bg, AppColors.hoverShape)
+            .border(1.dp, border, AppColors.hoverShape)
+            .padding(horizontal = 3.dp, vertical = 3.dp)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+            ),
+    ) {
+        Image(
+            painter = painterResource(entry.icon),
+            contentDescription = entry.title,
+            modifier = Modifier.size(32.dp),
+            contentScale = ContentScale.Fit,
+        )
+        Text(
+            text = entry.title,
+            fontSize = 9.sp,
+            color = Color(0xFF2C3E50),
+            textAlign = TextAlign.Center,
+            lineHeight = 10.sp,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 3.dp),
         )
     }
 }
@@ -202,8 +286,29 @@ internal fun RibbonSplitDropdownButton(
  * ([RIBBON_SPLIT_DROPDOWN_TITLES]); otherwise [RibbonButton].
  */
 @Composable
-internal fun RibbonMenuEntryButton(entry: MenuEntry) {
-    if (entry.title in RIBBON_SPLIT_DROPDOWN_TITLES && !entry.dropdown.isNullOrEmpty()) {
+internal fun RibbonMenuEntryButton(
+    entry: MenuEntry,
+    entityToolBinding: EntityToolRibbonBinding? = null,
+    observationToolBinding: ObservationToolRibbonBinding? = null,
+) {
+    if (entry.title == "Observação" && observationToolBinding != null) {
+        RibbonArmedToolButton(
+            entry = entry,
+            isArmed = observationToolBinding.isArmed,
+            onClick = observationToolBinding.onClick,
+        )
+    } else if (entry.title == "Entidade" && entityToolBinding != null && !entry.dropdown.isNullOrEmpty()) {
+        RibbonSplitDropdownButton(
+            entry = entry,
+            displayTitle = entityToolBinding.displayTitle,
+            displayIcon = entityToolBinding.displayIcon,
+            isPrimaryToolArmed = entityToolBinding.isArmed,
+            onMainClick = entityToolBinding.onMainClick,
+            onDropdownItemSelected = { row ->
+                row.entityVariant?.let { entityToolBinding.onDropdownVariant(it) }
+            },
+        )
+    } else if (entry.title in RIBBON_SPLIT_DROPDOWN_TITLES && !entry.dropdown.isNullOrEmpty()) {
         RibbonSplitDropdownButton(entry = entry)
     } else {
         RibbonButton(entry)

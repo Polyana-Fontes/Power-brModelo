@@ -39,7 +39,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.MenuEntry
+import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.components.AppColors
 
 /** Standard group: all buttons in a single row, group title below. */
@@ -67,7 +69,12 @@ internal fun RibbonGroup(title: String, items: List<MenuEntry>) {
 
 /** Group with vertical separators between sub-groups. */
 @Composable
-internal fun RibbonGroupWithSeparators(title: String, groups: List<List<MenuEntry>>) {
+internal fun RibbonGroupWithSeparators(
+    title: String,
+    groups: List<List<MenuEntry>>,
+    entityToolBinding: EntityToolRibbonBinding? = null,
+    observationToolBinding: ObservationToolRibbonBinding? = null,
+) {
     Column(
         modifier = Modifier
             .fillMaxHeight()
@@ -84,7 +91,7 @@ internal fun RibbonGroupWithSeparators(title: String, groups: List<List<MenuEntr
         ) {
             groups.forEachIndexed { index, group ->
                 if (index > 0) RibbonGroupSeparator()
-                group.forEach { RibbonMenuEntryButton(it) }
+                group.forEach { RibbonMenuEntryButton(it, entityToolBinding, observationToolBinding) }
             }
         }
         RibbonGroupTitle(title)
