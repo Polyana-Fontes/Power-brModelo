@@ -23,6 +23,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.Fill
@@ -526,7 +527,7 @@ private fun DrawScope.drawAssociativeEntity(assoc: SchemaElement.AssociativeEnti
  *
  * - Identifier attributes: ellipse filled with [games.polyclub.power.brmodelo.ui.canvas.IDENTIFIER_FILL] (#963636).
  * - Multi-valued: cardinality string appended to label.
- * - Composite: blue asterisk (*) drawn at the appropriate corner.
+ * - Optional attributes: ellipse outline drawn with a dashed stroke.
  */
 private fun DrawScope.drawAttribute(
     attr: SchemaElement.Attribute,
@@ -562,7 +563,14 @@ private fun DrawScope.drawAttribute(
     }
 
     val ellipseFill = if (attr.isIdentifier) IDENTIFIER_FILL else Color.White
-    val ellipseStroke = Stroke(1f)
+    val ellipseStroke = if (attr.isOptional) {
+        Stroke(
+            width = 1f,
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(3f, 2f), 0f),
+        )
+    } else {
+        Stroke(1f)
+    }
 
     if (ellipseOnLeft) {
         // Stub: short horizontal line from left edge to x+5
