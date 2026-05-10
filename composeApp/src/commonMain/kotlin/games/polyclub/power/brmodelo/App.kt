@@ -37,11 +37,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolVariant
+import games.polyclub.power.brmodelo.domain.applyMergeEntityAndRelationshipToAssociative
+import games.polyclub.power.brmodelo.domain.entityAndRelationshipIdsForMerge
 import games.polyclub.power.brmodelo.domain.applyDemoteAssociativeToEntity
 import games.polyclub.power.brmodelo.domain.applyDemoteAssociativeToRelationship
 import games.polyclub.power.brmodelo.domain.applyOrganizeAttributesMenuAction
 import games.polyclub.power.brmodelo.domain.applyPromoteAttributeToEntity
 import games.polyclub.power.brmodelo.domain.applyPromoteRelationshipsToAssociativeEntities
+import games.polyclub.power.brmodelo.domain.canMergeEntityAndRelationshipToAssociativeMenu
 import games.polyclub.power.brmodelo.domain.canDemoteAssociativeToEntityMenu
 import games.polyclub.power.brmodelo.domain.canDemoteAssociativeToRelationshipMenu
 import games.polyclub.power.brmodelo.domain.canOrganizeAttributesMenuSelection
@@ -474,6 +477,14 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         val updated = applyDemoteAssociativeToEntity(tab.schema, tab.selection) ?: return@demEnt
         pushCommitOnSelected(updated.withNormalizedAttributeMultiValuedCounts())
     }
+    val mergeToAssocEnabled = canMergeEntityAndRelationshipToAssociativeMenu(sel.schema, sel.selection)
+    val onMergeEntityAndRelationshipToAssociative: () -> Unit = merge@{
+        val tab = tabSessions.getOrNull(selectedTabIndex) ?: return@merge
+        val entityId = entityAndRelationshipIdsForMerge(tab.schema, tab.selection)?.first ?: return@merge
+        val updated = applyMergeEntityAndRelationshipToAssociative(tab.schema, tab.selection) ?: return@merge
+        pushCommitOnSelected(updated.withNormalizedAttributeMultiValuedCounts())
+        mutateSelectedTab { it.copy(selection = CanvasSelection.Element(entityId)) }
+    }
     val operationsMenuBinding = OperationsMenuRibbonBinding(
         organizeAttributesEnabled = organizeAttrsEnabled,
         onOrganizeAttributes = onOrganizeAttributes,
@@ -487,6 +498,8 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         onDemoteAssociativeToRelationship = onDemoteAssociativeToRelationship,
         demoteAssociativeToEntityEnabled = demoteAssocEntEnabled,
         onDemoteAssociativeToEntity = onDemoteAssociativeToEntity,
+        mergeEntityAndRelationshipToAssociativeEnabled = mergeToAssocEnabled,
+        onMergeEntityAndRelationshipToAssociative = onMergeEntityAndRelationshipToAssociative,
     )
 
     MaterialTheme {

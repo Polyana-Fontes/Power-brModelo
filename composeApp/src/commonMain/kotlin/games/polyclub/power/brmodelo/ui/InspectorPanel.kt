@@ -160,6 +160,7 @@ private val LocalRevertSchemaPreview = staticCompositionLocalOf<() -> Unit> { { 
 private val HINTS: Map<String, String> = mapOf(
     "NOME"           to "Descrição/identificação do objeto.",
     "NOME_MODELO"    to "Nome do modelo conceitual.",
+    "DIC"            to "Dicionário de dados do objeto (metadados / glossário).",
     "OBS"            to "Algo importante a ser anotado para posterior observação.",
     "ALINHAMENTOLT_X" to "Reposiciona o controle quanto a posição no modelo (esquerda ou direita).",
     "ALINHAMENTOLT_Y" to "Reposiciona o controle quanto a posição vertical no modelo.",
@@ -178,6 +179,7 @@ private val HINTS: Map<String, String> = mapOf(
     "ENT_FRACA"      to "Tipo de entidade (fraca ou normal).",
     "CARDINALIDADE"  to "Cardinalidade do relacionamento entre as entidades.",
     "PAPEL"          to "Descrição do papel da cardinalidade (descrição/observação).",
+    "CARD_DIC"       to "Dicionário de dados da cardinalidade (metadados / glossário).",
     "CARD_OBS"       to "Algo importante a ser anotado para posterior observação.",
     "CARD_LT_X"      to "Posição horizontal da caixa da cardinalidade no modelo. Editável só quando \"Fixar posição\" for Sim.",
     "CARD_LT_Y"      to "Posição vertical da caixa da cardinalidade no modelo. Editável só quando \"Fixar posição\" for Sim.",
@@ -712,6 +714,19 @@ private fun ElementContent(
         } else {
             onSchemaCommit(schema.withElement(el))
         }
+    }
+    val dictCommitted = committedSchema?.elements?.get(element.id)?.dictionary ?: element.dictionary
+    EditableRow(
+        label = "Dicionário",
+        value = dictCommitted,
+        key = "DIC",
+        focusedKey = focusedKey,
+        onFocusChange = onFocusChange,
+        onLiveDraftChange = { draft ->
+            onSchemaPreview(schema.withElement(element.withDictionary(draft)))
+        },
+    ) { v ->
+        onSchemaCommit(schema.withElement(element.withDictionary(v)))
     }
     EditableRow(
         "Observação",
@@ -1292,6 +1307,28 @@ private fun CardinalityContent(
         },
     ) { v ->
         updateConn { it.copy(cardinalityRole = v) }
+    }
+
+    val dicCommitted =
+        committedSchema?.connections?.firstOrNull { it.id == conn.id }?.cardinalityDictionary
+            ?: conn.cardinalityDictionary
+    EditableRow(
+        label = "Dicionário",
+        value = dicCommitted,
+        key = "CARD_DIC",
+        focusedKey = focusedKey,
+        onFocusChange = onFocusChange,
+        onLiveDraftChange = { draft ->
+            onSchemaPreview(
+                schema.copy(
+                    connections = schema.connections.map {
+                        if (it.id == conn.id) it.copy(cardinalityDictionary = draft) else it
+                    },
+                ),
+            )
+        },
+    ) { v ->
+        updateConn { it.copy(cardinalityDictionary = v) }
     }
 
     val obsCommitted =
@@ -2060,6 +2097,16 @@ private fun SchemaElement.withObservations(o: String): SchemaElement = when (thi
     is SchemaElement.Specialization   -> copy(observations = o)
     is SchemaElement.SelfRelationship -> copy(observations = o)
     is SchemaElement.Annotation       -> copy(observations = o)
+}
+
+private fun SchemaElement.withDictionary(d: String): SchemaElement = when (this) {
+    is SchemaElement.Entity           -> copy(dictionary = d)
+    is SchemaElement.Relationship     -> copy(dictionary = d)
+    is SchemaElement.AssociativeEntity -> copy(dictionary = d)
+    is SchemaElement.Attribute        -> copy(dictionary = d)
+    is SchemaElement.Specialization   -> copy(dictionary = d)
+    is SchemaElement.SelfRelationship -> copy(dictionary = d)
+    is SchemaElement.Annotation       -> copy(dictionary = d)
 }
 
 private fun ArrowDirection.label(): String = when (this) {

@@ -466,6 +466,7 @@ object ConceptualSchemaXmlSerializer {
                         pos,
                         conn.cardinalityFixed,
                         conn.cardinalityRole,
+                        conn.cardinalityDictionary,
                         conn.cardinalityObservations,
                         conn.cardinalityAutoSize
                     )
@@ -479,6 +480,7 @@ object ConceptualSchemaXmlSerializer {
         position: ElementPosition,
         fixed: Boolean,
         role: String = "",
+        dictionary: String = "",
         observations: String = "",
         autoSize: Boolean = true,
     ): XmlNode {
@@ -501,7 +503,7 @@ object ConceptualSchemaXmlSerializer {
             add(buildDefaultFont())
             add(xmlNode("Atributos"))
             add(xmlNode("AtributosOcultos"))
-            textNode("Dicionario", "")
+            textNode("Dicionario", dictionary)
             boolValor("Nula", false)
             textNode("Observacao", observations)
             textNode("Futuro", "")

@@ -137,7 +137,13 @@ class ConceptualDemoteAssociativeEntityTest {
         assertEquals(outer, ent.position)
         assertEquals("eo", ent.observations)
         assertEquals("ed", ent.dictionary)
-        assertTrue(out.connections.isEmpty())
+        val newRel = out.relationships.single { it.id != 3 }
+        assertEquals("R", newRel.name)
+        assertEquals(associativeInnerDiamondPosition(outer), newRel.position)
+        assertEquals(1, out.connections.size)
+        assertEquals(newRel.id, out.connections.single().elementIdA)
+        assertEquals(1, out.connections.single().elementIdB)
+        assertFalse(out.connections.any { it.elementIdA == 3 || it.elementIdB == 3 })
     }
 
     @Test
@@ -183,6 +189,7 @@ class ConceptualDemoteAssociativeEntityTest {
         assertNotNull(out)
         assertTrue(out.elements[3] is SchemaElement.Entity)
         val newRel = out.relationships.single { it.id != 3 }
+        assertEquals("Relacao2", newRel.name)
         assertEquals(associativeInnerDiamondPosition(outer), newRel.position)
         val legs = out.connections.filter { it.elementIdA == newRel.id }.map { it.elementIdB }.toSet()
         assertEquals(setOf(1, 2), legs)
@@ -197,5 +204,36 @@ class ConceptualDemoteAssociativeEntityTest {
         // Act & Assert
         assertNull(applyDemoteAssociativeToRelationship(schema, CanvasSelection.None))
         assertNull(applyDemoteAssociativeToEntity(schema, CanvasSelection.None))
+    }
+
+    @Test
+    fun `demote to entity creates inner relationship with no legs when associative has no connections`() {
+        // Arrange
+        val outer = ElementPosition(200, 90, 127, 66)
+        val assoc =
+            SchemaElement.AssociativeEntity(
+                id = 3,
+                name = "Isolada",
+                position = outer,
+                relationshipName = "RelVazia",
+                relationshipDictionary = "dicRel",
+            )
+        val schema = ConceptualSchema(
+            elements = mapOf(3 to assoc),
+            connections = emptyList(),
+            nextId = 10,
+        )
+
+        // Act
+        val out = applyDemoteAssociativeToEntity(schema, CanvasSelection.Element(3))
+
+        // Assert
+        assertNotNull(out)
+        assertTrue(out.elements[3] is SchemaElement.Entity)
+        val newRel = out.relationships.single { it.id != 3 }
+        assertEquals("RelVazia", newRel.name)
+        assertEquals("dicRel", newRel.dictionary)
+        assertEquals(associativeInnerDiamondPosition(outer), newRel.position)
+        assertTrue(out.connections.isEmpty())
     }
 }

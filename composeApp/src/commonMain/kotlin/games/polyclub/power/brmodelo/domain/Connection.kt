@@ -78,6 +78,7 @@ enum class LineOrientation(val code: Int) {
  * @param useAssociativeOuterForEndB Same for [elementIdB] — typically `true` when the **entity** side of the link
  *                                   was chosen on the outer rectangle of an associative entity.
  * @param cardinalityObservations Free text on the cardinality label (Pascal `TCardinalidade.Observacao`).
+ * @param cardinalityDictionary Free text on the cardinality label (XML `<Dicionario>` under `<Cardinalidade>`).
  */
 data class Connection(
     val id: Int,
@@ -90,6 +91,7 @@ data class Connection(
     val orientation: LineOrientation = LineOrientation.HORIZONTAL,
     val cardinalityRole: String = "",
     val cardinalityObservations: String = "",
+    val cardinalityDictionary: String = "",
     val cardinalityPosition: ElementPosition? = null,
     val cardinalityAutoSize: Boolean = true,
     val useAssociativeOuterForEndA: Boolean = false,

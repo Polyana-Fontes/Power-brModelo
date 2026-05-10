@@ -470,6 +470,7 @@ object ConceptualSchemaBrmParser {
             orientation = orientation,
             cardinalityRole = node.strProp("Nome"),
             cardinalityObservations = node.strProp("Observacao"),
+            cardinalityDictionary = node.strProp("Dicionario"),
             cardinalityPosition = labelPos,
             cardinalityAutoSize = node.boolProp("TamAuto", true),
         )

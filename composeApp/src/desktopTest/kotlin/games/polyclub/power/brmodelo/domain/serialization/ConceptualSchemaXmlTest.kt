@@ -29,6 +29,7 @@ import kotlin.test.*
  *   one relationship. Small and easy to assert exhaustively.
  * - `MER-PousadaSolDaManha.xml` — a real-world hotel management model with
  *   specializations, auto-relationships and associative entities.
+ * - `dicionario.xml` — entity, attribute, and cardinality `<Dicionario>` text for regression tests.
  */
 class ConceptualSchemaXmlTest {
 
@@ -346,6 +347,41 @@ class ConceptualSchemaXmlTest {
 
         // Assert — MinCard=0 in the XML
         assertTrue(dataFim.isOptional, "dataFim must be optional (MinCard=0)")
+    }
+
+    @Test
+    fun `parse dicionario xml - dictionary on entity attribute and cardinality`() {
+        // Arrange
+        val schema = parseResource("dicionario.xml")
+
+        // Act
+        val ent = schema.elements[1] as SchemaElement.Entity
+        val attr = schema.elements[2] as SchemaElement.Attribute
+
+        // Assert
+        assertEquals("dados no dicionario", ent.dictionary)
+        assertEquals("dados aqui", attr.dictionary)
+        val cardConn = schema.connections.first { it.id == 6 }
+        assertEquals("dicionario na cardinalidade", cardConn.cardinalityDictionary)
+    }
+
+    @Test
+    fun `round-trip dicionario xml - dictionary preserved on entity attribute and cardinality`() {
+        // Arrange
+        val original = parseResource("dicionario.xml")
+
+        // Act
+        val reloaded = ConceptualSchemaXmlParser.parse(
+            ConceptualSchemaXmlSerializer.serialize(original).toByteArray(Charsets.UTF_8),
+        )
+
+        // Assert
+        val ent = reloaded.elements[1] as SchemaElement.Entity
+        val attr = reloaded.elements[2] as SchemaElement.Attribute
+        assertEquals("dados no dicionario", ent.dictionary)
+        assertEquals("dados aqui", attr.dictionary)
+        val cardConn = reloaded.connections.first { it.id == 6 }
+        assertEquals("dicionario na cardinalidade", cardConn.cardinalityDictionary)
     }
 
     // ─────────────────────────────────────────────────────────────────────────

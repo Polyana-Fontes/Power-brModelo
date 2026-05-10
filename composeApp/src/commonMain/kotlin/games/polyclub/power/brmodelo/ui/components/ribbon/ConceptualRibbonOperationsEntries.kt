@@ -37,6 +37,7 @@ internal fun conceptualOperationsDropdownEntries(
     promoteAttributeToEntityEnabled: Boolean,
     demoteAssociativeToRelationshipEnabled: Boolean,
     demoteAssociativeToEntityEnabled: Boolean,
+    mergeEntityAndRelationshipToAssociativeEnabled: Boolean,
 ): List<DropdownEntry> =
     listOf(
         DropdownEntry(
@@ -81,6 +82,12 @@ internal fun conceptualOperationsDropdownEntries(
             icon = Res.drawable.entidade_s,
             enabled = demoteAssociativeToEntityEnabled,
             conceptualOperation = ConceptualRibbonOperation.DemoteAssociativeToEntity,
+        ),
+        DropdownEntry(
+            label = "Unir em Entidade Associativa",
+            icon = Res.drawable.entidade_associativa_s,
+            enabled = mergeEntityAndRelationshipToAssociativeEnabled,
+            conceptualOperation = ConceptualRibbonOperation.MergeEntityAndRelationshipToAssociative,
         ),
         DropdownEntry(
             label = "Converter Esp. para Restrita",

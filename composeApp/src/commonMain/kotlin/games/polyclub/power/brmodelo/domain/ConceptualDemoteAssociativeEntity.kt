@@ -83,12 +83,12 @@ fun applyDemoteAssociativeToRelationship(
  *
  * Non-attribute connections that were incident on the associative (inner or outer legs to other
  * participants) are **removed** so the model never keeps plain **entity–entity** edges (invalid in MER).
- * Legs that used the **inner diamond** ([Connection.useAssociativeOuterForEndA]/B false on the
- * associative end) and link to at least **two** distinct conceptual participants
- * ([SchemaElement.Entity], [SchemaElement.AssociativeEntity], [SchemaElement.SelfRelationship])
- * are **replaced** by a new [SchemaElement.Relationship] at the old inner-diamond position, with
- * one connection per participant (cardinality copied when the old edge was `(associative → participant)`).
- * With fewer than two such participants, inner legs are only dropped.
+ * A new [SchemaElement.Relationship] is always created at the old inner-diamond position (same metadata
+ * as the associative’s inner relationship). For each leg that used the **inner diamond**
+ * ([Connection.useAssociativeOuterForEndA]/B false on the associative end) to a conceptual participant
+ * ([SchemaElement.Entity], [SchemaElement.AssociativeEntity], [SchemaElement.SelfRelationship]),
+ * a connection is added from that relationship to the participant (cardinality copied when the old edge
+ * was `(associative → participant)`). With zero inner participants, the relationship has no legs.
  * Attribute–owner links to the associative are preserved.
  *
  * Ribbon: **Operações → Separar Entidade da Relação**.
@@ -135,37 +135,35 @@ fun applyDemoteAssociativeToEntity(
                 ),
             )
 
-        if (innerParticipantTemplates.size >= 2) {
-            val (wRel, relId) = work.allocateId()
-            work = wRel
-            val rel =
-                SchemaElement.Relationship(
-                    id = relId,
-                    name = work.nextUnusedRelationshipName(),
-                    position = innerPos,
-                    observations = "",
-                    dictionary = "",
-                    labelStyle = ConceptualPlacementDefaults.labelStyle,
-                    hiddenAttributes = emptyList(),
-                    arrowDirection = ArrowDirection.NONE,
-                    showName = true,
-                )
-            work = work.withElement(rel)
+        val (wRel, relId) = work.allocateId()
+        work = wRel
+        val rel =
+            SchemaElement.Relationship(
+                id = relId,
+                name = assoc.relationshipName,
+                position = innerPos,
+                observations = assoc.relationshipObservations,
+                dictionary = assoc.relationshipDictionary,
+                labelStyle = assoc.labelStyle,
+                hiddenAttributes = emptyList(),
+                arrowDirection = assoc.arrowDirection,
+                showName = true,
+            )
+        work = work.withElement(rel)
 
-            for ((participantId, oldConn) in innerParticipantTemplates) {
-                if (isDuplicateConceptualRelEntityConnection(work, relId, participantId)) continue
-                val (wC, connId) = work.allocateId()
-                work = wC
-                work = work.withConnection(
-                    newRelationshipToParticipantConnection(
-                        id = connId,
-                        relId = relId,
-                        participantId = participantId,
-                        template = oldConn,
-                        associativeId = aid,
-                    ),
-                )
-            }
+        for ((participantId, oldConn) in innerParticipantTemplates) {
+            if (isDuplicateConceptualRelEntityConnection(work, relId, participantId)) continue
+            val (wC, connId) = work.allocateId()
+            work = wC
+            work = work.withConnection(
+                newRelationshipToParticipantConnection(
+                    id = connId,
+                    relId = relId,
+                    participantId = participantId,
+                    template = oldConn,
+                    associativeId = aid,
+                ),
+            )
         }
     }
     return work
@@ -226,6 +224,7 @@ private fun newRelationshipToParticipantConnection(
                 orientation = template.orientation,
                 cardinalityRole = template.cardinalityRole,
                 cardinalityObservations = template.cardinalityObservations,
+                cardinalityDictionary = template.cardinalityDictionary,
                 cardinalityPosition = template.cardinalityPosition,
                 cardinalityAutoSize = template.cardinalityAutoSize,
                 useAssociativeOuterForEndA = false,
