@@ -167,7 +167,7 @@ private fun MainMenuItems(
 
         HorizontalDivider(color = SEPARATOR, thickness = 1.dp, modifier = Modifier.padding(horizontal = 4.dp))
 
-        MainMenuItem("Configurações", Res.drawable.configuracoes_2s)
+        MainMenuItem("Configurações", Res.drawable.configuracoes_2s, enabled = false)
 
         if (isDesktopTarget) {
             HorizontalDivider(color = SEPARATOR, thickness = 1.dp, modifier = Modifier.padding(horizontal = 4.dp))
@@ -186,11 +186,13 @@ private fun MainMenuItem(
     icon: DrawableResource,
     hasSubmenu: Boolean = false,
     selected: Boolean = false,
+    enabled: Boolean = true,
     onHover: () -> Unit = {},
     onClick: () -> Unit = {},
 ) {
     var isHovered by remember { mutableStateOf(false) }
     val bg = when {
+        !enabled -> Color(0xFFE8EBF0)
         selected  -> MENU_ACTIVE
         isHovered -> MENU_ACTIVE.copy(alpha = 0.45f)
         else      -> Color.Transparent
@@ -205,11 +207,13 @@ private fun MainMenuItem(
                         val event = awaitPointerEvent()
                         when (event.type) {
                             PointerEventType.Enter -> {
-                                isHovered = true
-                                if (hasSubmenu) onHover()
+                                if (enabled) {
+                                    isHovered = true
+                                    if (hasSubmenu) onHover()
+                                }
                             }
                             PointerEventType.Exit  -> isHovered = false
-                            PointerEventType.Release -> if (!hasSubmenu) onClick()
+                            PointerEventType.Release -> if (!hasSubmenu && enabled) onClick()
                         }
                     }
                 }
@@ -221,13 +225,14 @@ private fun MainMenuItem(
             painter = painterResource(icon),
             contentDescription = title,
             modifier = Modifier.size(18.dp),
-            contentScale = ContentScale.Fit
+            contentScale = ContentScale.Fit,
+            alpha = if (enabled) 1f else 0.5f,
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = title,
             fontSize = 12.sp,
-            color = MENU_TEXT,
+            color = if (enabled) MENU_TEXT else Color(0xFF8899AA),
             modifier = Modifier.weight(1f),
             maxLines = 1,
             softWrap = false
@@ -289,7 +294,8 @@ private fun NewModelSubmenu(onNewConceptualModel: () -> Unit = {}) {
         SubmenuCard(
             title = "Modelo Lógico",
             description = "Criar um novo modelo lógico",
-            icon = Res.drawable.modelo_logico_s
+            icon = Res.drawable.modelo_logico_s,
+            enabled = false,
         )
         Spacer(modifier = Modifier.height(14.dp))
         Text(
@@ -323,13 +329,15 @@ private fun PrintSubmenu(
         SubmenuCard(
             "Imprimir",
             "Permite a impressão do modelo corrente.",
-            Res.drawable.imprimir_s
+            Res.drawable.imprimir_s,
+            enabled = false,
         )
         Spacer(modifier = Modifier.height(6.dp))
         SubmenuCard(
             "Gerar Dicionário do Esquema",
             "Permite gerar o dicionário de dados geral do esquema.",
-            Res.drawable.dicionario_dados_3s
+            Res.drawable.dicionario_dados_3s,
+            enabled = false,
         )
         Spacer(modifier = Modifier.height(6.dp))
         SubmenuCard(
@@ -355,10 +363,15 @@ private fun SubmenuCard(
     title: String,
     description: String,
     icon: DrawableResource,
+    enabled: Boolean = true,
     onClick: () -> Unit = {},
 ) {
     var isHovered by remember { mutableStateOf(false) }
-    val bg = if (isHovered) Color(0xFFDDE6F4) else Color(0xFFF0F4FA)
+    val bg = when {
+        !enabled -> Color(0xFFE5E8ED)
+        isHovered -> Color(0xFFDDE6F4)
+        else -> Color(0xFFF0F4FA)
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -370,9 +383,9 @@ private fun SubmenuCard(
                     while (true) {
                         val event = awaitPointerEvent()
                         when (event.type) {
-                            PointerEventType.Enter   -> isHovered = true
+                            PointerEventType.Enter   -> if (enabled) isHovered = true
                             PointerEventType.Exit    -> isHovered = false
-                            PointerEventType.Release -> onClick()
+                            PointerEventType.Release -> if (enabled) onClick()
                         }
                     }
                 }
@@ -384,12 +397,23 @@ private fun SubmenuCard(
             painter = painterResource(icon),
             contentDescription = title,
             modifier = Modifier.size(18.dp).padding(top = 1.dp),
-            contentScale = ContentScale.Fit
+            contentScale = ContentScale.Fit,
+            alpha = if (enabled) 1f else 0.5f,
         )
         Spacer(modifier = Modifier.width(8.dp))
         Column {
-            Text(title, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MENU_TEXT)
-            Text(description, fontSize = 10.sp, color = Color(0xFF4D5C6A), lineHeight = 12.sp)
+            Text(
+                title,
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp,
+                color = if (enabled) MENU_TEXT else Color(0xFF8899AA),
+            )
+            Text(
+                description,
+                fontSize = 10.sp,
+                color = if (enabled) Color(0xFF4D5C6A) else Color(0xFF9AA5AE),
+                lineHeight = 12.sp,
+            )
         }
     }
 }

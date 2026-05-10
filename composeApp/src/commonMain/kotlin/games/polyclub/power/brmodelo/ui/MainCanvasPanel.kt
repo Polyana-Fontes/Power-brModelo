@@ -110,6 +110,8 @@ internal fun MainCanvasPanel(
     onCopyRequest: () -> Unit = {},
     onCutRequest: () -> Unit = {},
     onPasteRequest: () -> Unit = {},
+    onUndoRequest: () -> Unit = {},
+    onRedoRequest: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val selectedTab = canvasTabs.getOrNull(selectedCanvasTabIndex)
@@ -146,6 +148,22 @@ internal fun MainCanvasPanel(
                 .focusable()
                 .onPreviewKeyEvent { event ->
                     if (event.type == KeyEventType.KeyDown) {
+                        if (event.isCtrlPressed || event.isMetaPressed) {
+                            when {
+                                event.key == Key.Z && event.isShiftPressed -> {
+                                    onRedoRequest()
+                                    return@onPreviewKeyEvent true
+                                }
+                                event.key == Key.Z && !event.isShiftPressed -> {
+                                    onUndoRequest()
+                                    return@onPreviewKeyEvent true
+                                }
+                                event.key == Key.Y -> {
+                                    onRedoRequest()
+                                    return@onPreviewKeyEvent true
+                                }
+                            }
+                        }
                         val sch = schema
                         if (sch != null &&
                             (event.isCtrlPressed || event.isMetaPressed) &&

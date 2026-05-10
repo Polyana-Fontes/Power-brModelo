@@ -154,15 +154,17 @@ internal fun RibbonOpcoes(
             largeButtonWidth = WIDE_BUTTON_W,
             largeEntry = MenuEntry(
                 "Visualizar Esquema\nXML com XSLT",
-                Res.drawable.visualizar_l
+                Res.drawable.visualizar_l,
+                enabled = false,
             ),
             smallEntries = listOf(
                 MenuEntry(
                     "Exibir Log de Operações",
-                    Res.drawable.log_s
+                    Res.drawable.log_s,
+                    enabled = false,
                 ),
-                MenuEntry("Limpar Log", Res.drawable.apagar_s),
-                MenuEntry("Salvar Log", Res.drawable.salvar_s)
+                MenuEntry("Limpar Log", Res.drawable.apagar_s, enabled = false),
+                MenuEntry("Salvar Log", Res.drawable.salvar_s, enabled = false),
             )
         )
         Spacer(modifier = Modifier.width(5.dp))
@@ -196,7 +198,8 @@ internal fun RibbonOpcoes(
             items = listOf(
                 MenuEntry(
                     "Selecionar\nFonte",
-                    Res.drawable.fonte_l
+                    Res.drawable.fonte_l,
+                    enabled = false,
                 )
             )
         )

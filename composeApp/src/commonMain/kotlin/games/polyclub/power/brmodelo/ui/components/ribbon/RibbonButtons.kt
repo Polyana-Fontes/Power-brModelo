@@ -389,8 +389,11 @@ internal fun RibbonButton(
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
     var showDropdown by remember { mutableStateOf(false) }
+    val enabled = entry.enabled
     val hasDropdown = !entry.dropdown.isNullOrEmpty()
-    val isActive = isHovered || showDropdown
+    val canToggleDropdown = hasDropdown && enabled
+    val canInvokeClick = !hasDropdown && enabled && entry.onClick != null
+    val isActive = enabled && (isHovered || showDropdown)
 
     Box {
         Column(
@@ -399,33 +402,43 @@ internal fun RibbonButton(
             modifier = Modifier
                 .wrapContentWidth()
                 .fillMaxHeight()
-                .hoverable(interactionSource)
+                .then(if (enabled && (hasDropdown || entry.onClick != null)) Modifier.hoverable(interactionSource) else Modifier)
                 .background(if (isActive) AppColors.hoverBg else Color.Transparent, AppColors.hoverShape)
                 .border(1.dp, if (isActive) AppColors.hoverBorder else Color.Transparent, AppColors.hoverShape)
                 .padding(horizontal = 3.dp, vertical = 3.dp)
                 .then(
-                    if (hasDropdown) Modifier.clickable(
-                        interactionSource = interactionSource,
-                        indication = null
-                    ) { showDropdown = !showDropdown } else Modifier
-                )
+                    when {
+                        canToggleDropdown -> Modifier.clickable(
+                            interactionSource = interactionSource,
+                            indication = null,
+                        ) { showDropdown = !showDropdown }
+                        canInvokeClick -> Modifier.clickable(
+                            interactionSource = interactionSource,
+                            indication = null,
+                            onClick = entry.onClick!!,
+                        )
+                        else -> Modifier
+                    },
+                ),
         ) {
             Image(
                 painter = painterResource(entry.icon),
                 contentDescription = entry.title,
                 modifier = Modifier.size(32.dp),
-                contentScale = ContentScale.Fit
+                contentScale = ContentScale.Fit,
+                alpha = if (enabled) 1f else 0.55f,
+                colorFilter = if (enabled) null else ribbonDisabledGrayscale,
             )
             Text(
                 text = entry.title,
                 fontSize = 9.sp,
-                color = Color(0xFF2C3E50),
+                color = if (enabled) Color(0xFF2C3E50) else Color(0xFF8A8A8A),
                 textAlign = TextAlign.Center,
                 lineHeight = 10.sp,
-                modifier = Modifier.padding(top = 3.dp)
+                modifier = Modifier.padding(top = 3.dp),
             )
             if (hasDropdown) {
-                val arrowColor = Color(0xFF556677)
+                val arrowColor = if (enabled) Color(0xFF556677) else Color(0xFFAAAAAA)
                 Canvas(modifier = Modifier.padding(top = 2.dp).size(width = 8.dp, height = 4.dp)) {
                     drawPath(
                         path = Path().apply {
@@ -434,13 +447,13 @@ internal fun RibbonButton(
                             lineTo(size.width / 2f, size.height)
                             close()
                         },
-                        color = arrowColor
+                        color = arrowColor,
                     )
                 }
             }
         }
 
-        if (hasDropdown) {
+        if (hasDropdown && enabled) {
             RibbonDropdownMenu(
                 items = entry.dropdown!!,
                 expanded = showDropdown,

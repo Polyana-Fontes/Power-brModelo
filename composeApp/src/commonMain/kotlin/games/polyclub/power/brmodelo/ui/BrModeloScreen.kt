@@ -121,6 +121,8 @@ internal fun BrModeloScreen(
     onCopyRequest: () -> Unit = {},
     onCutRequest: () -> Unit = {},
     onPasteRequest: () -> Unit = {},
+    onUndoRequest: () -> Unit = {},
+    onRedoRequest: () -> Unit = {},
 ) {
     var exportCounter by remember { mutableIntStateOf(0) }
     var exportIsJpeg by remember { mutableStateOf(true) }
@@ -193,6 +195,8 @@ internal fun BrModeloScreen(
                 onCopyRequest = onCopyRequest,
                 onCutRequest = onCutRequest,
                 onPasteRequest = onPasteRequest,
+                onUndoRequest = onUndoRequest,
+                onRedoRequest = onRedoRequest,
             )
         }
 

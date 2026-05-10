@@ -62,6 +62,8 @@ internal fun WorkspaceArea(
     onCopyRequest: () -> Unit = {},
     onCutRequest: () -> Unit = {},
     onPasteRequest: () -> Unit = {},
+    onUndoRequest: () -> Unit = {},
+    onRedoRequest: () -> Unit = {},
 ) {
     Row(modifier = Modifier.fillMaxSize().padding(8.dp)) {
         MainCanvasPanel(
@@ -90,6 +92,8 @@ internal fun WorkspaceArea(
             onCopyRequest = onCopyRequest,
             onCutRequest = onCutRequest,
             onPasteRequest = onPasteRequest,
+            onUndoRequest = onUndoRequest,
+            onRedoRequest = onRedoRequest,
             modifier = Modifier.weight(1f),
         )
         Spacer(modifier = Modifier.width(8.dp))

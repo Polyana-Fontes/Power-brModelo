@@ -168,6 +168,7 @@ internal fun RibbonOperacoesGroup(
                 MenuEntry(
                     "Gerar Esquema\nLógico",
                     Res.drawable.gerar_logico_l,
+                    enabled = false,
                 ),
             )
         }
