@@ -68,6 +68,8 @@ internal actual fun rememberConceptualCanvasToolCursorModifier(tool: ConceptualC
             "files/brmodelo_cursors/png/cursor_ligacao2.png"
         is ConceptualCanvasTool.Attribute ->
             "files/brmodelo_cursors/png/cursor_atributo.png"
+        is ConceptualCanvasTool.BulkDeleteObjects ->
+            "files/brmodelo_cursors/png/cursor_apagar.png"
         else -> null
     }
     if (path == null) {

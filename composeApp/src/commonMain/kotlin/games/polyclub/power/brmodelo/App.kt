@@ -46,6 +46,8 @@ import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaXmlPar
 import games.polyclub.power.brmodelo.ui.AttributeToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.BrModeloScreen
+import games.polyclub.power.brmodelo.ui.BulkDeleteObjectsToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.BulkDeleteUiState
 import games.polyclub.power.brmodelo.ui.CloseTabUnsavedDialog
 import games.polyclub.power.brmodelo.ui.ConceptualCanvasTool
 import games.polyclub.power.brmodelo.ui.EditorTabSession
@@ -81,6 +83,13 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
     var selectedRibbonTab by remember { mutableStateOf(RibbonTab.EsquemaConceitual) }
 
     var conceptualCanvasTool by remember { mutableStateOf<ConceptualCanvasTool>(ConceptualCanvasTool.None) }
+    var bulkDeleteUi by remember { mutableStateOf<BulkDeleteUiState?>(null) }
+
+    LaunchedEffect(conceptualCanvasTool) {
+        if (conceptualCanvasTool !is ConceptualCanvasTool.BulkDeleteObjects) {
+            bulkDeleteUi = null
+        }
+    }
     var entityToolVariant by remember { mutableStateOf(EntityToolVariant.Plain) }
     var specializationToolVariant by remember { mutableStateOf(ConceptualSpecializationToolVariant.Basic) }
     var attributeToolVariant by remember { mutableStateOf(ConceptualAttributeToolVariant.Basic) }
@@ -91,6 +100,14 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         mutableStateOf(listOf(EditorTabSession.blank(initialTabId)))
     }
     var selectedTabIndex by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(selectedTabIndex) {
+        val sessionId = tabSessions.getOrNull(selectedTabIndex)?.id ?: return@LaunchedEffect
+        val awaiting = conceptualCanvasTool as? ConceptualCanvasTool.LinkObjects.AwaitingSecond ?: return@LaunchedEffect
+        if (awaiting.startedOnEditorTabId != -1L && awaiting.startedOnEditorTabId != sessionId) {
+            conceptualCanvasTool = ConceptualCanvasTool.LinkObjects.AwaitingFirst
+        }
+    }
 
     var pendingCloseTabIndex by remember { mutableStateOf<Int?>(null) }
     var pendingApplicationQuit by remember { mutableStateOf(false) }
@@ -379,6 +396,18 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         },
     )
 
+    val bulkDeleteObjectsToolBinding = BulkDeleteObjectsToolRibbonBinding(
+        isArmed = conceptualCanvasTool is ConceptualCanvasTool.BulkDeleteObjects,
+        onClick = {
+            conceptualCanvasTool =
+                if (conceptualCanvasTool is ConceptualCanvasTool.BulkDeleteObjects) {
+                    ConceptualCanvasTool.None
+                } else {
+                    ConceptualCanvasTool.BulkDeleteObjects
+                }
+        },
+    )
+
     val selElementId = (sel.selection as? CanvasSelection.Element)?.id
     val organizeAttrsEnabled =
         selElementId != null && canOrganizeAttributesMenu(sel.schema, selElementId)
@@ -436,10 +465,13 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                     autoSelfRelationshipToolBinding = autoSelfRelationshipToolBinding,
                     specializationToolBinding = specializationToolBinding,
                     attributeToolBinding = attributeToolBinding,
+                    bulkDeleteObjectsToolBinding = bulkDeleteObjectsToolBinding,
                     operationsMenuBinding = operationsMenuBinding,
                     conceptualCanvasTool = conceptualCanvasTool,
                     onConceptualCanvasToolChange = { conceptualCanvasTool = it },
                     onClearConceptualCanvasTool = { conceptualCanvasTool = ConceptualCanvasTool.None },
+                    bulkDeleteUiState = bulkDeleteUi,
+                    onBulkDeleteUiChange = { bulkDeleteUi = it },
                 )
 
                 pendingCloseTabIndex?.let { closeIdx ->

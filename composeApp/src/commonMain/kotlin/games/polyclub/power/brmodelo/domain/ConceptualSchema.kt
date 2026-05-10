@@ -122,6 +122,19 @@ data class ConceptualSchema(
         },
     )
 
+    /**
+     * Removes every id in [elementIds] and any [games.polyclub.power.brmodelo.domain.Connection]
+     * incident to at least one of them — a single logical delete (one undo step when committed once).
+     */
+    fun withoutElements(elementIds: Set<Int>): ConceptualSchema {
+        if (elementIds.isEmpty()) return this
+        val newElements = elements.filterKeys { it !in elementIds }
+        val newConnections = connections.filter { c ->
+            c.elementIdA !in elementIds && c.elementIdB !in elementIds
+        }
+        return copy(elements = newElements, connections = newConnections)
+    }
+
     /** Adds a connection to the schema. */
     fun withConnection(connection: Connection): ConceptualSchema = copy(
         connections = connections + connection,

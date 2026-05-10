@@ -57,8 +57,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import games.polyclub.power.brmodelo.ui.DropdownEntry
 import games.polyclub.power.brmodelo.ui.AttributeToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.DropdownEntry
+import games.polyclub.power.brmodelo.ui.BulkDeleteObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
@@ -298,6 +299,7 @@ internal fun RibbonMenuEntryButton(
     autoSelfRelationshipToolBinding: AutoSelfRelationshipToolRibbonBinding? = null,
     specializationToolBinding: SpecializationToolRibbonBinding? = null,
     attributeToolBinding: AttributeToolRibbonBinding? = null,
+    bulkDeleteObjectsToolBinding: BulkDeleteObjectsToolRibbonBinding? = null,
 ) {
     if (entry.title == "Observação" && observationToolBinding != null) {
         RibbonArmedToolButton(
@@ -316,6 +318,12 @@ internal fun RibbonMenuEntryButton(
             entry = entry,
             isArmed = linkObjectsToolBinding.isArmed,
             onClick = linkObjectsToolBinding.onClick,
+        )
+    } else if (entry.title == "Excluir\nObjetos" && bulkDeleteObjectsToolBinding != null) {
+        RibbonArmedToolButton(
+            entry = entry,
+            isArmed = bulkDeleteObjectsToolBinding.isArmed,
+            onClick = bulkDeleteObjectsToolBinding.onClick,
         )
     } else if (entry.title == "Entidade" && entityToolBinding != null && !entry.dropdown.isNullOrEmpty()) {
         RibbonSplitDropdownButton(

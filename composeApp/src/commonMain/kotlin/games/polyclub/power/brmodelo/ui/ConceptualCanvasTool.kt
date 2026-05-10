@@ -36,10 +36,16 @@ internal sealed class ConceptualCanvasTool {
     /**
      * "Ligar objetos" — first click picks an endpoint, second click completes the link.
      * [AwaitingFirst] uses `cursor_ligacao`; [AwaitingSecond] uses `cursor_ligacao2`.
+     *
+     * [AwaitingSecond.startedOnEditorTabId] is the [games.polyclub.power.brmodelo.ui.EditorTabSession.id] of the tab
+     * where the first endpoint was chosen; the second click must run on that same tab.
      */
     internal sealed class LinkObjects : ConceptualCanvasTool() {
         internal data object AwaitingFirst : LinkObjects()
-        internal data class AwaitingSecond(val first: ConceptualLinkPick) : LinkObjects()
+        internal data class AwaitingSecond(
+            val first: ConceptualLinkPick,
+            val startedOnEditorTabId: Long,
+        ) : LinkObjects()
     }
 
     /**
@@ -59,6 +65,12 @@ internal sealed class ConceptualCanvasTool {
      * (Pascal `Tool_Atributo*`). All variants share cursor `cursor_atributo`.
      */
     internal data class Attribute(val variant: ConceptualAttributeToolVariant) : ConceptualCanvasTool()
+
+    /**
+     * Rubber-band exclusion: drag a rectangle to remove every touched element (and dependent attributes)
+     * in one undo step. Cursor: `cursor_apagar`. The tool disarms automatically after a successful deletion.
+     */
+    internal data object BulkDeleteObjects : ConceptualCanvasTool()
 
     internal sealed class Entity : ConceptualCanvasTool() {
         internal data object Plain : Entity()

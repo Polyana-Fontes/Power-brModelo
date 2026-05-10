@@ -18,6 +18,8 @@
 
 package games.polyclub.power.brmodelo.ui
 
+import androidx.compose.ui.geometry.Rect
+import games.polyclub.power.brmodelo.domain.BulkDeleteCategoryCounts
 import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolVariant
 import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolVariant
 import org.jetbrains.compose.resources.DrawableResource
@@ -99,6 +101,19 @@ internal data class AttributeToolRibbonBinding(
     val displayIcon: DrawableResource,
     val onMainClick: () -> Unit,
     val onDropdownVariant: (ConceptualAttributeToolVariant) -> Unit,
+)
+
+/** Live UI for the rubber-band bulk-delete tool (view rect + schema-derived counts). */
+internal data class BulkDeleteUiState(
+    val viewSelectionRect: Rect,
+    val markedElementIds: Set<Int>,
+    val counts: BulkDeleteCategoryCounts,
+)
+
+/** Toggle for the conceptual-schema “Excluir Objetos” tool. */
+internal data class BulkDeleteObjectsToolRibbonBinding(
+    val isArmed: Boolean,
+    val onClick: () -> Unit,
 )
 
 /** **Operações** split/dropdown: enables menu rows and dispatches conceptual commands. */

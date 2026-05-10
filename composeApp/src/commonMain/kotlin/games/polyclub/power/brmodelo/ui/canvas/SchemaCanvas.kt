@@ -22,7 +22,13 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
+import games.polyclub.power.brmodelo.domain.ConceptualBulkDeleteBand
+import games.polyclub.power.brmodelo.domain.bulkDeleteCategoryCounts
+import games.polyclub.power.brmodelo.domain.bulkDeleteResolvedIds
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -40,6 +46,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.isPrimaryPressed
+import androidx.compose.ui.input.pointer.isTertiaryPressed
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextMeasurer
@@ -61,15 +69,20 @@ import games.polyclub.power.brmodelo.domain.organizeAttributesOnOwnerSide
 import games.polyclub.power.brmodelo.domain.relayoutCompositeSubtree
 import games.polyclub.power.brmodelo.domain.placeConceptualItem
 import games.polyclub.power.brmodelo.domain.validateAndBuildConceptualLink
+import games.polyclub.power.brmodelo.ui.BulkDeleteUiState
 import games.polyclub.power.brmodelo.ui.ConceptualCanvasTool
 import games.polyclub.power.brmodelo.ui.toPlacementKindOrNull
 import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
 
 // Background colour of the canvas (light grey, matching the original brModelo canvas background)
 private val CANVAS_BG = Color(0xFFE8E8E8)
 // Dot-grid colour (subtle)
 private val GRID_DOT = Color(0xFFCCCCCC)
 private const val GRID_STEP = 20f
+private val BULK_BAND_FILL = Color(0x40FF3B3B)
+private val BULK_BAND_STROKE = Color(0xFFCC0000)
 
 /**
  * Interactive canvas that renders a [games.polyclub.power.brmodelo.domain.ConceptualSchema] using Compose [Canvas].
@@ -98,6 +111,9 @@ private const val GRID_STEP = 20f
  * @param onTransientUserMessage Short user feedback (e.g. invalid link).
  * @param toolCursorModifier Optional pointer icon (entity / link tools) applied to the drawing surface.
  * @param canvasFocusRequester When set, receives focus on pointer down so parent shortcuts (e.g. Escape) apply after interacting with the canvas.
+ * @param bulkDeleteUiState Rubber-band preview (view rect + marked ids); drawn on top of the canvas.
+ * @param onBulkDeleteUiChange Updates [bulkDeleteUiState] while dragging with [ConceptualCanvasTool.BulkDeleteObjects].
+ * @param editorTabSessionId [games.polyclub.power.brmodelo.ui.EditorTabSession.id] for the canvas tab (for "Ligar objetos" second-click validation).
  * @param modifier            Layout modifier applied to the outer Box.
  */
 @Composable
@@ -110,6 +126,9 @@ internal fun SchemaCanvas(
     conceptualCanvasTool: ConceptualCanvasTool = ConceptualCanvasTool.None,
     onConceptualCanvasToolChange: (ConceptualCanvasTool) -> Unit = {},
     onTransientUserMessage: (String) -> Unit = {},
+    bulkDeleteUiState: BulkDeleteUiState? = null,
+    onBulkDeleteUiChange: (BulkDeleteUiState?) -> Unit = {},
+    editorTabSessionId: Long = -1L,
     toolCursorModifier: Modifier = Modifier,
     canvasFocusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier,
@@ -130,8 +149,10 @@ internal fun SchemaCanvas(
     val currentConceptualTool by rememberUpdatedState(conceptualCanvasTool)
     val currentOnConceptualCanvasToolChange by rememberUpdatedState(onConceptualCanvasToolChange)
     val currentOnTransientUserMessage by rememberUpdatedState(onTransientUserMessage)
+    val currentOnBulkDeleteUiChange by rememberUpdatedState(onBulkDeleteUiChange)
     val currentTextMeasurer by rememberUpdatedState(textMeasurer)
     val currentLayoutDirection by rememberUpdatedState(layoutDirection)
+    val currentEditorTabSessionId by rememberUpdatedState(editorTabSessionId)
 
     Box(
         modifier = modifier
@@ -143,9 +164,74 @@ internal fun SchemaCanvas(
                     val down = awaitFirstDown(requireUnconsumed = false)
                     currentCanvasFocusRequester?.requestFocus()
 
+                    if (currentEvent.buttons.isTertiaryPressed) {
+                        val panAtStart = currentPanOffset
+                        val startPointer = down.position
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) break
+                            change.consume()
+                            panOffset = panAtStart + (change.position - startPointer)
+                        }
+                        return@awaitEachGesture
+                    }
+
                     val panAtGestureStart = currentPanOffset
                     val schemaAtGestureStart = currentSchema
                     val selAtGestureStart = currentSelection
+
+                    val bulkDeleteTool = currentConceptualTool as? ConceptualCanvasTool.BulkDeleteObjects
+                    if (bulkDeleteTool != null && schemaAtGestureStart != null && currentEvent.buttons.isPrimaryPressed) {
+                        val startPointer = down.position
+                        val slop = viewConfiguration.touchSlop
+                        var isDraggingBand = false
+                        var lastPointer = startPointer
+                        val onUi = currentOnBulkDeleteUiChange
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            lastPointer = change.position
+                            if (!change.pressed) {
+                                if (isDraggingBand) {
+                                    val band = ConceptualBulkDeleteBand.fromCorners(
+                                        startPointer.x - panAtGestureStart.x,
+                                        startPointer.y - panAtGestureStart.y,
+                                        lastPointer.x - panAtGestureStart.x,
+                                        lastPointer.y - panAtGestureStart.y,
+                                    )
+                                    val ids = bulkDeleteResolvedIds(schemaAtGestureStart, band)
+                                    if (ids.isNotEmpty()) {
+                                        val next = schemaAtGestureStart.withoutElements(ids)
+                                            .withNormalizedAttributeMultiValuedCounts()
+                                        currentOnSchemaCommit(next)
+                                        currentOnSelectionChange(CanvasSelection.None)
+                                        currentOnConceptualCanvasToolChange(ConceptualCanvasTool.None)
+                                    }
+                                }
+                                onUi(null)
+                                break
+                            }
+                            val dragVec = lastPointer - startPointer
+                            if (!isDraggingBand && dragVec.getDistance() > slop) {
+                                isDraggingBand = true
+                            }
+                            if (isDraggingBand) {
+                                change.consume()
+                                val band = ConceptualBulkDeleteBand.fromCorners(
+                                    startPointer.x - panAtGestureStart.x,
+                                    startPointer.y - panAtGestureStart.y,
+                                    lastPointer.x - panAtGestureStart.x,
+                                    lastPointer.y - panAtGestureStart.y,
+                                )
+                                val marked = bulkDeleteResolvedIds(schemaAtGestureStart, band)
+                                val counts = bulkDeleteCategoryCounts(schemaAtGestureStart, marked)
+                                val viewRect = normalizedBulkDeleteViewRect(startPointer, lastPointer)
+                                onUi(BulkDeleteUiState(viewRect, marked, counts))
+                            }
+                        }
+                        return@awaitEachGesture
+                    }
 
                     val schemaPoint = down.position - panAtGestureStart
 
@@ -232,6 +318,7 @@ internal fun SchemaCanvas(
                                         schema = schemaAtGestureStart,
                                         schemaPoint = schemaPoint,
                                         toolState = linkTool,
+                                        editorTabSessionId = currentEditorTabSessionId,
                                         textMeasurer = currentTextMeasurer,
                                         onToolChange = currentOnConceptualCanvasToolChange,
                                         onMessage = currentOnTransientUserMessage,
@@ -322,9 +409,9 @@ internal fun SchemaCanvas(
                         } else {
                             null
                         }
-                    val hitHandleElem = selectedElem?.let {
-                        getResizeHandleAt(it.position, schemaPoint)
-                    }
+                    val hitHandleElem = selectedElem
+                        ?.takeUnless { it is SchemaElement.Attribute && it.autoSize }
+                        ?.let { getResizeHandleAt(it.position, schemaPoint) }
                     val hitHandleCard = cardinalityResizeBox?.let {
                         getResizeHandleAt(it, schemaPoint)
                     }
@@ -527,7 +614,7 @@ internal fun SchemaCanvas(
                 }
             },
     ) {
-        Canvas(modifier = Modifier.fillMaxSize().then(toolCursorModifier)) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
             // Optional dot grid (subtle background reference grid)
             val cols = (size.width / GRID_STEP).toInt() + 2
             val rows = (size.height / GRID_STEP).toInt() + 2
@@ -550,8 +637,29 @@ internal fun SchemaCanvas(
                             is ConceptualCanvasTool.LinkObjects.AwaitingSecond -> t.first.elementId
                             else -> null
                         }
-                    drawSchema(schema, textMeasurer, selection, linkHighlightId)
+                    val bulkHighlightIds = bulkDeleteUiState?.markedElementIds ?: emptySet()
+                    drawSchema(
+                        schema,
+                        textMeasurer,
+                        selection,
+                        linkHighlightId,
+                        bulkHighlightIds,
+                    )
                 }
+            }
+
+            bulkDeleteUiState?.viewSelectionRect?.let { vr ->
+                drawRect(
+                    color = BULK_BAND_FILL,
+                    topLeft = Offset(vr.left, vr.top),
+                    size = Size(vr.width, vr.height),
+                )
+                drawRect(
+                    color = BULK_BAND_STROKE,
+                    topLeft = Offset(vr.left, vr.top),
+                    size = Size(vr.width, vr.height),
+                    style = Stroke(width = 2f),
+                )
             }
         }
 
@@ -566,6 +674,14 @@ internal fun SchemaCanvas(
             )
         }
     }
+}
+
+private fun normalizedBulkDeleteViewRect(a: Offset, b: Offset): Rect {
+    val left = min(a.x, b.x)
+    val top = min(a.y, b.y)
+    val right = max(a.x, b.x)
+    val bottom = max(a.y, b.y)
+    return Rect(left, top, right, bottom)
 }
 
 private fun processSpecializationToolTap(
@@ -594,6 +710,7 @@ private fun processLinkObjectsTap(
     schema: ConceptualSchema,
     schemaPoint: Offset,
     toolState: ConceptualCanvasTool.LinkObjects,
+    editorTabSessionId: Long,
     textMeasurer: TextMeasurer,
     onToolChange: (ConceptualCanvasTool) -> Unit,
     onMessage: (String) -> Unit,
@@ -607,10 +724,30 @@ private fun processLinkObjectsTap(
                 onMessage("Selecione uma entidade, um relacionamento ou uma especialização.")
             } else {
                 onSelectionChange(CanvasSelection.None)
-                onToolChange(ConceptualCanvasTool.LinkObjects.AwaitingSecond(pick))
+                onToolChange(
+                    ConceptualCanvasTool.LinkObjects.AwaitingSecond(
+                        first = pick,
+                        startedOnEditorTabId = editorTabSessionId,
+                    ),
+                )
             }
         }
         is ConceptualCanvasTool.LinkObjects.AwaitingSecond -> {
+            if (editorTabSessionId != -1L &&
+                toolState.startedOnEditorTabId != -1L &&
+                toolState.startedOnEditorTabId != editorTabSessionId
+            ) {
+                onMessage(
+                    "O primeiro objeto foi escolhido em outra aba. Conclua a ligação na mesma aba ou cancele (Esc) e inicie de novo.",
+                )
+                onToolChange(ConceptualCanvasTool.LinkObjects.AwaitingFirst)
+                return
+            }
+            if (schema.elements[toolState.first.elementId] == null) {
+                onMessage("O primeiro objeto da ligação não existe mais neste modelo. Inicie a ligação novamente.")
+                onToolChange(ConceptualCanvasTool.LinkObjects.AwaitingFirst)
+                return
+            }
             if (pick == null) {
                 onToolChange(ConceptualCanvasTool.LinkObjects.AwaitingFirst)
                 return

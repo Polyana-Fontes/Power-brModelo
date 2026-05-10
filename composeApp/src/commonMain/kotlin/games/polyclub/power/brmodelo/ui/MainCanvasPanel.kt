@@ -54,6 +54,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
+import games.polyclub.power.brmodelo.domain.singleElementDeletionClosure
+import games.polyclub.power.brmodelo.ui.ConceptualCanvasTool
 import games.polyclub.power.brmodelo.ui.canvas.SchemaCanvas
 import games.polyclub.power.brmodelo.ui.canvas.rememberConceptualCanvasToolCursorModifier
 import games.polyclub.power.brmodelo.ui.components.CHROMIUM_TAB_ACTIVE_HEIGHT
@@ -91,6 +93,8 @@ internal fun MainCanvasPanel(
     onConceptualCanvasToolChange: (ConceptualCanvasTool) -> Unit = {},
     onTransientUserMessage: (String) -> Unit = {},
     onClearConceptualCanvasTool: () -> Unit = {},
+    bulkDeleteUiState: BulkDeleteUiState? = null,
+    onBulkDeleteUiChange: (BulkDeleteUiState?) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val selectedTab = canvasTabs.getOrNull(selectedCanvasTabIndex)
@@ -134,6 +138,25 @@ internal fun MainCanvasPanel(
                             }
                             else -> false
                         }
+                    } else if (event.type == KeyEventType.KeyDown &&
+                        (event.key == Key.Delete || event.key == Key.Backspace)
+                    ) {
+                        val sch = schema
+                        val elemId = (selection as? CanvasSelection.Element)?.id
+                        if (sch != null && elemId != null) {
+                            val ids = singleElementDeletionClosure(sch, elemId)
+                            if (ids.isNotEmpty()) {
+                                onSchemaCommit(
+                                    sch.withoutElements(ids).withNormalizedAttributeMultiValuedCounts(),
+                                )
+                                onSelectionChange(CanvasSelection.None)
+                                true
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
                     } else {
                         false
                     }
@@ -153,6 +176,9 @@ internal fun MainCanvasPanel(
                     conceptualCanvasTool = conceptualCanvasTool,
                     onConceptualCanvasToolChange = onConceptualCanvasToolChange,
                     onTransientUserMessage = onTransientUserMessage,
+                    bulkDeleteUiState = bulkDeleteUiState,
+                    onBulkDeleteUiChange = onBulkDeleteUiChange,
+                    editorTabSessionId = selectedTab?.id ?: -1L,
                     toolCursorModifier = toolCursorModifier,
                     canvasFocusRequester = focusRequester,
                     modifier = Modifier.fillMaxSize(),

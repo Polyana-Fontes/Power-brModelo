@@ -81,6 +81,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import games.polyclub.power.brmodelo.domain.BulkDeleteCategoryCounts
 import games.polyclub.power.brmodelo.domain.AnnotationType
 import games.polyclub.power.brmodelo.domain.ArrowDirection
 import games.polyclub.power.brmodelo.domain.CanvasSelection
@@ -92,7 +93,6 @@ import games.polyclub.power.brmodelo.domain.LineOrientation
 import games.polyclub.power.brmodelo.domain.SchemaElement
 import games.polyclub.power.brmodelo.domain.SpecializationType
 import games.polyclub.power.brmodelo.domain.TextAlignment
-import games.polyclub.power.brmodelo.ui.assocLabel
 import games.polyclub.power.brmodelo.ui.canvas.autoSizedAttributePosition
 import games.polyclub.power.brmodelo.ui.canvas.connectionCardinalityBoxForModel
 import games.polyclub.power.brmodelo.ui.canvas.materializeCardinalityPositionForFixed
@@ -126,6 +126,7 @@ private val LABEL_FOCUSED_COLOR = Color(0xFFFFFFFF)
 private val VALUE_COLOR        = Color(0xFF1A2535)
 private val HINT_BG            = Color(0xFFDCDFE2)  // neutral gray hint area
 private val HINT_TEXT_COLOR    = Color(0xFF2A3040)
+private val BULK_DELETE_INSPECTOR_WARN = Color(0xFFB00020)
 
 private val CELL_LABEL_WIDTH = 96.dp
 private val ROW_TEXT_SIZE    = 10.sp
@@ -206,6 +207,8 @@ internal fun InspectorPanel(
     schema: ConceptualSchema? = null,
     inspectorCommittedSchema: ConceptualSchema? = null,
     selection: CanvasSelection = CanvasSelection.None,
+    conceptualCanvasTool: ConceptualCanvasTool = ConceptualCanvasTool.None,
+    bulkDeleteUiState: BulkDeleteUiState? = null,
     onSchemaPreview: (ConceptualSchema) -> Unit = {},
     onSchemaCommit: (ConceptualSchema) -> Unit = {},
     onRevertSchemaPreview: () -> Unit = {},
@@ -234,6 +237,8 @@ internal fun InspectorPanel(
                 schema = schema,
                 committedSchema = inspectorCommittedSchema,
                 selection = selection,
+                conceptualCanvasTool = conceptualCanvasTool,
+                bulkDeleteUiState = bulkDeleteUiState,
                 focusedKey = focusedKey,
                 onFocusChange = { focusedKey = it },
                 onSchemaPreview = onSchemaPreview,
@@ -320,6 +325,67 @@ private fun InspectorTabStrip(
 
 // ChromiumTab is defined in components/ChromiumTabs.kt.
 
+@Composable
+private fun BulkDeleteToolInspectorSection(ui: BulkDeleteUiState?) {
+    SectionTitle("Ferramenta: excluir objetos")
+    Text(
+        text = "Esta ferramenta exclui objetos do modelo. Ao soltar o botão esquerdo, todos os elementos " +
+            "que estiverem dentro ou parcialmente dentro do retângulo serão removidos de uma só vez " +
+            "(um único passo no histórico para desfazer). Arraste na área do diagrama para desenhar o retângulo. " +
+            "Com o botão esquerdo, o diagrama não é arrastado — use o botão do meio do mouse para mover a vista.",
+        fontSize = 9.sp,
+        color = BULK_DELETE_INSPECTOR_WARN,
+        lineHeight = 12.sp,
+        modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+    )
+    val c = ui?.counts
+    if (c != null && c.total > 0) {
+        if (c.entities > 0) {
+            Text("Entidades: ${c.entities}", fontSize = 9.sp, color = VALUE_COLOR, modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp))
+        }
+        if (c.relationships > 0) {
+            Text("Relações: ${c.relationships}", fontSize = 9.sp, color = VALUE_COLOR, modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp))
+        }
+        if (c.associativeEntities > 0) {
+            Text(
+                "Entidades associativas: ${c.associativeEntities}",
+                fontSize = 9.sp,
+                color = VALUE_COLOR,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+            )
+        }
+        if (c.specializations > 0) {
+            Text(
+                "Especializações: ${c.specializations}",
+                fontSize = 9.sp,
+                color = VALUE_COLOR,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+            )
+        }
+        if (c.attributes > 0) {
+            Text("Atributos: ${c.attributes}", fontSize = 9.sp, color = VALUE_COLOR, modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp))
+        }
+        if (c.hiddenAttributesLeaves > 0) {
+            Text(
+                "Atributos ocultos (total na árvore): ${c.hiddenAttributesLeaves}",
+                fontSize = 9.sp,
+                color = VALUE_COLOR,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+            )
+        }
+        if (c.observations > 0) {
+            Text("Observações: ${c.observations}", fontSize = 9.sp, color = VALUE_COLOR, modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp))
+        }
+        Text(
+            "Total: ${c.total}",
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            color = VALUE_COLOR,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+        )
+    }
+}
+
 // ── Selection tab ─────────────────────────────────────────────────────────────
 
 @Composable
@@ -327,6 +393,8 @@ private fun SelectionTab(
     schema: ConceptualSchema?,
     committedSchema: ConceptualSchema?,
     selection: CanvasSelection,
+    conceptualCanvasTool: ConceptualCanvasTool,
+    bulkDeleteUiState: BulkDeleteUiState?,
     focusedKey: String?,
     onFocusChange: (String?) -> Unit,
     onSchemaPreview: (ConceptualSchema) -> Unit,
@@ -344,6 +412,10 @@ private fun SelectionTab(
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
         ) {
+            if (conceptualCanvasTool is ConceptualCanvasTool.BulkDeleteObjects) {
+                BulkDeleteToolInspectorSection(bulkDeleteUiState)
+                HorizontalDivider(color = Color(0xFF7A9ABF), thickness = 1.dp)
+            }
             when {
                 schema == null -> Unit
 

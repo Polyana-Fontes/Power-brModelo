@@ -42,7 +42,8 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
-import games.polyclub.power.brmodelo.ui.OperationsMenuRibbonBinding
+import games.polyclub.power.brmodelo.ui.BulkDeleteObjectsToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.BulkDeleteUiState
 import games.polyclub.power.brmodelo.ui.canvas.renderSchemaToImageBitmap
 import games.polyclub.power.brmodelo.ui.components.ribbon.HeaderRibbon
 import kotlinx.coroutines.launch
@@ -83,10 +84,13 @@ internal fun BrModeloScreen(
     autoSelfRelationshipToolBinding: AutoSelfRelationshipToolRibbonBinding? = null,
     specializationToolBinding: SpecializationToolRibbonBinding? = null,
     attributeToolBinding: AttributeToolRibbonBinding? = null,
+    bulkDeleteObjectsToolBinding: BulkDeleteObjectsToolRibbonBinding? = null,
     operationsMenuBinding: OperationsMenuRibbonBinding? = null,
     conceptualCanvasTool: ConceptualCanvasTool = ConceptualCanvasTool.None,
     onConceptualCanvasToolChange: (ConceptualCanvasTool) -> Unit = {},
     onClearConceptualCanvasTool: () -> Unit = {},
+    bulkDeleteUiState: BulkDeleteUiState? = null,
+    onBulkDeleteUiChange: (BulkDeleteUiState?) -> Unit = {},
 ) {
     var exportCounter by remember { mutableIntStateOf(0) }
     var exportIsJpeg by remember { mutableStateOf(true) }
@@ -117,6 +121,7 @@ internal fun BrModeloScreen(
                 autoSelfRelationshipToolBinding = autoSelfRelationshipToolBinding,
                 specializationToolBinding = specializationToolBinding,
                 attributeToolBinding = attributeToolBinding,
+                bulkDeleteObjectsToolBinding = bulkDeleteObjectsToolBinding,
                 operationsMenuBinding = operationsMenuBinding,
                 onMainMenuClick = onMainMenuToggle,
                 onTabSelect = onTabSelect,
@@ -144,6 +149,8 @@ internal fun BrModeloScreen(
                     }
                 },
                 onClearConceptualCanvasTool = onClearConceptualCanvasTool,
+                bulkDeleteUiState = bulkDeleteUiState,
+                onBulkDeleteUiChange = onBulkDeleteUiChange,
             )
         }
 

@@ -95,18 +95,21 @@ private val MULTIVALUE_CARD_STYLE = TextStyle(fontSize = 11.sp, color = Color.Bl
  * 4b. Self-relationship diamonds — redrawn on top (same idea as the inner rhombus).
  * 5. Cardinality labels — floating on top of everything.
  * 6. Optional link-tool highlight (orange border, no resize handles) for the first picked element.
- * 7. Selection handles (blue border + corner squares) on top of all diagram content.
+ * 7. Selection (blue border; corner resize squares only when the element allows manual resize —
+ *    e.g. not for attributes with [SchemaElement.Attribute.autoSize]).
  *
  * @param selection When not [games.polyclub.power.brmodelo.domain.CanvasSelection.None], draws selection handles for the
  *   selected element or cardinality label. Defaults to [games.polyclub.power.brmodelo.domain.CanvasSelection.None] so that
  *   off-screen exporters that call this function without a selection continue to work.
  * @param linkToolHighlightElementId When set, draws a highlight border around that element (used by "Ligar objetos").
+ * @param bulkDeleteHighlightIds When non-empty, draws a strong red overlay on each listed element (bulk-delete preview).
  */
 fun DrawScope.drawSchema(
     schema: ConceptualSchema,
     textMeasurer: TextMeasurer,
     selection: CanvasSelection = CanvasSelection.None,
     linkToolHighlightElementId: Int? = null,
+    bulkDeleteHighlightIds: Set<Int> = emptySet(),
 ) {
     val dividedPoints = computeDividedPoints(schema)
 
@@ -120,7 +123,7 @@ fun DrawScope.drawSchema(
     }
     // 2. All elements (including AssociativeEntity outer rect + inner diamond)
     schema.elements.values.forEach { element ->
-        drawElement(element, schema, textMeasurer)
+        drawElement(element, schema, textMeasurer, bulkDeleteHighlightIds)
     }
     // 3. Re-draw connection lines that involve an AssociativeEntity, now on top of the
     //    outer rect white fill — only entity/relationship connections (not attributes),
@@ -135,16 +138,25 @@ fun DrawScope.drawSchema(
     // 4. Re-draw the inner diamonds on top of the connection lines so that the diamond
     //    outline remains visible above lines that enter the outer rect area.
     schema.elements.values.filterIsInstance<SchemaElement.AssociativeEntity>().forEach { assoc ->
+        val innerPos = assocInnerDiamondPos(assoc.position)
         drawRelationshipDiamond(
-            assocInnerDiamondPos(assoc.position),
+            innerPos,
             assoc.relationshipName,
             showName = true,
             textMeasurer,
         )
+        // Bulk-delete tint was drawn on the outer rect in step 2; the inner diamond is redrawn here
+        // with opaque fill on top of those lines, so it must be tinted again (same idea as step 4b).
+        if (assoc.id in bulkDeleteHighlightIds) {
+            drawBulkDeleteThreatHighlight(innerPos)
+        }
     }
     // 4b. Self-relationship diamonds on top of lines (outline + fill), like VCL z-order.
     schema.elements.values.filterIsInstance<SchemaElement.SelfRelationship>().forEach { selfRel ->
         drawRelationshipDiamond(selfRel.position, selfRel.name, showName = true, textMeasurer)
+        if (selfRel.id in bulkDeleteHighlightIds) {
+            drawBulkDeleteThreatHighlight(selfRel.position)
+        }
     }
     // 5. Cardinality labels on top
     schema.connections.forEach { conn ->
@@ -159,7 +171,10 @@ fun DrawScope.drawSchema(
     // 7. Selection handles — drawn last so they are always on top of diagram content
     when (selection) {
         is CanvasSelection.Element -> {
-            schema.elements[selection.id]?.let { drawElementSelectionHandles(it.position) }
+            schema.elements[selection.id]?.let { el ->
+                val showResizeHandles = el !is SchemaElement.Attribute || !el.autoSize
+                drawElementSelectionHandles(el.position, showResizeHandles = showResizeHandles)
+            }
         }
         is CanvasSelection.Cardinality -> {
             val conn = schema.connections.firstOrNull { it.id == selection.connectionId }
@@ -183,13 +198,17 @@ private val HANDLE_FILL     = Color(0xFF0060C0)
 private val HANDLE_SIZE     = HANDLE_SIZE_PX
 
 /**
- * Draws a blue selection border and four corner resize handles around [position].
+ * Draws a blue selection border around [position] and, when [showResizeHandles] is true,
+ * four corner resize handles.
  *
  * Matches the visual style shown in the brModelo 3.0 screenshots:
  * - Thin blue dashed-style outline around the bounding box.
- * - Four solid blue squares at the corners (resize handles).
+ * - Four solid blue squares at the corners (resize handles), unless [showResizeHandles] is false.
  */
-private fun DrawScope.drawElementSelectionHandles(position: ElementPosition) {
+private fun DrawScope.drawElementSelectionHandles(
+    position: ElementPosition,
+    showResizeHandles: Boolean = true,
+) {
     val x = position.x.toFloat()
     val y = position.y.toFloat()
     val w = position.width.toFloat()
@@ -202,6 +221,8 @@ private fun DrawScope.drawElementSelectionHandles(position: ElementPosition) {
         size     = Size(w + 2f, h + 2f),
         style    = Stroke(1.5f),
     )
+
+    if (!showResizeHandles) return
 
     // Corner handles
     val half = HANDLE_SIZE / 2f
@@ -253,12 +274,35 @@ private fun DrawScope.drawCardinalitySelectionHighlight(position: ElementPositio
     )
 }
 
+/** Strong red overlay for elements marked for bulk deletion (preview). */
+private val BULK_DELETE_FILL = Color(0x66FF2D2D)
+private val BULK_DELETE_STROKE = Color(0xFFAA0000)
+
+private fun DrawScope.drawBulkDeleteThreatHighlight(position: ElementPosition) {
+    val x = position.x.toFloat()
+    val y = position.y.toFloat()
+    val w = position.width.toFloat().coerceAtLeast(1f)
+    val h = position.height.toFloat().coerceAtLeast(1f)
+    drawRect(
+        color = BULK_DELETE_FILL,
+        topLeft = Offset(x, y),
+        size = Size(w, h),
+    )
+    drawRect(
+        color = BULK_DELETE_STROKE,
+        topLeft = Offset(x, y),
+        size = Size(w, h),
+        style = Stroke(width = 2.5f),
+    )
+}
+
 // ── Element dispatch ──────────────────────────────────────────────────────────
 
 private fun DrawScope.drawElement(
     element: SchemaElement,
     schema: ConceptualSchema,
     textMeasurer: TextMeasurer,
+    bulkDeleteHighlightIds: Set<Int> = emptySet(),
 ) {
     when (element) {
         is SchemaElement.Entity -> drawEntity(element, textMeasurer)
@@ -268,6 +312,9 @@ private fun DrawScope.drawElement(
         is SchemaElement.Specialization -> drawSpecialization(element, schema, textMeasurer)
         is SchemaElement.SelfRelationship -> Unit // drawn in drawSchema step 4b on top of lines
         is SchemaElement.Annotation -> drawAnnotation(element, textMeasurer)
+    }
+    if (element.id in bulkDeleteHighlightIds && element !is SchemaElement.SelfRelationship) {
+        drawBulkDeleteThreatHighlight(element.position)
     }
 }
 

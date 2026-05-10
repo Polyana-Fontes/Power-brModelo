@@ -49,6 +49,8 @@ internal fun WorkspaceArea(
     onConceptualCanvasToolChange: (ConceptualCanvasTool) -> Unit = {},
     onTransientUserMessage: (String) -> Unit = {},
     onClearConceptualCanvasTool: () -> Unit = {},
+    bulkDeleteUiState: BulkDeleteUiState? = null,
+    onBulkDeleteUiChange: (BulkDeleteUiState?) -> Unit = {},
 ) {
     Row(modifier = Modifier.fillMaxSize().padding(8.dp)) {
         MainCanvasPanel(
@@ -68,6 +70,8 @@ internal fun WorkspaceArea(
             onConceptualCanvasToolChange = onConceptualCanvasToolChange,
             onTransientUserMessage = onTransientUserMessage,
             onClearConceptualCanvasTool = onClearConceptualCanvasTool,
+            bulkDeleteUiState = bulkDeleteUiState,
+            onBulkDeleteUiChange = onBulkDeleteUiChange,
             modifier = Modifier.weight(1f),
         )
         Spacer(modifier = Modifier.width(8.dp))
@@ -75,6 +79,8 @@ internal fun WorkspaceArea(
             schema = schema,
             inspectorCommittedSchema = inspectorCommittedSchema,
             selection = selection,
+            conceptualCanvasTool = conceptualCanvasTool,
+            bulkDeleteUiState = bulkDeleteUiState,
             onSchemaPreview = onSchemaPreview,
             onSchemaCommit = onSchemaCommit,
             onRevertSchemaPreview = onRevertSchemaPreview,

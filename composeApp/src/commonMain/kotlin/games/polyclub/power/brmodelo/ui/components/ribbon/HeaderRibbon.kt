@@ -32,6 +32,7 @@ import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.OperationsMenuRibbonBinding
+import games.polyclub.power.brmodelo.ui.BulkDeleteObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.RibbonTab
 import games.polyclub.power.brmodelo.ui.SpecializationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.components.AppColors
@@ -45,6 +46,7 @@ internal fun HeaderRibbon(
     autoSelfRelationshipToolBinding: AutoSelfRelationshipToolRibbonBinding? = null,
     specializationToolBinding: SpecializationToolRibbonBinding? = null,
     attributeToolBinding: AttributeToolRibbonBinding? = null,
+    bulkDeleteObjectsToolBinding: BulkDeleteObjectsToolRibbonBinding? = null,
     operationsMenuBinding: OperationsMenuRibbonBinding? = null,
     onMainMenuClick: () -> Unit,
     onTabSelect: (RibbonTab) -> Unit,
@@ -70,6 +72,7 @@ internal fun HeaderRibbon(
                 autoSelfRelationshipToolBinding = autoSelfRelationshipToolBinding,
                 specializationToolBinding = specializationToolBinding,
                 attributeToolBinding = attributeToolBinding,
+                bulkDeleteObjectsToolBinding = bulkDeleteObjectsToolBinding,
                 operationsMenuBinding = operationsMenuBinding,
             )
             RibbonTab.Opcoes            -> RibbonOpcoes()
