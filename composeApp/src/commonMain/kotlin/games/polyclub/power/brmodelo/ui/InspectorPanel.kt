@@ -330,8 +330,8 @@ private fun BulkDeleteToolInspectorSection(ui: BulkDeleteUiState?) {
     SectionTitle("Ferramenta: excluir objetos")
     Text(
         text = "Esta ferramenta exclui objetos do modelo. Ao soltar o botão esquerdo, todos os elementos " +
-            "que estiverem dentro ou parcialmente dentro do retângulo serão removidos de uma só vez " +
-            "(um único passo no histórico para desfazer). Arraste na área do diagrama para desenhar o retângulo. " +
+            "que estiverem dentro ou parcialmente dentro do retângulo serão removidos de uma só vez. " +
+            "Arraste na área do diagrama para desenhar o retângulo. " +
             "Com o botão esquerdo, o diagrama não é arrastado — use o botão do meio do mouse para mover a vista.",
         fontSize = 9.sp,
         color = BULK_DELETE_INSPECTOR_WARN,

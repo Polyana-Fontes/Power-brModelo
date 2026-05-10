@@ -75,6 +75,9 @@ val generateBuildInfo = tasks.register("generateBuildInfo") {
 }
 
 kotlin {
+    // Kotlin 2.0.x can crash parsing very new JDKs (e.g. 25.x) as the compiler JVM; pin an LTS toolchain.
+    jvmToolchain(21)
+
     jvm("desktop")
 
     @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)

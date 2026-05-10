@@ -103,6 +103,9 @@ internal fun MainCanvasPanel(
     val focusRequester = remember { FocusRequester() }
     val toolCursorModifier = rememberConceptualCanvasToolCursorModifier(conceptualCanvasTool)
 
+    val desktopAwtModifierRemapVerticalScroll = rememberDesktopModifierKeysRemapVerticalScrollToHorizontal()
+    val keyboardRemapVerticalScrollPan = isDesktopTarget && desktopAwtModifierRemapVerticalScroll
+
     Column(
         modifier = modifier
             .fillMaxHeight()
@@ -179,6 +182,7 @@ internal fun MainCanvasPanel(
                     bulkDeleteUiState = bulkDeleteUiState,
                     onBulkDeleteUiChange = onBulkDeleteUiChange,
                     editorTabSessionId = selectedTab?.id ?: -1L,
+                    keyboardRemapVerticalScrollPanToHorizontal = keyboardRemapVerticalScrollPan,
                     toolCursorModifier = toolCursorModifier,
                     canvasFocusRequester = focusRequester,
                     modifier = Modifier.fillMaxSize(),

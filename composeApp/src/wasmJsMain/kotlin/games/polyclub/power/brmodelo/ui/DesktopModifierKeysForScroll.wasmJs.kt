@@ -18,18 +18,7 @@
 
 package games.polyclub.power.brmodelo.ui
 
-internal expect val supportsBitmapResources: Boolean
+import androidx.compose.runtime.Composable
 
-/** True only on Desktop/JVM target; used to show platform-exclusive items (e.g. "Sair"). */
-internal expect val isDesktopTarget: Boolean
-
-/**
- * When true, [androidx.compose.ui.input.pointer.PointerInputChange.scrollDelta] is negated before
- * applying it to canvas pan (Wasm/browser reports inverted axes relative to desktop).
- */
-internal expect val invertCanvasPointerScrollPan: Boolean
-
-/**
- * Scales wheel/trackpad scroll before pan. Desktop deltas are often small (e.g. X11); Wasm uses 1f.
- */
-internal expect val canvasPointerScrollPanGain: Float
+@Composable
+internal actual fun rememberDesktopModifierKeysRemapVerticalScrollToHorizontal(): Boolean = false

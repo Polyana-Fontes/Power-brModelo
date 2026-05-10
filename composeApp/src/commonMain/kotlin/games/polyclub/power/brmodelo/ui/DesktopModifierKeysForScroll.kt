@@ -18,18 +18,14 @@
 
 package games.polyclub.power.brmodelo.ui
 
-internal expect val supportsBitmapResources: Boolean
-
-/** True only on Desktop/JVM target; used to show platform-exclusive items (e.g. "Sair"). */
-internal expect val isDesktopTarget: Boolean
+import androidx.compose.runtime.Composable
 
 /**
- * When true, [androidx.compose.ui.input.pointer.PointerInputChange.scrollDelta] is negated before
- * applying it to canvas pan (Wasm/browser reports inverted axes relative to desktop).
+ * Desktop: true while **Shift** is held (from AWT), so vertical wheel/trackpad scroll can map to horizontal
+ * canvas pan. Wasm: always false.
+ *
+ * Compose [androidx.compose.ui.input.key.onPreviewKeyEvent] often never receives modifier-only key
+ * events on Skiko/JVM; AWT sees them reliably.
  */
-internal expect val invertCanvasPointerScrollPan: Boolean
-
-/**
- * Scales wheel/trackpad scroll before pan. Desktop deltas are often small (e.g. X11); Wasm uses 1f.
- */
-internal expect val canvasPointerScrollPanGain: Float
+@Composable
+internal expect fun rememberDesktopModifierKeysRemapVerticalScrollToHorizontal(): Boolean

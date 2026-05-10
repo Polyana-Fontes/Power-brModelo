@@ -21,7 +21,6 @@ package games.polyclub.power.brmodelo.ui.canvas
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -45,9 +44,19 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
+import androidx.compose.ui.input.pointer.PointerEvent
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.changedToDown
+import androidx.compose.ui.input.pointer.changedToDownIgnoreConsumed
 import androidx.compose.ui.input.pointer.isPrimaryPressed
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.isTertiaryPressed
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextMeasurer
@@ -71,6 +80,9 @@ import games.polyclub.power.brmodelo.domain.placeConceptualItem
 import games.polyclub.power.brmodelo.domain.validateAndBuildConceptualLink
 import games.polyclub.power.brmodelo.ui.BulkDeleteUiState
 import games.polyclub.power.brmodelo.ui.ConceptualCanvasTool
+import games.polyclub.power.brmodelo.ui.canvasPointerScrollPanGain
+import games.polyclub.power.brmodelo.ui.invertCanvasPointerScrollPan
+import games.polyclub.power.brmodelo.ui.isDesktopTarget
 import games.polyclub.power.brmodelo.ui.toPlacementKindOrNull
 import kotlin.math.abs
 import kotlin.math.max
@@ -88,7 +100,13 @@ private val BULK_BAND_STROKE = Color(0xFFCC0000)
  * Interactive canvas that renders a [games.polyclub.power.brmodelo.domain.ConceptualSchema] using Compose [Canvas].
  *
  * Supports:
- * - **Pan**: drag on empty space moves the viewport.
+ * - **Pan**: dragging empty canvas moves the view; **wheel / trackpad scroll** always pans (independent of
+ *   the active tool). **Two-finger touch** pans by centroid. On **desktop**, if the stack only delivers
+ *   vertical scroll, hold **Shift** and scroll to pan horizontally (Shift is read from AWT via
+ *   [games.polyclub.power.brmodelo.ui.rememberDesktopModifierKeysRemapVerticalScrollToHorizontal] when pointer
+ *   events omit modifiers). **Middle-button drag** always pans (same as dragging empty canvas with the left button).
+ *   With **Excluir objetos** armed, **right-button drag** also pans.
+ *   **Wasm** applies [games.polyclub.power.brmodelo.ui.invertCanvasPointerScrollPan] so pan matches finger direction.
  * - **Select**: tap on an element or cardinality label selects it.
  * - **Move**: drag a selected element (or any element) to reposition it.
  * - **Move cardinality label**: drag a selected cardinality label.
@@ -114,6 +132,8 @@ private val BULK_BAND_STROKE = Color(0xFFCC0000)
  * @param bulkDeleteUiState Rubber-band preview (view rect + marked ids); drawn on top of the canvas.
  * @param onBulkDeleteUiChange Updates [bulkDeleteUiState] while dragging with [ConceptualCanvasTool.BulkDeleteObjects].
  * @param editorTabSessionId [games.polyclub.power.brmodelo.ui.EditorTabSession.id] for the canvas tab (for "Ligar objetos" second-click validation).
+ * @param keyboardRemapVerticalScrollPanToHorizontal Desktop only: when true, vertical scroll maps to horizontal pan;
+ *   fed from AWT (Shift only).
  * @param modifier            Layout modifier applied to the outer Box.
  */
 @Composable
@@ -129,6 +149,7 @@ internal fun SchemaCanvas(
     bulkDeleteUiState: BulkDeleteUiState? = null,
     onBulkDeleteUiChange: (BulkDeleteUiState?) -> Unit = {},
     editorTabSessionId: Long = -1L,
+    keyboardRemapVerticalScrollPanToHorizontal: Boolean = false,
     toolCursorModifier: Modifier = Modifier,
     canvasFocusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier,
@@ -153,18 +174,86 @@ internal fun SchemaCanvas(
     val currentTextMeasurer by rememberUpdatedState(textMeasurer)
     val currentLayoutDirection by rememberUpdatedState(layoutDirection)
     val currentEditorTabSessionId by rememberUpdatedState(editorTabSessionId)
+    val currentKeyboardRemapVerticalScrollPan by rememberUpdatedState(keyboardRemapVerticalScrollPanToHorizontal)
 
     Box(
         modifier = modifier
             .then(toolCursorModifier)
             .clipToBounds()
             .background(CANVAS_BG)
+            // This block is the OUTER pointerInput so scroll/multitouch runs without starving the inner
+            // gesture detector (middle/right-button pan uses [awaitCanvasGestureFirstDown] in the inner block).
+            .pointerInput(invertCanvasPointerScrollPan, canvasPointerScrollPanGain) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+
+                        val pressedForPan = event.changes.filter { it.pressed }
+                        if (pressedForPan.size >= 2) {
+                            if (currentConceptualTool is ConceptualCanvasTool.BulkDeleteObjects) {
+                                currentOnBulkDeleteUiChange(null)
+                            }
+                            val panBase = panOffset
+                            val centroidStart = centroidOfOffsets(pressedForPan.map { it.position })
+                            event.changes.forEach { it.consume() }
+                            while (true) {
+                                val inner = awaitPointerEvent()
+                                val pr = inner.changes.filter { it.pressed }
+                                if (pr.size < 2) break
+                                val cNow = centroidOfOffsets(pr.map { it.position })
+                                panOffset = panBase + (cNow - centroidStart)
+                                inner.changes.forEach { it.consume() }
+                            }
+                            continue
+                        }
+
+                        if (event.type == PointerEventType.Scroll) {
+                            var rawScroll = Offset.Zero
+                            for (change in event.changes) {
+                                rawScroll += change.scrollDelta
+                            }
+                            if (rawScroll != Offset.Zero) {
+                                val panDelta = scrollDeltaForCanvasPan(
+                                    rawScroll,
+                                    pointerShiftPressed = event.keyboardModifiers.isShiftPressed,
+                                    keyboardRemapVerticalToHorizontal = currentKeyboardRemapVerticalScrollPan,
+                                )
+                                if (panDelta != Offset.Zero) {
+                                    panOffset += panDelta
+                                    event.changes.forEach { ch -> ch.consume() }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             .pointerInput(Unit) {
                 awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
+                    // Re-evaluate bulk-delete arming on every pointer event while waiting for a down;
+                    // a frozen boolean caused right-button pan to lag tool toggles until another gesture (e.g. middle) ran.
+                    val down = awaitCanvasGestureFirstDown(
+                        bulkDeleteAllowsSecondaryPan = {
+                            currentConceptualTool is ConceptualCanvasTool.BulkDeleteObjects
+                        },
+                    )
                     currentCanvasFocusRequester?.requestFocus()
 
                     if (currentEvent.buttons.isTertiaryPressed) {
+                        val panAtStart = currentPanOffset
+                        val startPointer = down.position
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) break
+                            change.consume()
+                            panOffset = panAtStart + (change.position - startPointer)
+                        }
+                        return@awaitEachGesture
+                    }
+
+                    if (currentConceptualTool is ConceptualCanvasTool.BulkDeleteObjects &&
+                        currentEvent.buttons.isSecondaryPressed
+                    ) {
                         val panAtStart = currentPanOffset
                         val startPointer = down.position
                         while (true) {
@@ -190,6 +279,33 @@ internal fun SchemaCanvas(
                         val onUi = currentOnBulkDeleteUiChange
                         while (true) {
                             val event = awaitPointerEvent()
+                            val pressedChanges = event.changes.filter { it.pressed }
+                            if (pressedChanges.size >= 2) {
+                                onUi(null)
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                lastPointer = change.position
+                                if (!change.pressed) {
+                                    if (isDraggingBand) {
+                                        val band = ConceptualBulkDeleteBand.fromCorners(
+                                            startPointer.x - panAtGestureStart.x,
+                                            startPointer.y - panAtGestureStart.y,
+                                            lastPointer.x - panAtGestureStart.x,
+                                            lastPointer.y - panAtGestureStart.y,
+                                        )
+                                        val ids = bulkDeleteResolvedIds(schemaAtGestureStart, band)
+                                        if (ids.isNotEmpty()) {
+                                            val next = schemaAtGestureStart.withoutElements(ids)
+                                                .withNormalizedAttributeMultiValuedCounts()
+                                            currentOnSchemaCommit(next)
+                                            currentOnSelectionChange(CanvasSelection.None)
+                                            currentOnConceptualCanvasToolChange(ConceptualCanvasTool.None)
+                                        }
+                                    }
+                                    onUi(null)
+                                    break
+                                }
+                                continue
+                            }
                             val change = event.changes.firstOrNull { it.id == down.id } ?: break
                             lastPointer = change.position
                             if (!change.pressed) {
@@ -674,6 +790,76 @@ internal fun SchemaCanvas(
             )
         }
     }
+}
+
+/**
+ * Same idea as [androidx.compose.foundation.gestures.awaitFirstDown], but [awaitFirstDown] only reacts to the
+ * **primary** mouse button; middle and right never start a gesture. This variant also accepts **tertiary**
+ * (middle) always, and **secondary** (right) when [bulkDeleteAllowsSecondaryPan] is true for that frame.
+ */
+private fun PointerEvent.isCanvasGestureStartDown(
+    requireUnconsumed: Boolean,
+    bulkDeleteAllowsSecondaryPan: () -> Boolean,
+): Boolean {
+    val primaryButtonCausesDown = changes.all { it.type == PointerType.Mouse }
+    val changedToDown = changes.all {
+        if (requireUnconsumed) it.changedToDown() else it.changedToDownIgnoreConsumed()
+    }
+    if (!changedToDown) return false
+    if (!primaryButtonCausesDown) return true
+    val b = buttons
+    return b.isPrimaryPressed ||
+        b.isTertiaryPressed ||
+        (bulkDeleteAllowsSecondaryPan() && b.isSecondaryPressed)
+}
+
+private suspend fun AwaitPointerEventScope.awaitCanvasGestureFirstDown(
+    bulkDeleteAllowsSecondaryPan: () -> Boolean,
+): PointerInputChange {
+    while (true) {
+        val event = awaitPointerEvent(PointerEventPass.Main)
+        if (event.isCanvasGestureStartDown(
+                requireUnconsumed = false,
+                bulkDeleteAllowsSecondaryPan = bulkDeleteAllowsSecondaryPan,
+            )
+        ) {
+            return event.changes[0]
+        }
+    }
+}
+
+/** Arithmetic mean of [positions]; caller must pass a non-empty list. */
+private fun centroidOfOffsets(positions: List<Offset>): Offset {
+    var sx = 0f
+    var sy = 0f
+    for (p in positions) {
+        sx += p.x
+        sy += p.y
+    }
+    val n = positions.size.toFloat().coerceAtLeast(1f)
+    return Offset(sx / n, sy / n)
+}
+
+/** Maps summed [androidx.compose.ui.input.pointer.PointerInputChange.scrollDelta] to canvas pan. */
+private fun scrollDeltaForCanvasPan(
+    raw: Offset,
+    pointerShiftPressed: Boolean,
+    keyboardRemapVerticalToHorizontal: Boolean,
+): Offset {
+    var x = raw.x
+    var y = raw.y
+    val remapVerticalToHorizontal = isDesktopTarget &&
+        (pointerShiftPressed || keyboardRemapVerticalToHorizontal) &&
+        abs(y) >= abs(x)
+    if (remapVerticalToHorizontal) {
+        x = y
+        y = 0f
+    }
+    var out = Offset(x * canvasPointerScrollPanGain, y * canvasPointerScrollPanGain)
+    if (invertCanvasPointerScrollPan) {
+        out = Offset(-out.x, -out.y)
+    }
+    return out
 }
 
 private fun normalizedBulkDeleteViewRect(a: Offset, b: Offset): Rect {

@@ -21,3 +21,7 @@ package games.polyclub.power.brmodelo.ui
 internal actual val supportsBitmapResources: Boolean = true
 
 internal actual val isDesktopTarget: Boolean = false
+
+internal actual val invertCanvasPointerScrollPan: Boolean = true
+
+internal actual val canvasPointerScrollPanGain: Float = 1f

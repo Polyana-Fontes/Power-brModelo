@@ -21,3 +21,8 @@ package games.polyclub.power.brmodelo.ui
 internal actual val supportsBitmapResources: Boolean = true
 
 internal actual val isDesktopTarget: Boolean = true
+
+internal actual val invertCanvasPointerScrollPan: Boolean = false
+
+/** Linux/X11 often delivers small scroll steps; tune if pan still feels slow. */
+internal actual val canvasPointerScrollPanGain: Float = 2.75f
