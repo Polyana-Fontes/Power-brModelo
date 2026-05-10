@@ -85,6 +85,8 @@ private fun leafCanvasAttributeToHidden(a: SchemaElement.Attribute): HiddenAttri
         children = emptyList(),
         nestedHiddenAttributes = a.hiddenAttributes,
         isOptional = a.isOptional,
+        observations = a.observations,
+        dictionary = a.dictionary,
     )
 
 /**
@@ -111,6 +113,8 @@ private fun canvasAttributeSubtreeToHidden(schema: ConceptualSchema, attrId: Int
         children = canvasChildHiddens,
         nestedHiddenAttributes = a.hiddenAttributes,
         isOptional = a.isOptional,
+        observations = a.observations,
+        dictionary = a.dictionary,
     ) to removed
 }
 
@@ -156,8 +160,8 @@ private fun materializeHiddenSubtree(
         id = aid,
         name = h.name,
         position = pos,
-        observations = "",
-        dictionary = "",
+        observations = h.observations,
+        dictionary = h.dictionary,
         labelStyle = ConceptualPlacementDefaults.labelStyle,
         hiddenAttributes = h.nestedHiddenAttributes,
         ownerId = canvasOwnerId,

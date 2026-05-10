@@ -42,6 +42,8 @@ package games.polyclub.power.brmodelo.domain
  * @param nestedHiddenAttributes Attributes that stayed in [SchemaElement.Attribute.hiddenAttributes] on the canvas
  *                     node (not drawn as composite children). Serialized separately in XML as `<AtributosOcultosAninhados>`.
  * @param isOptional   Optional flag on the canvas attribute (Kotlin model); preserved across hide/reveal.
+ * @param observations Free-text notes (XML `<Observacao>` on `<AtributoOculto>` when non-empty).
+ * @param dictionary   Data dictionary text (XML `<Dicionario>` when non-empty).
  */
 data class HiddenAttribute(
     val name: String,
@@ -52,6 +54,8 @@ data class HiddenAttribute(
     val children: List<HiddenAttribute> = emptyList(),
     val nestedHiddenAttributes: List<HiddenAttribute> = emptyList(),
     val isOptional: Boolean = false,
+    val observations: String = "",
+    val dictionary: String = "",
 ) {
     /** True when [cardinality.maxCardinality] > 0, same logic as [TAtributoOculto.Multivalorado]. */
     val isMultiValued: Boolean get() = cardinality.maxCardinality > 0
@@ -104,4 +108,10 @@ data class HiddenAttribute(
         return children.sumOf { it.physicalFieldLeafCount() } +
             nestedHiddenAttributes.sumOf { it.physicalFieldLeafCount() }
     }
+
+    /** Recursive copy for editor dialogs (isolated mutable draft tree). */
+    fun deepCopy(): HiddenAttribute = copy(
+        children = children.map { it.deepCopy() },
+        nestedHiddenAttributes = nestedHiddenAttributes.map { it.deepCopy() },
+    )
 }

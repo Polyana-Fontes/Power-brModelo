@@ -588,6 +588,12 @@ object ConceptualSchemaXmlSerializer {
             boolValor("Identificador", attr.isIdentifier)
             boolValor("Opcional", attr.isOptional)
             valor("Tipo", attr.type)
+            if (attr.observations.isNotEmpty()) {
+                textNode("Observacao", attr.observations)
+            }
+            if (attr.dictionary.isNotEmpty()) {
+                textNode("Dicionario", attr.dictionary)
+            }
             if (attr.children.isNotEmpty()) {
                 add(xmlNode("Atributos") {
                     attr.children.forEach { add(buildAtributoOculto(it)) }

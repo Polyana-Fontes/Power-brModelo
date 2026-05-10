@@ -38,6 +38,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.HorizontalDivider
@@ -73,6 +74,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -101,6 +103,12 @@ import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.Cardinality
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.domain.canRevealHiddenAttributeMenu
+import games.polyclub.power.brmodelo.domain.applyAppendHiddenAttribute
+import games.polyclub.power.brmodelo.domain.applyRemoveHiddenAttribute
+import games.polyclub.power.brmodelo.domain.applyReplaceHiddenAttribute
+import games.polyclub.power.brmodelo.domain.hiddenAttributeAtPath
+import games.polyclub.power.brmodelo.domain.hiddenAttributeForestNamesValid
+import games.polyclub.power.brmodelo.domain.replaceHiddenAttributeAtPath
 import games.polyclub.power.brmodelo.domain.ElementPosition
 import games.polyclub.power.brmodelo.domain.HiddenAttribute
 import games.polyclub.power.brmodelo.domain.LineOrientation
@@ -287,6 +295,7 @@ internal fun InspectorPanel(
                 hiddenAttributeRevealPath = hiddenAttributeRevealPath,
                 onHiddenAttributeRevealPathChange = onHiddenAttributeRevealPathChange,
                 onRevealHiddenAttributeInModel = onRevealHiddenAttributeInModel,
+                onSchemaCommit = onSchemaCommit,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -1697,12 +1706,14 @@ private fun ReadOnlyRow(
 }
 
 @Composable
-private fun MultilineInspectorDialog(
+internal fun MultilineInspectorDialog(
     label: String,
     initialText: String,
     onLiveDraftChange: ((String) -> Unit)?,
     onCancel: () -> Unit,
     onConfirm: (String) -> Unit,
+    /** Smaller padding and text area — for desktop tool windows (e.g. hidden-attribute editor). */
+    compact: Boolean = false,
 ) {
     var draft by remember(initialText) { mutableStateOf(initialText) }
     val focusRequester = remember { FocusRequester() }
@@ -1710,14 +1721,26 @@ private fun MultilineInspectorDialog(
         focusRequester.requestFocus()
     }
 
+    val outerPad = if (compact) 10.dp else 16.dp
+    val titleSize = if (compact) 12.sp else 14.sp
+    val titleLine = if (compact) 14.sp else 18.sp
+    val titleSpacer = if (compact) 6.dp else 12.dp
+    val fieldMinH = if (compact) 100.dp else 220.dp
+    val fieldMaxH = if (compact) 220.dp else 420.dp
+    val minLines = if (compact) 5 else 12
+    val maxLines = if (compact) 14 else 24
+    val bottomSpacer = if (compact) 8.dp else 16.dp
+    val widthMin = if (compact) 260.dp else 320.dp
+    val widthMax = if (compact) 400.dp else 560.dp
+
     Dialog(onDismissRequest = onCancel) {
         Surface(
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(if (compact) 8.dp else 12.dp),
             color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp,
-            shadowElevation = 8.dp,
+            tonalElevation = if (compact) 2.dp else 6.dp,
+            shadowElevation = if (compact) 4.dp else 8.dp,
             modifier = Modifier
-                .widthIn(min = 320.dp, max = 560.dp)
+                .widthIn(min = widthMin, max = widthMax)
                 .onPreviewKeyEvent { evt ->
                     if (evt.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     if (evt.key == Key.Escape) {
@@ -1728,42 +1751,57 @@ private fun MultilineInspectorDialog(
                     }
                 },
         ) {
-            Column(Modifier.padding(16.dp)) {
+            Column(Modifier.padding(outerPad)) {
                 Text(
                     text = label,
                     style = TextStyle(
-                        fontSize = 14.sp,
-                        lineHeight = 18.sp,
+                        fontSize = titleSize,
+                        lineHeight = titleLine,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
                     ),
                 )
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(titleSpacer))
                 OutlinedTextField(
                     value = draft,
-                    onValueChange = {
-                        draft = it
-                        onLiveDraftChange?.invoke(it)
+                    onValueChange = { newText ->
+                        draft = newText
+                        onLiveDraftChange?.invoke(newText)
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 220.dp, max = 420.dp)
+                        .heightIn(min = fieldMinH, max = fieldMaxH)
                         .focusRequester(focusRequester),
-                    minLines = 12,
-                    maxLines = 24,
+                    minLines = minLines,
+                    maxLines = maxLines,
+                    textStyle = TextStyle(fontSize = if (compact) 12.sp else 14.sp),
                 )
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(bottomSpacer))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    TextButton(onClick = onCancel) {
-                        Text("Cancelar")
+                    TextButton(
+                        onClick = onCancel,
+                        contentPadding = if (compact) {
+                            PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        } else {
+                            PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                        },
+                    ) {
+                        Text("Cancelar", fontSize = if (compact) 12.sp else 14.sp)
                     }
                     Spacer(Modifier.width(8.dp))
-                    Button(onClick = { onConfirm(draft) }) {
-                        Text("Pronto")
+                    Button(
+                        onClick = { onConfirm(draft) },
+                        contentPadding = if (compact) {
+                            PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        } else {
+                            PaddingValues(horizontal = 16.dp, vertical = 10.dp)
+                        },
+                    ) {
+                        Text("Pronto", fontSize = if (compact) 12.sp else 14.sp)
                     }
                 }
             }
@@ -2268,6 +2306,11 @@ private fun PropertyRow(
 
 // ── Atr. ocultos tab ──────────────────────────────────────────────────────────
 
+private sealed interface HiddenAttributeEditorLaunch {
+    data object New : HiddenAttributeEditorLaunch
+    data class Edit(val path: List<Int>) : HiddenAttributeEditorLaunch
+}
+
 @Composable
 private fun HiddenAttributesTab(
     schema: ConceptualSchema?,
@@ -2275,8 +2318,13 @@ private fun HiddenAttributesTab(
     hiddenAttributeRevealPath: List<Int>?,
     onHiddenAttributeRevealPathChange: (List<Int>?) -> Unit,
     onRevealHiddenAttributeInModel: () -> Unit,
+    onSchemaCommit: (ConceptualSchema) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var editorLaunch by remember { mutableStateOf<HiddenAttributeEditorLaunch?>(null) }
+    var pendingDeletePath by remember { mutableStateOf<List<Int>?>(null) }
+
+    val ownerId = (selection as? CanvasSelection.Element)?.id
     val hiddenAttrs: List<HiddenAttribute> = when (selection) {
         is CanvasSelection.Element -> schema?.elements?.get(selection.id)?.let { el ->
             when (el) {
@@ -2296,6 +2344,99 @@ private fun HiddenAttributesTab(
     val revealEnabled = schema != null &&
         canRevealHiddenAttributeMenu(schema, selection, hiddenAttributeRevealPath)
 
+    val canUseHiddenTools = schema != null && ownerId != null && selection is CanvasSelection.Element
+    val pathSelected = hiddenAttributeRevealPath != null && hiddenAttributeRevealPath.isNotEmpty()
+    val editEnabled = canUseHiddenTools && pathSelected
+    val deleteEnabled = canUseHiddenTools && pathSelected
+
+    LaunchedEffect(editorLaunch, hiddenAttrs) {
+        val ed = editorLaunch as? HiddenAttributeEditorLaunch.Edit ?: return@LaunchedEffect
+        if (hiddenAttributeAtPath(hiddenAttrs, ed.path) == null) {
+            editorLaunch = null
+        }
+    }
+
+    editorLaunch?.let { launch ->
+        when (launch) {
+            HiddenAttributeEditorLaunch.New -> {
+                HiddenAttributeEditorDialog(
+                    title = "Novo atributo oculto",
+                    initialSubtree = defaultNewHiddenAttribute(suggestNewRootHiddenAttributeName(hiddenAttrs)),
+                    onDismiss = { editorLaunch = null },
+                    extraValid = { d -> hiddenAttributeForestNamesValid(hiddenAttrs + d) },
+                    onConfirm = { subtree ->
+                        val oid = ownerId ?: return@HiddenAttributeEditorDialog
+                        val sch = schema ?: return@HiddenAttributeEditorDialog
+                        applyAppendHiddenAttribute(sch, oid, subtree)?.let {
+                            onSchemaCommit(it)
+                            onHiddenAttributeRevealPathChange(null)
+                            editorLaunch = null
+                        }
+                    },
+                )
+            }
+            is HiddenAttributeEditorLaunch.Edit -> {
+                val path = launch.path
+                val initial = hiddenAttributeAtPath(hiddenAttrs, path)?.deepCopy()
+                if (initial != null) {
+                    HiddenAttributeEditorDialog(
+                        title = "Editar atributo oculto",
+                        initialSubtree = initial,
+                        onDismiss = { editorLaunch = null },
+                        extraValid = { d ->
+                            replaceHiddenAttributeAtPath(hiddenAttrs, path, d)
+                                ?.let { hiddenAttributeForestNamesValid(it) } ?: false
+                        },
+                        onConfirm = { subtree ->
+                            val oid = ownerId ?: return@HiddenAttributeEditorDialog
+                            val sch = schema ?: return@HiddenAttributeEditorDialog
+                            applyReplaceHiddenAttribute(sch, oid, path, subtree)?.let {
+                                onSchemaCommit(it)
+                                onHiddenAttributeRevealPathChange(null)
+                                editorLaunch = null
+                            }
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    pendingDeletePath?.let { delPath ->
+        AlertDialog(
+            onDismissRequest = { pendingDeletePath = null },
+            title = { Text("Excluir atributo oculto") },
+            text = {
+                Text(
+                    "Remover este atributo oculto e toda a subárvore? Esta ação não pode ser desfeita pelo diálogo.",
+                    fontSize = 13.sp,
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val oid = ownerId
+                        val sch = schema
+                        if (oid != null && sch != null) {
+                            applyRemoveHiddenAttribute(sch, oid, delPath)?.let {
+                                onSchemaCommit(it)
+                                onHiddenAttributeRevealPathChange(null)
+                            }
+                        }
+                        pendingDeletePath = null
+                    },
+                ) {
+                    Text("Excluir")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeletePath = null }) {
+                    Text("Cancelar")
+                }
+            },
+        )
+    }
+
     Column(modifier = modifier.fillMaxWidth()) {
         // Action buttons row
         Row(
@@ -2304,10 +2445,29 @@ private fun HiddenAttributesTab(
                 .background(HEADER_BG)
                 .padding(horizontal = 4.dp, vertical = 3.dp),
         ) {
-            listOf("Novo", "Editar", "Excluir").forEach { label ->
-                ActionButton(label, onClick = { /* TODO */ })
-                Spacer(Modifier.width(2.dp))
-            }
+            ActionButton(
+                label = "Novo",
+                enabled = canUseHiddenTools,
+                onClick = { editorLaunch = HiddenAttributeEditorLaunch.New },
+            )
+            Spacer(Modifier.width(2.dp))
+            ActionButton(
+                label = "Editar",
+                enabled = editEnabled,
+                onClick = {
+                    val p = hiddenAttributeRevealPath
+                    if (p != null) editorLaunch = HiddenAttributeEditorLaunch.Edit(p)
+                },
+            )
+            Spacer(Modifier.width(2.dp))
+            ActionButton(
+                label = "Excluir",
+                enabled = deleteEnabled,
+                onClick = {
+                    val p = hiddenAttributeRevealPath
+                    if (p != null) pendingDeletePath = p
+                },
+            )
         }
         Row(
             modifier = Modifier

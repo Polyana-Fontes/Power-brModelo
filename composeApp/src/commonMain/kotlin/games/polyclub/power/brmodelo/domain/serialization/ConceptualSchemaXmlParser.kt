@@ -523,6 +523,8 @@ object ConceptualSchemaXmlParser {
             node.child("AtributosOcultosAninhados")?.children("AtributoOculto")?.map { parseHiddenAttribute(it) }
                 ?: emptyList()
         val isOptional = node.boolValor("Opcional")
+        val observations = node.textChild("Observacao") ?: ""
+        val dictionary = node.textChild("Dicionario") ?: ""
         return HiddenAttribute(
             name = name,
             type = type,
@@ -535,6 +537,8 @@ object ConceptualSchemaXmlParser {
             children = children,
             nestedHiddenAttributes = nestedHiddenAttributes,
             isOptional = isOptional,
+            observations = observations,
+            dictionary = dictionary,
         )
     }
 }
