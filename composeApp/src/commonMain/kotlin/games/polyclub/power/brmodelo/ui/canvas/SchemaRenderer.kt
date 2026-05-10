@@ -884,6 +884,19 @@ private fun cardinalityLabelDisplayString(
 }
 
 /**
+ * Extra clearance (px) between the auto-placed cardinality label and the entity edge / line,
+ * on top of the legacy brModelo offsets.
+ */
+private const val CARDINALITY_LABEL_AUTO_LAYOUT_OUTSET_PX = 5f
+/**
+ * Bottom edge uses a smaller outward nudge so the label does not look overly far from the line
+ * (the original `CARD_H - 4f` shift reads larger than on other sides).
+ */
+private const val CARDINALITY_LABEL_AUTO_LAYOUT_OUTSET_BOTTOM_PX = 2f
+/** Horizontal nudge (px) for top/bottom attachment so the label sits slightly right of the line. */
+private const val CARDINALITY_LABEL_TOP_BOTTOM_LINE_OFFSET_X_PX = 3f
+
+/**
  * Top-left pixel where the cardinality text is placed in **fallback** mode
  * (same geometry as the former no-stored-position branch of [drawCardinalityLabel]).
  */
@@ -924,8 +937,21 @@ private fun floatingCardinalityLabelTextTopLeftMeasured(
     var aLeft = anchor.x
     var aTop = anchor.y - CARD_H + 5f
     when (p) {
-        1 -> aLeft = aLeft - lw + 2f
-        4 -> aTop = aTop + CARD_H - 4f
+        1 -> {
+            aLeft = aLeft - lw + 2f - CARDINALITY_LABEL_AUTO_LAYOUT_OUTSET_PX
+        }
+        2 -> {
+            aTop -= CARDINALITY_LABEL_AUTO_LAYOUT_OUTSET_PX
+            aLeft += CARDINALITY_LABEL_TOP_BOTTOM_LINE_OFFSET_X_PX
+        }
+        3 -> {
+            aLeft += CARDINALITY_LABEL_AUTO_LAYOUT_OUTSET_PX
+        }
+        4 -> {
+            aTop = aTop + CARD_H - 4f + CARDINALITY_LABEL_AUTO_LAYOUT_OUTSET_BOTTOM_PX
+            aLeft += CARDINALITY_LABEL_TOP_BOTTOM_LINE_OFFSET_X_PX
+        }
+        else -> Unit
     }
     return Offset(aLeft, aTop)
 }

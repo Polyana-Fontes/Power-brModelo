@@ -115,6 +115,8 @@ private val SECTION_HEADER_BG  = Color(0xFFD2D5D8)  // neutral gray section head
 private val CELL_LABEL_BG      = Color(0xFFDFE2E6)  // neutral gray label cell
 private val CELL_LABEL_FOCUSED = Color(0xFF4A5868)  // muted slate for focused label bg
 private val CELL_VALUE_BG      = Color(0xFFFFFFFF)
+/** Value cell background for read-only / locked fields (slightly darker than [CELL_VALUE_BG]). */
+private val CELL_VALUE_READ_ONLY_BG = Color(0xFFECEEF1)
 private val CELL_BORDER        = Color(0xFFB8BCC0)
 private val LABEL_COLOR        = Color(0xFF2A3A4A)
 private val LABEL_FOCUSED_COLOR = Color(0xFFFFFFFF)
@@ -168,8 +170,8 @@ private val HINTS: Map<String, String> = mapOf(
     "CARDINALIDADE"  to "Cardinalidade do relacionamento entre as entidades.",
     "PAPEL"          to "Descrição do papel da cardinalidade (descrição/observação).",
     "CARD_OBS"       to "Algo importante a ser anotado para posterior observação.",
-    "CARD_LT_X"      to "Posição horizontal da caixa da cardinalidade no modelo.",
-    "CARD_LT_Y"      to "Posição vertical da caixa da cardinalidade no modelo.",
+    "CARD_LT_X"      to "Posição horizontal da caixa da cardinalidade no modelo. Editável só quando \"Fixar posição\" for Sim.",
+    "CARD_LT_Y"      to "Posição vertical da caixa da cardinalidade no modelo. Editável só quando \"Fixar posição\" for Sim.",
     "CARD_WH_W"      to "Largura da caixa da cardinalidade (somente leitura com tamanho automático).",
     "CARD_WH_H"      to "Altura da caixa da cardinalidade (somente leitura com tamanho automático).",
     "ATRIB_TAM_AUT"  to "Controle do tamanho do desenho do atributo.",
@@ -1060,62 +1062,80 @@ private fun CardinalityContent(
             connectionCardinalityBoxForModel(schema, conn, textMeasurer)
                 ?: materializeCardinalityPositionForFixed(schema, conn, textMeasurer)!!
 
-        EditableRow(
-            label = "Esquerda",
-            value = box.x.toString(),
-            key = "CARD_LT_X",
-            focusedKey = focusedKey,
-            onFocusChange = onFocusChange,
-            onLiveDraftChange = { draft ->
-                draft.toIntOrNull()?.let { x ->
+        val positionFieldsEditable = conn.cardinalityFixed
+        if (positionFieldsEditable) {
+            EditableRow(
+                label = "Esquerda",
+                value = box.x.toString(),
+                key = "CARD_LT_X",
+                focusedKey = focusedKey,
+                onFocusChange = onFocusChange,
+                onLiveDraftChange = { draft ->
+                    draft.toIntOrNull()?.let { x ->
+                        val b = ensureBoxForEdit()
+                        onSchemaPreview(
+                            schema.copy(
+                                connections = schema.connections.map {
+                                    if (it.id == conn.id) {
+                                        it.copy(cardinalityPosition = b.copy(x = x))
+                                    } else {
+                                        it
+                                    }
+                                },
+                            ),
+                        )
+                    }
+                },
+            ) { v ->
+                v.toIntOrNull()?.let { x ->
                     val b = ensureBoxForEdit()
-                    onSchemaPreview(
-                        schema.copy(
-                            connections = schema.connections.map {
-                                if (it.id == conn.id) {
-                                    it.copy(cardinalityPosition = b.copy(x = x))
-                                } else {
-                                    it
-                                }
-                            },
-                        ),
-                    )
+                    updateConn { it.copy(cardinalityPosition = b.copy(x = x)) }
                 }
-            },
-        ) { v ->
-            v.toIntOrNull()?.let { x ->
-                val b = ensureBoxForEdit()
-                updateConn { it.copy(cardinalityPosition = b.copy(x = x)) }
             }
-        }
 
-        EditableRow(
-            label = "Acima",
-            value = box.y.toString(),
-            key = "CARD_LT_Y",
-            focusedKey = focusedKey,
-            onFocusChange = onFocusChange,
-            onLiveDraftChange = { draft ->
-                draft.toIntOrNull()?.let { y ->
+            EditableRow(
+                label = "Acima",
+                value = box.y.toString(),
+                key = "CARD_LT_Y",
+                focusedKey = focusedKey,
+                onFocusChange = onFocusChange,
+                onLiveDraftChange = { draft ->
+                    draft.toIntOrNull()?.let { y ->
+                        val b = ensureBoxForEdit()
+                        onSchemaPreview(
+                            schema.copy(
+                                connections = schema.connections.map {
+                                    if (it.id == conn.id) {
+                                        it.copy(cardinalityPosition = b.copy(y = y))
+                                    } else {
+                                        it
+                                    }
+                                },
+                            ),
+                        )
+                    }
+                },
+            ) { v ->
+                v.toIntOrNull()?.let { y ->
                     val b = ensureBoxForEdit()
-                    onSchemaPreview(
-                        schema.copy(
-                            connections = schema.connections.map {
-                                if (it.id == conn.id) {
-                                    it.copy(cardinalityPosition = b.copy(y = y))
-                                } else {
-                                    it
-                                }
-                            },
-                        ),
-                    )
+                    updateConn { it.copy(cardinalityPosition = b.copy(y = y)) }
                 }
-            },
-        ) { v ->
-            v.toIntOrNull()?.let { y ->
-                val b = ensureBoxForEdit()
-                updateConn { it.copy(cardinalityPosition = b.copy(y = y)) }
             }
+        } else {
+            ReadOnlyRow(
+                label = "Esquerda",
+                value = box.x.toString(),
+                key = "CARD_LT_X",
+                focusedKey = focusedKey,
+                onFocusChange = onFocusChange,
+            )
+            ReadOnlyRow(
+                label = "Acima",
+                value = box.y.toString(),
+                key = "CARD_LT_Y",
+                focusedKey = focusedKey,
+                onFocusChange = onFocusChange,
+            )
         }
 
         if (conn.cardinalityAutoSize) {
@@ -1339,6 +1359,7 @@ private fun ReadOnlyRow(
     key: String,
     focusedKey: String?,
     onFocusChange: (String?) -> Unit,
+    valueCellBackground: Color = CELL_VALUE_READ_ONLY_BG,
 ) {
     val focused = focusedKey == key
     PropertyRow(
@@ -1346,6 +1367,7 @@ private fun ReadOnlyRow(
         focused = focused,
         onLabelClick = { onFocusChange(key) },
         valueCellModifier = Modifier.clickable { onFocusChange(key) },
+        valueCellBackground = valueCellBackground,
     ) {
         Text(
             text = value,
@@ -1408,6 +1430,7 @@ private fun EditableRow(
         focused = focused,
         onLabelClick = activateRow,
         valueCellModifier = valueCellModifier,
+        valueCellBackground = if (enabled) CELL_VALUE_BG else CELL_VALUE_READ_ONLY_BG,
     ) {
         if (focused && enabled) {
             BasicTextField(
@@ -1459,9 +1482,13 @@ private fun EditableRow(
             )
         } else {
             Text(
-                text = if (enabled) value else "",
+                text = value,
                 style = inspectorValueTextStyle(
-                    if (enabled) VALUE_COLOR else Color(0xFF9AA0A8),
+                    when {
+                        !enabled -> Color(0xFF9AA0A8)
+                        focused -> Color(0xFF80A0C0)
+                        else -> VALUE_COLOR
+                    },
                 ),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -1600,6 +1627,7 @@ private fun PropertyRow(
     focused: Boolean,
     onLabelClick: () -> Unit,
     valueCellModifier: Modifier,
+    valueCellBackground: Color = CELL_VALUE_BG,
     valueContent: @Composable () -> Unit,
 ) {
     Row(
@@ -1635,7 +1663,7 @@ private fun PropertyRow(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight()
-                .background(CELL_VALUE_BG)
+                .background(valueCellBackground)
                 .then(valueCellModifier),
         ) {
             valueContent()
