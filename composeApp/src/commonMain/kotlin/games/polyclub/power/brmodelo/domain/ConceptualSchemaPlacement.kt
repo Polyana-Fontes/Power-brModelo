@@ -110,6 +110,23 @@ private fun nextEntAssocName(schema: ConceptualSchema): String =
     "EntAssoc${nextFreeIndex(usedEntAssocIndices(schema))}"
 
 /**
+ * Next unused outer name for an associative entity (`EntAssocN`), scanning pattern indices and
+ * explicit name collisions (entities, relationships, associative outers).
+ */
+internal fun ConceptualSchema.nextUnusedAssociativeEntityOuterName(): String {
+    val patternUsed = usedEntAssocIndices(this)
+    var n = nextFreeIndex(patternUsed)
+    while (true) {
+        val candidate = "EntAssoc$n"
+        val taken = associativeEntities.any { it.name == candidate } ||
+            entities.any { it.name == candidate } ||
+            relationships.any { it.name == candidate }
+        if (!taken) return candidate
+        n++
+    }
+}
+
+/**
  * Places a new canvas element at the given top-left (schema coordinates) and returns the updated schema
  * plus the new element id.
  */

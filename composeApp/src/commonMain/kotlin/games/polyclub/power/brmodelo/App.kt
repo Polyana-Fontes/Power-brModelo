@@ -38,7 +38,9 @@ import androidx.compose.ui.graphics.Color
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolVariant
 import games.polyclub.power.brmodelo.domain.applyOrganizeAttributesMenuAction
+import games.polyclub.power.brmodelo.domain.applyPromoteRelationshipsToAssociativeEntities
 import games.polyclub.power.brmodelo.domain.canOrganizeAttributesMenuSelection
+import games.polyclub.power.brmodelo.domain.canPromoteToAssociativeEntityMenu
 import games.polyclub.power.brmodelo.domain.canSelectAttributeTreeMenu
 import games.polyclub.power.brmodelo.domain.expandCanvasSelectionWithAttributeTrees
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
@@ -442,11 +444,19 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
             tab.copy(selection = expandCanvasSelectionWithAttributeTrees(tab.schema, tab.selection))
         }
     }
+    val promoteAssociativeEnabled = canPromoteToAssociativeEntityMenu(sel.schema, sel.selection)
+    val onPromoteToAssociative: () -> Unit = promote@{
+        val tab = tabSessions.getOrNull(selectedTabIndex) ?: return@promote
+        val updated = applyPromoteRelationshipsToAssociativeEntities(tab.schema, tab.selection) ?: return@promote
+        pushCommitOnSelected(updated.withNormalizedAttributeMultiValuedCounts())
+    }
     val operationsMenuBinding = OperationsMenuRibbonBinding(
         organizeAttributesEnabled = organizeAttrsEnabled,
         onOrganizeAttributes = onOrganizeAttributes,
         selectAttributesEnabled = selectAttrsEnabled,
         onSelectAttributes = onSelectAttributes,
+        promoteToAssociativeEnabled = promoteAssociativeEnabled,
+        onPromoteToAssociative = onPromoteToAssociative,
     )
 
     MaterialTheme {

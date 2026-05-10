@@ -32,6 +32,7 @@ import games.polyclub.power.brmodelo.generated.resources.selecionar_s
 internal fun conceptualOperationsDropdownEntries(
     organizeAttributesEnabled: Boolean,
     selectAttributesEnabled: Boolean,
+    promoteToAssociativeEnabled: Boolean,
 ): List<DropdownEntry> =
     listOf(
         DropdownEntry(
@@ -55,6 +56,8 @@ internal fun conceptualOperationsDropdownEntries(
             label = "Converter em Entidade Associativa",
             icon = Res.drawable.entidade_associativa_s,
             isSeparatorAbove = true,
+            enabled = promoteToAssociativeEnabled,
+            conceptualOperation = ConceptualRibbonOperation.PromoteToAssociativeEntity,
         ),
         DropdownEntry(
             label = "Converter em Entidade",

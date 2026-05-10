@@ -38,6 +38,7 @@ internal enum class RibbonTab {
 internal enum class ConceptualRibbonOperation {
     OrganizeAttributes,
     SelectAttributes,
+    PromoteToAssociativeEntity,
 }
 
 internal data class DropdownEntry(
@@ -137,6 +138,8 @@ internal data class OperationsMenuRibbonBinding(
     val onOrganizeAttributes: () -> Unit,
     val selectAttributesEnabled: Boolean,
     val onSelectAttributes: () -> Unit,
+    val promoteToAssociativeEnabled: Boolean,
+    val onPromoteToAssociative: () -> Unit,
 )
 
 internal data class MenuEntry(
