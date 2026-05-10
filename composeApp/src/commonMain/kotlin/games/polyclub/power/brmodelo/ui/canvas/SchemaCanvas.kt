@@ -666,6 +666,26 @@ internal fun SchemaCanvas(
                                 }
                         }
 
+                    /** When moving an element (not a resize handle), every selected element moves by the same delta. */
+                    val multiElementDragSnapshot: Pair<Set<Int>, Map<Int, ElementPosition>>? =
+                        if (dragElementId != null && hitHandle == null && schemaAtGestureStart != null) {
+                            val ids = when (val sel = selAtGestureStart) {
+                                is CanvasSelection.Multiple -> sel.elementIds
+                                is CanvasSelection.Element -> setOf(sel.id)
+                                else -> null
+                            }
+                            if (ids != null && dragElementId in ids) {
+                                val posMap = ids.mapNotNull { id ->
+                                    schemaAtGestureStart.elements[id]?.let { id to it.position }
+                                }.toMap()
+                                if (posMap.size == ids.size) ids to posMap else null
+                            } else {
+                                null
+                            }
+                        } else {
+                            null
+                        }
+
                     val startPointer = down.position
                     val slop = viewConfiguration.touchSlop
                     var totalDrag = Offset.Zero
@@ -711,11 +731,12 @@ internal fun SchemaCanvas(
 
                         if (isDragging) {
                             change.consume()
-                            val s = schemaAtGestureStart
+                            val schemaSnapshot = schemaAtGestureStart
 
-                            if (s == null) {
+                            if (schemaSnapshot == null) {
                                 panOffset = panAtGestureStart + totalDrag
                             } else {
+                                val s = schemaSnapshot
                                 when {
                                     // ── Resize cardinality label (manual size) ────────
                                     hitHandle != null &&
@@ -762,22 +783,37 @@ internal fun SchemaCanvas(
                                         }
                                     }
 
-                                    // ── Move element ─────────────────────────────────
-                                    dragElementId != null && startElementPos != null -> {
-                                        val newPos = startElementPos.copy(
-                                            x = startElementPos.x + totalDrag.x.toInt(),
-                                            y = startElementPos.y + totalDrag.y.toInt(),
-                                        )
-                                        val elem = s.elements[dragElementId]
-                                        if (elem != null) {
-                                            val schemaMoved = s.withElement(elem.withPosition(newPos))
-                                            currentOnSchemaPreview(
-                                                schemaMoved.withRecalculatedFloatingCardinalityPositions(
-                                                    onlyIncidentToElementId = dragElementId,
-                                                    textMeasurer = currentTextMeasurer,
+                                    // ── Move element(s) — entire selection translates together ─────
+                                    multiElementDragSnapshot != null -> {
+                                        val movingSchema: ConceptualSchema = schemaSnapshot
+                                        val (ids, startPositions) = multiElementDragSnapshot
+                                        val dx = totalDrag.x.toInt()
+                                        val dy = totalDrag.y.toInt()
+                                        var schemaMoved: ConceptualSchema = movingSchema
+                                        for ((id, startPos) in startPositions) {
+                                            val el = schemaMoved.elements[id] ?: continue
+                                            schemaMoved = schemaMoved.withElement(
+                                                el.withPosition(
+                                                    startPos.copy(
+                                                        x = startPos.x + dx,
+                                                        y = startPos.y + dy,
+                                                    ),
                                                 ),
                                             )
                                         }
+                                        val selectedCardIds = when (val sel = selAtGestureStart) {
+                                            is CanvasSelection.Multiple -> sel.cardinalityConnectionIds
+                                            else -> emptySet()
+                                        }
+                                        currentOnSchemaPreview(
+                                            schemaMoved.withCardinalityPositionsAfterElementsMovedByDelta(
+                                                movedElementIds = ids,
+                                                dx = dx,
+                                                dy = dy,
+                                                selectedCardinalityConnectionIds = selectedCardIds,
+                                                textMeasurer = currentTextMeasurer,
+                                            ),
+                                        )
                                     }
 
                                     // ── Move cardinality label ────────────────────────
@@ -1268,7 +1304,7 @@ private fun processAttributeToolTap(
  * Applies a resize gesture to [startPos] based on which corner [handle] is being dragged
  * and the cumulative [totalDelta] since the start of the gesture.
  *
- * The minimum size is clamped to 10×10 to avoid negative/zero dimensions.
+ * The minimum size is clamped to [ElementPosition.MIN_WIDTH_PX] × [ElementPosition.MIN_HEIGHT_PX].
  */
 private fun applyResize(
     handle: ResizeHandle,
@@ -1277,7 +1313,7 @@ private fun applyResize(
 ): ElementPosition {
     val dx = totalDelta.x.toInt()
     val dy = totalDelta.y.toInt()
-    val minSize = 10
+    val minSize = ElementPosition.MIN_WIDTH_PX
 
     return when (handle) {
         ResizeHandle.TOP_LEFT -> ElementPosition(

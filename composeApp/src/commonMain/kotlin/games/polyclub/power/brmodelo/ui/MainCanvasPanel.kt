@@ -45,9 +45,12 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -57,6 +60,7 @@ import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.domain.expandBulkDeleteClosure
 import games.polyclub.power.brmodelo.domain.singleElementDeletionClosure
 import games.polyclub.power.brmodelo.ui.ConceptualCanvasTool
+import games.polyclub.power.brmodelo.ui.canvas.applyCanvasKeyboardArrow
 import games.polyclub.power.brmodelo.ui.canvas.SchemaCanvas
 import games.polyclub.power.brmodelo.ui.canvas.rememberConceptualCanvasToolCursorModifier
 import games.polyclub.power.brmodelo.ui.components.CHROMIUM_TAB_ACTIVE_HEIGHT
@@ -105,6 +109,7 @@ internal fun MainCanvasPanel(
 
     val focusRequester = remember { FocusRequester() }
     val toolCursorModifier = rememberConceptualCanvasToolCursorModifier(conceptualCanvasTool)
+    val textMeasurer = rememberTextMeasurer()
 
     val desktopAwtModifierRemapVerticalScroll = rememberDesktopModifierKeysRemapVerticalScrollToHorizontal()
     val keyboardRemapVerticalScrollPan = isDesktopTarget && desktopAwtModifierRemapVerticalScroll
@@ -132,6 +137,22 @@ internal fun MainCanvasPanel(
                 .focusRequester(focusRequester)
                 .focusable()
                 .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown) {
+                        val sch = schema
+                        if (sch != null) {
+                            val nudged = sch.applyCanvasKeyboardArrow(
+                                selection = selection,
+                                key = event.key,
+                                isCtrlPressed = event.isCtrlPressed,
+                                isShiftPressed = event.isShiftPressed,
+                                textMeasurer = textMeasurer,
+                            )
+                            if (nudged != null) {
+                                onSchemaCommit(nudged)
+                                return@onPreviewKeyEvent true
+                            }
+                        }
+                    }
                     if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
                         when {
                             conceptualCanvasTool != ConceptualCanvasTool.None -> {

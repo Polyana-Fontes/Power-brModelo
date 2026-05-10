@@ -1323,80 +1323,62 @@ private fun CardinalityContent(
             connectionCardinalityBoxForModel(schema, conn, textMeasurer)
                 ?: materializeCardinalityPositionForFixed(schema, conn, textMeasurer)!!
 
-        val positionFieldsEditable = conn.cardinalityFixed
-        if (positionFieldsEditable) {
-            EditableRow(
-                label = "Esquerda",
-                value = box.x.toString(),
-                key = "CARD_LT_X",
-                focusedKey = focusedKey,
-                onFocusChange = onFocusChange,
-                onLiveDraftChange = { draft ->
-                    draft.toIntOrNull()?.let { x ->
-                        val b = ensureBoxForEdit()
-                        onSchemaPreview(
-                            schema.copy(
-                                connections = schema.connections.map {
-                                    if (it.id == conn.id) {
-                                        it.copy(cardinalityPosition = b.copy(x = x))
-                                    } else {
-                                        it
-                                    }
-                                },
-                            ),
-                        )
-                    }
-                },
-            ) { v ->
-                v.toIntOrNull()?.let { x ->
+        EditableRow(
+            label = "Esquerda",
+            value = box.x.toString(),
+            key = "CARD_LT_X",
+            focusedKey = focusedKey,
+            onFocusChange = onFocusChange,
+            onLiveDraftChange = { draft ->
+                draft.toIntOrNull()?.let { x ->
                     val b = ensureBoxForEdit()
-                    updateConn { it.copy(cardinalityPosition = b.copy(x = x)) }
+                    onSchemaPreview(
+                        schema.copy(
+                            connections = schema.connections.map {
+                                if (it.id == conn.id) {
+                                    it.copy(cardinalityPosition = b.copy(x = x))
+                                } else {
+                                    it
+                                }
+                            },
+                        ),
+                    )
                 }
+            },
+        ) { v ->
+            v.toIntOrNull()?.let { x ->
+                val b = ensureBoxForEdit()
+                updateConn { it.copy(cardinalityPosition = b.copy(x = x)) }
             }
+        }
 
-            EditableRow(
-                label = "Acima",
-                value = box.y.toString(),
-                key = "CARD_LT_Y",
-                focusedKey = focusedKey,
-                onFocusChange = onFocusChange,
-                onLiveDraftChange = { draft ->
-                    draft.toIntOrNull()?.let { y ->
-                        val b = ensureBoxForEdit()
-                        onSchemaPreview(
-                            schema.copy(
-                                connections = schema.connections.map {
-                                    if (it.id == conn.id) {
-                                        it.copy(cardinalityPosition = b.copy(y = y))
-                                    } else {
-                                        it
-                                    }
-                                },
-                            ),
-                        )
-                    }
-                },
-            ) { v ->
-                v.toIntOrNull()?.let { y ->
+        EditableRow(
+            label = "Acima",
+            value = box.y.toString(),
+            key = "CARD_LT_Y",
+            focusedKey = focusedKey,
+            onFocusChange = onFocusChange,
+            onLiveDraftChange = { draft ->
+                draft.toIntOrNull()?.let { y ->
                     val b = ensureBoxForEdit()
-                    updateConn { it.copy(cardinalityPosition = b.copy(y = y)) }
+                    onSchemaPreview(
+                        schema.copy(
+                            connections = schema.connections.map {
+                                if (it.id == conn.id) {
+                                    it.copy(cardinalityPosition = b.copy(y = y))
+                                } else {
+                                    it
+                                }
+                            },
+                        ),
+                    )
                 }
+            },
+        ) { v ->
+            v.toIntOrNull()?.let { y ->
+                val b = ensureBoxForEdit()
+                updateConn { it.copy(cardinalityPosition = b.copy(y = y)) }
             }
-        } else {
-            ReadOnlyRow(
-                label = "Esquerda",
-                value = box.x.toString(),
-                key = "CARD_LT_X",
-                focusedKey = focusedKey,
-                onFocusChange = onFocusChange,
-            )
-            ReadOnlyRow(
-                label = "Acima",
-                value = box.y.toString(),
-                key = "CARD_LT_Y",
-                focusedKey = focusedKey,
-                onFocusChange = onFocusChange,
-            )
         }
 
         if (conn.cardinalityAutoSize) {

@@ -29,4 +29,20 @@ data class ElementPosition(
     val y: Int,
     val width: Int,
     val height: Int,
-)
+) {
+    companion object {
+        /** Rigid minimum width for every element box in the in-memory model (keyboard, resize, load). */
+        const val MIN_WIDTH_PX = 5
+
+        /** Rigid minimum height for every element box in the in-memory model (keyboard, resize, load). */
+        const val MIN_HEIGHT_PX = 5
+    }
+
+    /**
+     * Enforces [MIN_WIDTH_PX] × [MIN_HEIGHT_PX] so legacy saves or bad data cannot leave smaller bounds in memory.
+     */
+    fun coercedToMinimumDimensions(): ElementPosition = copy(
+        width = width.coerceAtLeast(MIN_WIDTH_PX),
+        height = height.coerceAtLeast(MIN_HEIGHT_PX),
+    )
+}

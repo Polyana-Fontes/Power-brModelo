@@ -57,7 +57,9 @@ enum class LineOrientation(val code: Int) {
  *                            Null when no cardinality applies (e.g. attribute connections).
  * @param showCardinality     Whether the cardinality label is visible on the canvas.
  *                            Corresponds to `TLigacao.MostraCardinalidade`.
- * @param cardinalityFixed    Whether the cardinality label position is locked by the user.
+ * @param cardinalityFixed    When true, the label box is not auto-recomputed from connection geometry when
+ *                            endpoints move; the stored position is translated with dragged elements instead.
+ *                            Does not block manual editing of coordinates in the inspector.
  *                            Corresponds to `TCardinalidade.Fixa`.
  * @param isWeak              Whether this connection represents a weak-entity participation
  *                            (drawn as a double line). Corresponds to `TLigacao.Fraca`.

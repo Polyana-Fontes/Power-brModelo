@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import games.polyclub.power.brmodelo.domain.CanvasSelection
+import games.polyclub.power.brmodelo.domain.Cardinality
 import games.polyclub.power.brmodelo.domain.ConceptualLinkPick
 import games.polyclub.power.brmodelo.domain.ConceptualLinkValidationResult
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
@@ -33,6 +34,7 @@ import games.polyclub.power.brmodelo.domain.SchemaElement
 import games.polyclub.power.brmodelo.domain.validateAndBuildConceptualLink
 import kotlin.math.abs
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -147,5 +149,41 @@ class CanvasCardinalityHitTest {
 
         // Assert
         assertTrue(highlightPos == materialized)
+    }
+
+    @Test
+    fun withCardinalityPositionsAfterElementsMovedByDelta_translatesFixedCardinalityBox() {
+        // Arrange
+        val textMeasurer = headlessTextMeasurer()
+        val entity = SchemaElement.Entity(id = 1, name = "E", position = ElementPosition(10, 5, 100, 50))
+        val rel = SchemaElement.Relationship(id = 2, name = "R", position = ElementPosition(200, 0, 80, 50))
+        val conn = Connection(
+            id = 10,
+            elementIdA = 2,
+            elementIdB = 1,
+            cardinality = Cardinality.ONE_TO_ONE,
+            showCardinality = true,
+            cardinalityFixed = true,
+            cardinalityPosition = ElementPosition(150, 80, 36, 20),
+            cardinalityAutoSize = false,
+        )
+        val schemaAfterMove = ConceptualSchema(
+            elements = mapOf(1 to entity, 2 to rel),
+            connections = listOf(conn),
+        )
+
+        // Act
+        val next = schemaAfterMove.withCardinalityPositionsAfterElementsMovedByDelta(
+            movedElementIds = setOf(1),
+            dx = 10,
+            dy = 5,
+            selectedCardinalityConnectionIds = emptySet(),
+            textMeasurer = textMeasurer,
+        )
+
+        // Assert
+        val pos = next.connections.single().cardinalityPosition!!
+        assertEquals(160, pos.x)
+        assertEquals(85, pos.y)
     }
 }

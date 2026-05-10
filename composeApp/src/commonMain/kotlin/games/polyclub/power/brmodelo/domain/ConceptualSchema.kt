@@ -107,12 +107,25 @@ data class ConceptualSchema(
 
     /** Adds or replaces an element, auto-incrementing [nextId] when needed. */
     fun withElement(element: SchemaElement): ConceptualSchema {
-        val newNextId = maxOf(nextId, element.id + 1)
+        val coerced = element.withCoercedMinimumDimensions()
+        val newNextId = maxOf(nextId, coerced.id + 1)
         return copy(
-            elements = elements + (element.id to element),
+            elements = elements + (coerced.id to coerced),
             nextId = newNextId,
         )
     }
+
+    /**
+     * Enforces minimum element and cardinality label dimensions everywhere (e.g. after loading legacy saves).
+     */
+    fun withCoercedMinimumDimensions(): ConceptualSchema = copy(
+        elements = elements.mapValues { (_, el) -> el.withCoercedMinimumDimensions() },
+        connections = connections.map { conn ->
+            conn.copy(
+                cardinalityPosition = conn.cardinalityPosition?.coercedToMinimumDimensions(),
+            )
+        },
+    )
 
     /** Removes an element and all connections that reference it. */
     fun withoutElement(elementId: Int): ConceptualSchema = copy(
@@ -136,9 +149,12 @@ data class ConceptualSchema(
     }
 
     /** Adds a connection to the schema. */
-    fun withConnection(connection: Connection): ConceptualSchema = copy(
-        connections = connections + connection,
-    )
+    fun withConnection(connection: Connection): ConceptualSchema {
+        val c = connection.copy(
+            cardinalityPosition = connection.cardinalityPosition?.coercedToMinimumDimensions(),
+        )
+        return copy(connections = connections + c)
+    }
 
     /** Removes a connection by ID. */
     fun withoutConnection(connectionId: Int): ConceptualSchema = copy(

@@ -1316,6 +1316,65 @@ internal fun ConceptualSchema.withRecalculatedFloatingCardinalityPositions(
 }
 
 /**
+ * After translating one or more elements by ([dx],[dy]) in model space, updates cardinality labels:
+ * - **Floating** ([Connection.cardinalityFixed] false): recomputed from geometry via
+ *   [materializeCardinalityPositionForFixed] when the link touches a moved element or [conn.id] is in
+ *   [selectedCardinalityConnectionIds].
+ * - **Fixed**: the stored label box is shifted by ([dx],[dy]) when the link touches a moved element
+ *   or the label connection is among [selectedCardinalityConnectionIds].
+ */
+internal fun ConceptualSchema.withCardinalityPositionsAfterElementsMovedByDelta(
+    movedElementIds: Set<Int>,
+    dx: Int,
+    dy: Int,
+    selectedCardinalityConnectionIds: Set<Int>,
+    textMeasurer: TextMeasurer,
+): ConceptualSchema {
+    if (movedElementIds.isEmpty() && selectedCardinalityConnectionIds.isEmpty()) return this
+    val s = this
+
+    if (movedElementIds.isEmpty()) {
+        return copy(
+            connections = connections.map { conn ->
+                if (!conn.showCardinality || conn.cardinality == null) return@map conn
+                if (conn.id !in selectedCardinalityConnectionIds) return@map conn
+                val base = conn.cardinalityPosition
+                    ?: materializeCardinalityPositionForFixed(s, conn, textMeasurer)
+                    ?: return@map conn
+                val shifted = base.copy(x = base.x + dx, y = base.y + dy)
+                conn.copy(cardinalityPosition = shifted.coercedToMinimumDimensions())
+            },
+        )
+    }
+
+    return copy(
+        connections = connections.map { conn ->
+            if (!conn.showCardinality || conn.cardinality == null) return@map conn
+            val touchesMoved =
+                conn.elementIdA in movedElementIds || conn.elementIdB in movedElementIds
+            val selectedCard = conn.id in selectedCardinalityConnectionIds
+
+            if (!conn.cardinalityFixed) {
+                if (selectedCard || touchesMoved) {
+                    return@map materializeCardinalityPositionForFixed(s, conn, textMeasurer)?.let { pos ->
+                        conn.copy(cardinalityPosition = pos)
+                    } ?: conn
+                }
+                return@map conn
+            }
+
+            val p = conn.cardinalityPosition ?: return@map conn
+            if (touchesMoved || selectedCard) {
+                return@map conn.copy(
+                    cardinalityPosition = p.copy(x = p.x + dx, y = p.y + dy).coercedToMinimumDimensions(),
+                )
+            }
+            conn
+        },
+    )
+}
+
+/**
  * Axis-aligned bounds for hit-testing a connection's cardinality label.
  * When [Connection.cardinalityPosition] is null, uses the same fallback placement as
  * [drawCardinalityLabel] so labels from new links (or legacy data without stored coords)

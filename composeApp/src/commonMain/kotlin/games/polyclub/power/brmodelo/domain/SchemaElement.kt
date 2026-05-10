@@ -371,3 +371,20 @@ sealed class SchemaElement {
         val autoSize: Boolean = true,
     ) : SchemaElement()
 }
+
+/**
+ * Applies rigid minimum width/height from [ElementPosition] for all canvas elements.
+ */
+fun SchemaElement.withCoercedMinimumDimensions(): SchemaElement {
+    val p = position.coercedToMinimumDimensions()
+    if (p == position) return this
+    return when (this) {
+        is SchemaElement.Entity -> copy(position = p)
+        is SchemaElement.Relationship -> copy(position = p)
+        is SchemaElement.AssociativeEntity -> copy(position = p)
+        is SchemaElement.Attribute -> copy(position = p)
+        is SchemaElement.Specialization -> copy(position = p)
+        is SchemaElement.SelfRelationship -> copy(position = p)
+        is SchemaElement.Annotation -> copy(position = p)
+    }
+}

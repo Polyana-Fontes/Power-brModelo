@@ -191,7 +191,7 @@ object ConceptualSchemaBrmParser {
             elements = elements,
             connections = connections,
             nextId = maxId + 1,
-        ).withNormalizedAttributeMultiValuedCounts()
+        ).withNormalizedAttributeMultiValuedCounts().withCoercedMinimumDimensions()
     }
 
     // ── Collect all children recursively ──────────────────────────────────────
