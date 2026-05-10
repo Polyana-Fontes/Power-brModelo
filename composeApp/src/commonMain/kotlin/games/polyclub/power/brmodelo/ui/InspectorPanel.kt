@@ -68,9 +68,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -91,6 +93,7 @@ import games.polyclub.power.brmodelo.domain.SchemaElement
 import games.polyclub.power.brmodelo.domain.SpecializationType
 import games.polyclub.power.brmodelo.domain.TextAlignment
 import games.polyclub.power.brmodelo.ui.assocLabel
+import games.polyclub.power.brmodelo.ui.canvas.autoSizedAttributePosition
 import games.polyclub.power.brmodelo.ui.canvas.connectionCardinalityBoxForModel
 import games.polyclub.power.brmodelo.ui.canvas.materializeCardinalityPositionForFixed
 import games.polyclub.power.brmodelo.ui.canvas.withPosition
@@ -158,6 +161,8 @@ private val HINTS: Map<String, String> = mapOf(
     "ALINHAMENTOLT_Y" to "Reposiciona o controle quanto a posição vertical no modelo.",
     "ALINHAMENTOWH_W" to "Reposiciona o controle quanto à largura.",
     "ALINHAMENTOWH_H" to "Reposiciona o controle quanto à altura.",
+    "ATRIB_WH_W" to "Largura do atributo (somente leitura com tamanho automático).",
+    "ATRIB_WH_H" to "Altura do atributo (somente leitura com tamanho automático).",
     "AUTO_REL"       to "A entidade está auto relacionada.",
     "ESPECIALIZADA"  to "Indica se a entidade é generalização com pelo menos um triângulo de especialização (Pascal Especializacoes / XML ehEsp).",
     "EA_NOME"        to "Nome do relacionamento contido na entidade associativa.",
@@ -328,6 +333,8 @@ private fun SelectionTab(
     onSchemaCommit: (ConceptualSchema) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val textMeasurer = rememberTextMeasurer()
+    val layoutDirection = LocalLayoutDirection.current
     val hintText = focusedKey?.let { HINTS[it] } ?: ""
 
     Column(modifier = modifier) {
@@ -361,6 +368,8 @@ private fun SelectionTab(
                             onFocusChange = onFocusChange,
                             onSchemaPreview = onSchemaPreview,
                             onSchemaCommit = onSchemaCommit,
+                            textMeasurer = textMeasurer,
+                            layoutDirection = layoutDirection,
                         )
                     }
                 }
@@ -451,6 +460,37 @@ private fun SchemaMetaContent(
     }
 }
 
+// ── Attribute auto-size (inspector + canvas) ─────────────────────────────────
+
+private fun SchemaElement.Attribute.resizedIfAuto(
+    schema: ConceptualSchema,
+    textMeasurer: TextMeasurer,
+    layoutDirection: LayoutDirection,
+): SchemaElement.Attribute {
+    if (!autoSize) return this
+    return copy(position = autoSizedAttributePosition(this, schema.withElement(this), textMeasurer, layoutDirection))
+}
+
+private fun commitAttributeElement(
+    schema: ConceptualSchema,
+    attr: SchemaElement.Attribute,
+    textMeasurer: TextMeasurer,
+    layoutDirection: LayoutDirection,
+    onSchemaCommit: (ConceptualSchema) -> Unit,
+) {
+    onSchemaCommit(schema.withElement(attr.resizedIfAuto(schema, textMeasurer, layoutDirection)))
+}
+
+private fun previewAttributeElement(
+    schema: ConceptualSchema,
+    attr: SchemaElement.Attribute,
+    textMeasurer: TextMeasurer,
+    layoutDirection: LayoutDirection,
+    onSchemaPreview: (ConceptualSchema) -> Unit,
+) {
+    onSchemaPreview(schema.withElement(attr.resizedIfAuto(schema, textMeasurer, layoutDirection)))
+}
+
 // ── Element content dispatcher ────────────────────────────────────────────────
 
 @Composable
@@ -462,6 +502,8 @@ private fun ElementContent(
     onFocusChange: (String?) -> Unit,
     onSchemaPreview: (ConceptualSchema) -> Unit,
     onSchemaCommit: (ConceptualSchema) -> Unit,
+    textMeasurer: TextMeasurer,
+    layoutDirection: LayoutDirection,
 ) {
     val friendlyName = when (element) {
         is SchemaElement.Entity           -> "Entidade"
@@ -484,10 +526,20 @@ private fun ElementContent(
         focusedKey = focusedKey,
         onFocusChange = onFocusChange,
         onLiveDraftChange = { draft ->
-            onSchemaPreview(schema.withElement(element.withName(draft)))
+            val el = element.withName(draft)
+            if (el is SchemaElement.Attribute && el.autoSize) {
+                previewAttributeElement(schema, el, textMeasurer, layoutDirection, onSchemaPreview)
+            } else {
+                onSchemaPreview(schema.withElement(el))
+            }
         },
     ) { newName ->
-        onSchemaCommit(schema.withElement(element.withName(newName)))
+        val el = element.withName(newName)
+        if (el is SchemaElement.Attribute && el.autoSize) {
+            commitAttributeElement(schema, el, textMeasurer, layoutDirection, onSchemaCommit)
+        } else {
+            onSchemaCommit(schema.withElement(el))
+        }
     }
     EditableRow(
         "Observação",
@@ -501,6 +553,7 @@ private fun ElementContent(
 
     SectionTitle("Posição e Tamanho")
     val p = element.position
+    val attrAutoSize = element is SchemaElement.Attribute && element.autoSize
     EditableRow(
         "Esquerda (Left)",
         p.x.toString(),
@@ -523,26 +576,43 @@ private fun ElementContent(
             onSchemaCommit(schema.withElement(element.withPosition(p.copy(y = it))))
         }
     }
-    EditableRow(
-        "Largura (Width)",
-        p.width.toString(),
-        "ALINHAMENTOWH_W",
-        focusedKey,
-        onFocusChange
-    ) { v ->
-        v.toIntOrNull()?.let {
-            onSchemaCommit(schema.withElement(element.withPosition(p.copy(width = it))))
+    if (attrAutoSize) {
+        ReadOnlyRow(
+            label = "Largura (Width)",
+            value = p.width.toString(),
+            key = "ATRIB_WH_W",
+            focusedKey = focusedKey,
+            onFocusChange = onFocusChange,
+        )
+        ReadOnlyRow(
+            label = "Altura (Height)",
+            value = p.height.toString(),
+            key = "ATRIB_WH_H",
+            focusedKey = focusedKey,
+            onFocusChange = onFocusChange,
+        )
+    } else {
+        EditableRow(
+            "Largura (Width)",
+            p.width.toString(),
+            "ALINHAMENTOWH_W",
+            focusedKey,
+            onFocusChange
+        ) { v ->
+            v.toIntOrNull()?.let {
+                onSchemaCommit(schema.withElement(element.withPosition(p.copy(width = it))))
+            }
         }
-    }
-    EditableRow(
-        "Altura (Height)",
-        p.height.toString(),
-        "ALINHAMENTOWH_H",
-        focusedKey,
-        onFocusChange
-    ) { v ->
-        v.toIntOrNull()?.let {
-            onSchemaCommit(schema.withElement(element.withPosition(p.copy(height = it))))
+        EditableRow(
+            "Altura (Height)",
+            p.height.toString(),
+            "ALINHAMENTOWH_H",
+            focusedKey,
+            onFocusChange
+        ) { v ->
+            v.toIntOrNull()?.let {
+                onSchemaCommit(schema.withElement(element.withPosition(p.copy(height = it))))
+            }
         }
     }
 
@@ -579,6 +649,8 @@ private fun ElementContent(
             onFocusChange = onFocusChange,
             onSchemaPreview = onSchemaPreview,
             onSchemaCommit = onSchemaCommit,
+            textMeasurer = textMeasurer,
+            layoutDirection = layoutDirection,
         )
         is SchemaElement.Specialization   -> SpecializationFields(
             element,
@@ -738,6 +810,8 @@ private fun AttributeFields(
     onFocusChange: (String?) -> Unit,
     onSchemaPreview: (ConceptualSchema) -> Unit,
     onSchemaCommit: (ConceptualSchema) -> Unit,
+    textMeasurer: TextMeasurer,
+    layoutDirection: LayoutDirection,
 ) {
     SectionTitle("Atributo")
     DropdownRow(
@@ -747,7 +821,15 @@ private fun AttributeFields(
         key = "ATRIB_TAM_AUT",
         focusedKey = focusedKey,
         onFocusChange = onFocusChange,
-    ) { v -> onSchemaCommit(schema.withElement(element.copy(autoSize = v == "Sim"))) }
+    ) { v ->
+        val sim = v == "Sim"
+        val next = element.copy(autoSize = sim)
+        if (sim) {
+            commitAttributeElement(schema, next, textMeasurer, layoutDirection, onSchemaCommit)
+        } else {
+            onSchemaCommit(schema.withElement(next))
+        }
+    }
 
     val ownerPos = schema.elements[element.ownerId]?.position
     val attrPos  = element.position
@@ -771,7 +853,10 @@ private fun AttributeFields(
         key = "IDENTIFICADOR",
         focusedKey = focusedKey,
         onFocusChange = onFocusChange,
-    ) { v -> onSchemaCommit(schema.withElement(element.copy(isIdentifier = v == "Sim"))) }
+    ) { v ->
+        val next = element.copy(isIdentifier = v == "Sim")
+        commitAttributeElement(schema, next, textMeasurer, layoutDirection, onSchemaCommit)
+    }
 
     DropdownRow(
         label = "Opcional",
@@ -780,7 +865,10 @@ private fun AttributeFields(
         key = "OPCIONAL",
         focusedKey = focusedKey,
         onFocusChange = onFocusChange,
-    ) { v -> onSchemaCommit(schema.withElement(element.copy(isOptional = v == "Sim"))) }
+    ) { v ->
+        val next = element.copy(isOptional = v == "Sim")
+        commitAttributeElement(schema, next, textMeasurer, layoutDirection, onSchemaCommit)
+    }
 
     ReadOnlyRow(
         "Composto",
@@ -797,7 +885,10 @@ private fun AttributeFields(
         key = "MULTIVALORADO",
         focusedKey = focusedKey,
         onFocusChange = onFocusChange,
-    ) { v -> onSchemaCommit(schema.withElement(element.copy(isMultiValued = v == "Sim"))) }
+    ) { v ->
+        val next = element.copy(isMultiValued = v == "Sim")
+        commitAttributeElement(schema, next, textMeasurer, layoutDirection, onSchemaCommit)
+    }
 
     ReadOnlyRow(
         "Qtd. Campos",
@@ -818,14 +909,14 @@ private fun AttributeFields(
         enabled = element.isMultiValued,
         onLiveDraftChange = { draft ->
             draft.toIntOrNull()?.let { min ->
-                onSchemaPreview(
-                    schema.withElement(element.copy(cardinality = element.cardinality.copy(minCardinality = min))),
-                )
+                val next = element.copy(cardinality = element.cardinality.copy(minCardinality = min))
+                previewAttributeElement(schema, next, textMeasurer, layoutDirection, onSchemaPreview)
             }
         },
     ) { v ->
         v.toIntOrNull()?.let {
-            onSchemaCommit(schema.withElement(element.copy(cardinality = element.cardinality.copy(minCardinality = it))))
+            val next = element.copy(cardinality = element.cardinality.copy(minCardinality = it))
+            commitAttributeElement(schema, next, textMeasurer, layoutDirection, onSchemaCommit)
         }
     }
     val maxLabelCommitted =
@@ -840,15 +931,15 @@ private fun AttributeFields(
         onLiveDraftChange = { draft ->
             val maxVal = parseAttributeMaxCardinalityDraft(draft)
             if (maxVal != null) {
-                onSchemaPreview(
-                    schema.withElement(element.copy(cardinality = element.cardinality.copy(maxCardinality = maxVal))),
-                )
+                val next = element.copy(cardinality = element.cardinality.copy(maxCardinality = maxVal))
+                previewAttributeElement(schema, next, textMeasurer, layoutDirection, onSchemaPreview)
             }
         },
     ) { v ->
         val intVal = parseAttributeMaxCardinalityDraft(v)
             ?: return@EditableRow
-        onSchemaCommit(schema.withElement(element.copy(cardinality = element.cardinality.copy(maxCardinality = intVal))))
+        val next = element.copy(cardinality = element.cardinality.copy(maxCardinality = intVal))
+        commitAttributeElement(schema, next, textMeasurer, layoutDirection, onSchemaCommit)
     }
 
     EditableRow(

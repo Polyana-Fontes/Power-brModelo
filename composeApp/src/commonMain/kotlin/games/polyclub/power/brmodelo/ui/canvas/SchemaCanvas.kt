@@ -40,8 +40,10 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import games.polyclub.power.brmodelo.domain.applyConceptualAttributeTool
@@ -61,7 +63,6 @@ import games.polyclub.power.brmodelo.domain.placeConceptualItem
 import games.polyclub.power.brmodelo.domain.validateAndBuildConceptualLink
 import games.polyclub.power.brmodelo.ui.ConceptualCanvasTool
 import games.polyclub.power.brmodelo.ui.toPlacementKindOrNull
-import games.polyclub.power.brmodelo.ui.canvas.withPosition
 import kotlin.math.abs
 
 // Background colour of the canvas (light grey, matching the original brModelo canvas background)
@@ -115,6 +116,7 @@ internal fun SchemaCanvas(
 ) {
     var panOffset by remember { mutableStateOf(Offset(8f, 8f)) }
     val textMeasurer = rememberTextMeasurer()
+    val layoutDirection = LocalLayoutDirection.current
 
     // rememberUpdatedState lets the gesture handler always see the latest values
     // without restarting the gesture on every recomposition.
@@ -129,6 +131,7 @@ internal fun SchemaCanvas(
     val currentOnConceptualCanvasToolChange by rememberUpdatedState(onConceptualCanvasToolChange)
     val currentOnTransientUserMessage by rememberUpdatedState(onTransientUserMessage)
     val currentTextMeasurer by rememberUpdatedState(textMeasurer)
+    val currentLayoutDirection by rememberUpdatedState(layoutDirection)
 
     Box(
         modifier = modifier
@@ -265,6 +268,8 @@ internal fun SchemaCanvas(
                                         schema = schemaAtGestureStart,
                                         schemaPoint = schemaPoint,
                                         variant = attributeTool.variant,
+                                        textMeasurer = currentTextMeasurer,
+                                        layoutDirection = currentLayoutDirection,
                                         onMessage = currentOnTransientUserMessage,
                                         onSchemaCommit = currentOnSchemaCommit,
                                         onSelectionChange = currentOnSelectionChange,
@@ -676,6 +681,8 @@ private fun processAttributeToolTap(
     schema: ConceptualSchema,
     schemaPoint: Offset,
     variant: ConceptualAttributeToolVariant,
+    textMeasurer: TextMeasurer,
+    layoutDirection: LayoutDirection,
     onMessage: (String) -> Unit,
     onSchemaCommit: (ConceptualSchema) -> Unit,
     onSelectionChange: (CanvasSelection) -> Unit,
@@ -687,7 +694,11 @@ private fun processAttributeToolTap(
     }
     when (val r = applyConceptualAttributeTool(schema, pickId, schemaPoint, variant)) {
         is ConceptualAttributeToolResult.Ok -> {
-            var committed = r.schema
+            var committed = r.schema.withAutoSizedAttributeSubtree(
+                r.newPrimaryAttributeId,
+                textMeasurer,
+                layoutDirection,
+            )
             committed = organizeAttributesOnOwnerSide(
                 committed,
                 r.ownerElementId,
