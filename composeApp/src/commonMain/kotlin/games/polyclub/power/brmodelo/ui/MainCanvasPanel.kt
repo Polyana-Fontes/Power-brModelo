@@ -179,35 +179,53 @@ internal fun MainCanvasPanel(
                     } else if (event.type == KeyEventType.KeyDown &&
                         (event.key == Key.Delete || event.key == Key.Backspace)
                     ) {
-                        val sch = schema
-                        val multi = selection as? CanvasSelection.Multiple
-                        if (sch != null && multi != null && multi.elementIds.isNotEmpty()) {
-                            val ids = expandBulkDeleteClosure(sch, multi.elementIds)
-                            if (ids.isNotEmpty()) {
-                                onSchemaCommit(
-                                    sch.withoutElements(ids).withNormalizedAttributeMultiValuedCounts(),
-                                )
-                                onSelectionChange(CanvasSelection.None)
-                                true
-                            } else {
-                                false
-                            }
-                        } else {
-                            val elemId = (selection as? CanvasSelection.Element)?.id
-                            if (sch != null && elemId != null) {
-                                val ids = singleElementDeletionClosure(sch, elemId)
-                                if (ids.isNotEmpty()) {
+                        val currentSchema = schema ?: return@onPreviewKeyEvent false
+                        when (val sel = selection) {
+                            is CanvasSelection.Cardinality -> {
+                                val stripped = currentSchema.withoutConnection(sel.connectionId)
+                                if (stripped != currentSchema) {
                                     onSchemaCommit(
-                                        sch.withoutElements(ids).withNormalizedAttributeMultiValuedCounts(),
+                                        stripped.withNormalizedAttributeMultiValuedCounts(),
                                     )
                                     onSelectionChange(CanvasSelection.None)
                                     true
                                 } else {
                                     false
                                 }
-                            } else {
-                                false
                             }
+                            is CanvasSelection.Multiple -> {
+                                var next = currentSchema
+                                if (sel.elementIds.isNotEmpty()) {
+                                    val ids = expandBulkDeleteClosure(next, sel.elementIds)
+                                    if (ids.isNotEmpty()) {
+                                        next = next.withoutElements(ids)
+                                    }
+                                }
+                                for (cid in sel.cardinalityConnectionIds) {
+                                    val n2 = next.withoutConnection(cid)
+                                    if (n2 != next) next = n2
+                                }
+                                if (next != currentSchema) {
+                                    onSchemaCommit(next.withNormalizedAttributeMultiValuedCounts())
+                                    onSelectionChange(CanvasSelection.None)
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                            is CanvasSelection.Element -> {
+                                val ids = singleElementDeletionClosure(currentSchema, sel.id)
+                                if (ids.isNotEmpty()) {
+                                    onSchemaCommit(
+                                        currentSchema.withoutElements(ids).withNormalizedAttributeMultiValuedCounts(),
+                                    )
+                                    onSelectionChange(CanvasSelection.None)
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                            CanvasSelection.None -> false
                         }
                     } else {
                         false
