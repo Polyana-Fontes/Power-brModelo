@@ -29,7 +29,10 @@ import games.polyclub.power.brmodelo.generated.resources.especializacao_exclusiv
 import games.polyclub.power.brmodelo.generated.resources.especializacao_nao_exclusiva_s
 import games.polyclub.power.brmodelo.generated.resources.selecionar_s
 
-internal fun conceptualOperationsDropdownEntries(organizeAttributesEnabled: Boolean): List<DropdownEntry> =
+internal fun conceptualOperationsDropdownEntries(
+    organizeAttributesEnabled: Boolean,
+    selectAttributesEnabled: Boolean,
+): List<DropdownEntry> =
     listOf(
         DropdownEntry(
             label = "Ocultar Atributo",
@@ -43,21 +46,24 @@ internal fun conceptualOperationsDropdownEntries(organizeAttributesEnabled: Bool
             conceptualOperation = ConceptualRibbonOperation.OrganizeAttributes,
         ),
         DropdownEntry(
-            label = "Selecionar Atributo",
+            label = "Selecionar Atributos",
             icon = Res.drawable.selecionar_s,
+            enabled = selectAttributesEnabled,
+            conceptualOperation = ConceptualRibbonOperation.SelectAttributes,
+        ),
+        DropdownEntry(
+            label = "Converter em Entidade Associativa",
+            icon = Res.drawable.entidade_associativa_s,
             isSeparatorAbove = true,
         ),
         DropdownEntry(
-            label = "Promover à Entidade Associativa",
-            icon = Res.drawable.entidade_associativa_s,
-        ),
-        DropdownEntry(
-            label = "Promover à Entidade",
+            label = "Converter em Entidade",
             icon = Res.drawable.entidade_s,
         ),
         DropdownEntry(
             label = "Converter Esp. para Restrita",
             icon = Res.drawable.especializacao_exclusiva_s,
+            isSeparatorAbove = true,
         ),
         DropdownEntry(
             label = "Converter Esp. para Opcional",
@@ -66,5 +72,6 @@ internal fun conceptualOperationsDropdownEntries(organizeAttributesEnabled: Bool
         DropdownEntry(
             label = "Dicionário de Dados do Objeto",
             icon = Res.drawable.dicionario_dados_3s,
+            isSeparatorAbove = true,
         ),
     )

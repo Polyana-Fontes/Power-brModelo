@@ -78,6 +78,7 @@ internal fun RibbonGroup(
                     val binding = operationsMenuBinding
                     val entries = conceptualOperationsDropdownEntries(
                         binding?.organizeAttributesEnabled ?: false,
+                        binding?.selectAttributesEnabled ?: false,
                     )
                     RibbonButton(
                         entry = item.copy(dropdown = entries),
@@ -85,6 +86,8 @@ internal fun RibbonGroup(
                             when (row.conceptualOperation) {
                                 ConceptualRibbonOperation.OrganizeAttributes ->
                                     binding?.onOrganizeAttributes?.invoke()
+                                ConceptualRibbonOperation.SelectAttributes ->
+                                    binding?.onSelectAttributes?.invoke()
                                 null -> Unit
                             }
                         },

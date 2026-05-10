@@ -37,6 +37,7 @@ internal enum class RibbonTab {
 /** Ribbon **Operações** dropdown actions (conceptual schema tab). */
 internal enum class ConceptualRibbonOperation {
     OrganizeAttributes,
+    SelectAttributes,
 }
 
 internal data class DropdownEntry(
@@ -134,6 +135,8 @@ internal data class RectangleSelectionToolRibbonBinding(
 internal data class OperationsMenuRibbonBinding(
     val organizeAttributesEnabled: Boolean,
     val onOrganizeAttributes: () -> Unit,
+    val selectAttributesEnabled: Boolean,
+    val onSelectAttributes: () -> Unit,
 )
 
 internal data class MenuEntry(

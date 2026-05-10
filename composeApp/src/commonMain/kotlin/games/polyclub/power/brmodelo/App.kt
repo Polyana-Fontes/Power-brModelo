@@ -39,6 +39,8 @@ import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolVariant
 import games.polyclub.power.brmodelo.domain.applyOrganizeAttributesMenuAction
 import games.polyclub.power.brmodelo.domain.canOrganizeAttributesMenuSelection
+import games.polyclub.power.brmodelo.domain.canSelectAttributeTreeMenu
+import games.polyclub.power.brmodelo.domain.expandCanvasSelectionWithAttributeTrees
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolVariant
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaBrmParser
@@ -434,9 +436,17 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         val updated = applyOrganizeAttributesMenuAction(tab.schema, tab.selection) ?: return@organize
         pushCommitOnSelected(updated.withNormalizedAttributeMultiValuedCounts())
     }
+    val selectAttrsEnabled = canSelectAttributeTreeMenu(sel.schema, sel.selection)
+    val onSelectAttributes: () -> Unit = {
+        mutateSelectedTab { tab ->
+            tab.copy(selection = expandCanvasSelectionWithAttributeTrees(tab.schema, tab.selection))
+        }
+    }
     val operationsMenuBinding = OperationsMenuRibbonBinding(
         organizeAttributesEnabled = organizeAttrsEnabled,
         onOrganizeAttributes = onOrganizeAttributes,
+        selectAttributesEnabled = selectAttrsEnabled,
+        onSelectAttributes = onSelectAttributes,
     )
 
     MaterialTheme {
