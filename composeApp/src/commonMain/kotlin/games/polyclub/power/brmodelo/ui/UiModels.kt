@@ -110,8 +110,22 @@ internal data class BulkDeleteUiState(
     val counts: BulkDeleteCategoryCounts,
 )
 
+/** Live UI for rectangle multi-select preview (same shape as [BulkDeleteUiState]; blue band on canvas). */
+internal data class SelectionBandUiState(
+    val viewSelectionRect: Rect,
+    val markedElementIds: Set<Int>,
+    val markedCardinalityConnectionIds: Set<Int> = emptySet(),
+    val counts: BulkDeleteCategoryCounts,
+)
+
 /** Toggle for the conceptual-schema “Excluir Objetos” tool. */
 internal data class BulkDeleteObjectsToolRibbonBinding(
+    val isArmed: Boolean,
+    val onClick: () -> Unit,
+)
+
+/** Toggle for the conceptual-schema “Seleção” (rectangle multi-select) tool. */
+internal data class RectangleSelectionToolRibbonBinding(
     val isArmed: Boolean,
     val onClick: () -> Unit,
 )

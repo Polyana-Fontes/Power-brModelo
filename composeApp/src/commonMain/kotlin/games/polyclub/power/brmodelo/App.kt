@@ -47,7 +47,9 @@ import games.polyclub.power.brmodelo.ui.AttributeToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.BrModeloScreen
 import games.polyclub.power.brmodelo.ui.BulkDeleteObjectsToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.RectangleSelectionToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.BulkDeleteUiState
+import games.polyclub.power.brmodelo.ui.SelectionBandUiState
 import games.polyclub.power.brmodelo.ui.CloseTabUnsavedDialog
 import games.polyclub.power.brmodelo.ui.ConceptualCanvasTool
 import games.polyclub.power.brmodelo.ui.EditorTabSession
@@ -84,10 +86,16 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
 
     var conceptualCanvasTool by remember { mutableStateOf<ConceptualCanvasTool>(ConceptualCanvasTool.None) }
     var bulkDeleteUi by remember { mutableStateOf<BulkDeleteUiState?>(null) }
+    var selectionBandUi by remember { mutableStateOf<SelectionBandUiState?>(null) }
 
     LaunchedEffect(conceptualCanvasTool) {
         if (conceptualCanvasTool !is ConceptualCanvasTool.BulkDeleteObjects) {
             bulkDeleteUi = null
+        }
+        if (conceptualCanvasTool != ConceptualCanvasTool.None &&
+            conceptualCanvasTool != ConceptualCanvasTool.RectangleSelection
+        ) {
+            selectionBandUi = null
         }
     }
     var entityToolVariant by remember { mutableStateOf(EntityToolVariant.Plain) }
@@ -408,6 +416,18 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         },
     )
 
+    val rectangleSelectionToolBinding = RectangleSelectionToolRibbonBinding(
+        isArmed = conceptualCanvasTool is ConceptualCanvasTool.RectangleSelection,
+        onClick = {
+            conceptualCanvasTool =
+                if (conceptualCanvasTool is ConceptualCanvasTool.RectangleSelection) {
+                    ConceptualCanvasTool.None
+                } else {
+                    ConceptualCanvasTool.RectangleSelection
+                }
+        },
+    )
+
     val selElementId = (sel.selection as? CanvasSelection.Element)?.id
     val organizeAttrsEnabled =
         selElementId != null && canOrganizeAttributesMenu(sel.schema, selElementId)
@@ -466,12 +486,15 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                     specializationToolBinding = specializationToolBinding,
                     attributeToolBinding = attributeToolBinding,
                     bulkDeleteObjectsToolBinding = bulkDeleteObjectsToolBinding,
+                    rectangleSelectionToolBinding = rectangleSelectionToolBinding,
                     operationsMenuBinding = operationsMenuBinding,
                     conceptualCanvasTool = conceptualCanvasTool,
                     onConceptualCanvasToolChange = { conceptualCanvasTool = it },
                     onClearConceptualCanvasTool = { conceptualCanvasTool = ConceptualCanvasTool.None },
                     bulkDeleteUiState = bulkDeleteUi,
                     onBulkDeleteUiChange = { bulkDeleteUi = it },
+                    selectionBandUiState = selectionBandUi,
+                    onSelectionBandUiChange = { selectionBandUi = it },
                 )
 
                 pendingCloseTabIndex?.let { closeIdx ->

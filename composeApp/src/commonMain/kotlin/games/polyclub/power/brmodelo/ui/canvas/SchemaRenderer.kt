@@ -103,6 +103,7 @@ private val MULTIVALUE_CARD_STYLE = TextStyle(fontSize = 11.sp, color = Color.Bl
  *   off-screen exporters that call this function without a selection continue to work.
  * @param linkToolHighlightElementId When set, draws a highlight border around that element (used by "Ligar objetos").
  * @param bulkDeleteHighlightIds When non-empty, draws a strong red overlay on each listed element (bulk-delete preview).
+ * @param selectionBandHighlightCardinalityConnectionIds Blue overlay on cardinality labels during rectangle preview.
  */
 fun DrawScope.drawSchema(
     schema: ConceptualSchema,
@@ -110,6 +111,8 @@ fun DrawScope.drawSchema(
     selection: CanvasSelection = CanvasSelection.None,
     linkToolHighlightElementId: Int? = null,
     bulkDeleteHighlightIds: Set<Int> = emptySet(),
+    selectionBandHighlightIds: Set<Int> = emptySet(),
+    selectionBandHighlightCardinalityConnectionIds: Set<Int> = emptySet(),
 ) {
     val dividedPoints = computeDividedPoints(schema)
 
@@ -123,7 +126,7 @@ fun DrawScope.drawSchema(
     }
     // 2. All elements (including AssociativeEntity outer rect + inner diamond)
     schema.elements.values.forEach { element ->
-        drawElement(element, schema, textMeasurer, bulkDeleteHighlightIds)
+        drawElement(element, schema, textMeasurer, bulkDeleteHighlightIds, selectionBandHighlightIds)
     }
     // 3. Re-draw connection lines that involve an AssociativeEntity, now on top of the
     //    outer rect white fill — only entity/relationship connections (not attributes),
@@ -149,6 +152,8 @@ fun DrawScope.drawSchema(
         // with opaque fill on top of those lines, so it must be tinted again (same idea as step 4b).
         if (assoc.id in bulkDeleteHighlightIds) {
             drawBulkDeleteThreatHighlight(innerPos)
+        } else if (assoc.id in selectionBandHighlightIds) {
+            drawSelectionBandHighlight(innerPos)
         }
     }
     // 4b. Self-relationship diamonds on top of lines (outline + fill), like VCL z-order.
@@ -156,11 +161,19 @@ fun DrawScope.drawSchema(
         drawRelationshipDiamond(selfRel.position, selfRel.name, showName = true, textMeasurer)
         if (selfRel.id in bulkDeleteHighlightIds) {
             drawBulkDeleteThreatHighlight(selfRel.position)
+        } else if (selfRel.id in selectionBandHighlightIds) {
+            drawSelectionBandHighlight(selfRel.position)
         }
     }
     // 5. Cardinality labels on top
     schema.connections.forEach { conn ->
         drawCardinalityLabel(conn, schema, dividedPoints, textMeasurer)
+    }
+    for (conn in schema.connections) {
+        if (conn.id !in selectionBandHighlightCardinalityConnectionIds) continue
+        cardinalityLabelHighlightElementPosition(schema, conn, textMeasurer)?.let { pos ->
+            drawSelectionBandHighlight(pos)
+        }
     }
     // 6. Link-tool first-target highlight (no corner handles)
     linkToolHighlightElementId?.let { hid ->
@@ -183,6 +196,25 @@ fun DrawScope.drawSchema(
                     drawCardinalitySelectionHighlight(pos)
                     if (!conn.cardinalityAutoSize) {
                         drawElementSelectionHandles(pos)
+                    }
+                }
+            }
+        }
+        is CanvasSelection.Multiple -> {
+            for (id in selection.elementIds) {
+                schema.elements[id]?.let { el ->
+                    val showResizeHandles = el !is SchemaElement.Attribute || !el.autoSize
+                    drawElementSelectionHandles(el.position, showResizeHandles = showResizeHandles)
+                }
+            }
+            for (cid in selection.cardinalityConnectionIds) {
+                val conn = schema.connections.firstOrNull { it.id == cid }
+                if (conn != null && conn.showCardinality && conn.cardinality != null) {
+                    cardinalityLabelHighlightElementPosition(schema, conn, textMeasurer)?.let { pos ->
+                        drawCardinalitySelectionHighlight(pos)
+                        if (!conn.cardinalityAutoSize) {
+                            drawElementSelectionHandles(pos)
+                        }
                     }
                 }
             }
@@ -296,6 +328,28 @@ private fun DrawScope.drawBulkDeleteThreatHighlight(position: ElementPosition) {
     )
 }
 
+/** Blue overlay for elements inside the rectangle multi-select preview. */
+private val SELECTION_BAND_FILL = Color(0x662E7DFF)
+private val SELECTION_BAND_STROKE = Color(0xFF0060C0)
+
+private fun DrawScope.drawSelectionBandHighlight(position: ElementPosition) {
+    val x = position.x.toFloat()
+    val y = position.y.toFloat()
+    val w = position.width.toFloat().coerceAtLeast(1f)
+    val h = position.height.toFloat().coerceAtLeast(1f)
+    drawRect(
+        color = SELECTION_BAND_FILL,
+        topLeft = Offset(x, y),
+        size = Size(w, h),
+    )
+    drawRect(
+        color = SELECTION_BAND_STROKE,
+        topLeft = Offset(x, y),
+        size = Size(w, h),
+        style = Stroke(width = 2.5f),
+    )
+}
+
 // ── Element dispatch ──────────────────────────────────────────────────────────
 
 private fun DrawScope.drawElement(
@@ -303,6 +357,7 @@ private fun DrawScope.drawElement(
     schema: ConceptualSchema,
     textMeasurer: TextMeasurer,
     bulkDeleteHighlightIds: Set<Int> = emptySet(),
+    selectionBandHighlightIds: Set<Int> = emptySet(),
 ) {
     when (element) {
         is SchemaElement.Entity -> drawEntity(element, textMeasurer)
@@ -313,8 +368,11 @@ private fun DrawScope.drawElement(
         is SchemaElement.SelfRelationship -> Unit // drawn in drawSchema step 4b on top of lines
         is SchemaElement.Annotation -> drawAnnotation(element, textMeasurer)
     }
-    if (element.id in bulkDeleteHighlightIds && element !is SchemaElement.SelfRelationship) {
-        drawBulkDeleteThreatHighlight(element.position)
+    when {
+        element.id in bulkDeleteHighlightIds && element !is SchemaElement.SelfRelationship ->
+            drawBulkDeleteThreatHighlight(element.position)
+        element.id in selectionBandHighlightIds && element !is SchemaElement.SelfRelationship ->
+            drawSelectionBandHighlight(element.position)
     }
 }
 

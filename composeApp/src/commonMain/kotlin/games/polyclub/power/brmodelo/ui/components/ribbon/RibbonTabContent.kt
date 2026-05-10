@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import games.polyclub.power.brmodelo.ui.AttributeToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.BulkDeleteObjectsToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.RectangleSelectionToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.components.AppColors
 import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
@@ -71,6 +72,7 @@ internal fun RibbonEsquemaConceitual(
     specializationToolBinding: SpecializationToolRibbonBinding? = null,
     attributeToolBinding: AttributeToolRibbonBinding? = null,
     bulkDeleteObjectsToolBinding: BulkDeleteObjectsToolRibbonBinding? = null,
+    rectangleSelectionToolBinding: RectangleSelectionToolRibbonBinding? = null,
     operationsMenuBinding: OperationsMenuRibbonBinding? = null,
 ) {
     Row(
@@ -90,6 +92,7 @@ internal fun RibbonEsquemaConceitual(
             specializationToolBinding = specializationToolBinding,
             attributeToolBinding = attributeToolBinding,
             bulkDeleteObjectsToolBinding = bulkDeleteObjectsToolBinding,
+            rectangleSelectionToolBinding = rectangleSelectionToolBinding,
             groups = listOf(
                 listOf(MenuEntry("Seleção", Res.drawable.cursor_l)),
                 listOf(

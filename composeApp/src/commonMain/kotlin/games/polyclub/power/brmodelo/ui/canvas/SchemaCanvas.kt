@@ -66,6 +66,10 @@ import androidx.compose.ui.unit.sp
 import games.polyclub.power.brmodelo.domain.applyConceptualAttributeTool
 import games.polyclub.power.brmodelo.domain.applyConceptualSpecializationTool
 import games.polyclub.power.brmodelo.domain.CanvasSelection
+import games.polyclub.power.brmodelo.domain.mergeCanvasBandPick
+import games.polyclub.power.brmodelo.domain.toggleCardinalityInMultiSelection
+import games.polyclub.power.brmodelo.domain.toggleElementInMultiSelection
+import games.polyclub.power.brmodelo.domain.toMultiPickSets
 import games.polyclub.power.brmodelo.domain.ConceptualLinkValidationResult
 import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolResult
 import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolVariant
@@ -80,6 +84,7 @@ import games.polyclub.power.brmodelo.domain.placeConceptualItem
 import games.polyclub.power.brmodelo.domain.validateAndBuildConceptualLink
 import games.polyclub.power.brmodelo.ui.BulkDeleteUiState
 import games.polyclub.power.brmodelo.ui.ConceptualCanvasTool
+import games.polyclub.power.brmodelo.ui.SelectionBandUiState
 import games.polyclub.power.brmodelo.ui.canvasPointerScrollPanGain
 import games.polyclub.power.brmodelo.ui.invertCanvasPointerScrollPan
 import games.polyclub.power.brmodelo.ui.isDesktopTarget
@@ -95,6 +100,8 @@ private val GRID_DOT = Color(0xFFCCCCCC)
 private const val GRID_STEP = 20f
 private val BULK_BAND_FILL = Color(0x40FF3B3B)
 private val BULK_BAND_STROKE = Color(0xFFCC0000)
+private val SELECTION_BAND_FILL = Color(0x402E7DFF)
+private val SELECTION_BAND_STROKE = Color(0xFF0060C0)
 
 /**
  * Interactive canvas that renders a [games.polyclub.power.brmodelo.domain.ConceptualSchema] using Compose [Canvas].
@@ -131,6 +138,8 @@ private val BULK_BAND_STROKE = Color(0xFFCC0000)
  * @param canvasFocusRequester When set, receives focus on pointer down so parent shortcuts (e.g. Escape) apply after interacting with the canvas.
  * @param bulkDeleteUiState Rubber-band preview (view rect + marked ids); drawn on top of the canvas.
  * @param onBulkDeleteUiChange Updates [bulkDeleteUiState] while dragging with [ConceptualCanvasTool.BulkDeleteObjects].
+ * @param selectionBandUiState Blue rubber-band preview for [ConceptualCanvasTool.RectangleSelection].
+ * @param onSelectionBandUiChange Updates [selectionBandUiState] during that gesture.
  * @param editorTabSessionId [games.polyclub.power.brmodelo.ui.EditorTabSession.id] for the canvas tab (for "Ligar objetos" second-click validation).
  * @param keyboardRemapVerticalScrollPanToHorizontal Desktop only: when true, vertical scroll maps to horizontal pan;
  *   fed from AWT (Shift only).
@@ -148,6 +157,8 @@ internal fun SchemaCanvas(
     onTransientUserMessage: (String) -> Unit = {},
     bulkDeleteUiState: BulkDeleteUiState? = null,
     onBulkDeleteUiChange: (BulkDeleteUiState?) -> Unit = {},
+    selectionBandUiState: SelectionBandUiState? = null,
+    onSelectionBandUiChange: (SelectionBandUiState?) -> Unit = {},
     editorTabSessionId: Long = -1L,
     keyboardRemapVerticalScrollPanToHorizontal: Boolean = false,
     toolCursorModifier: Modifier = Modifier,
@@ -171,6 +182,7 @@ internal fun SchemaCanvas(
     val currentOnConceptualCanvasToolChange by rememberUpdatedState(onConceptualCanvasToolChange)
     val currentOnTransientUserMessage by rememberUpdatedState(onTransientUserMessage)
     val currentOnBulkDeleteUiChange by rememberUpdatedState(onBulkDeleteUiChange)
+    val currentOnSelectionBandUiChange by rememberUpdatedState(onSelectionBandUiChange)
     val currentTextMeasurer by rememberUpdatedState(textMeasurer)
     val currentLayoutDirection by rememberUpdatedState(layoutDirection)
     val currentEditorTabSessionId by rememberUpdatedState(editorTabSessionId)
@@ -193,6 +205,7 @@ internal fun SchemaCanvas(
                             if (currentConceptualTool is ConceptualCanvasTool.BulkDeleteObjects) {
                                 currentOnBulkDeleteUiChange(null)
                             }
+                            currentOnSelectionBandUiChange(null)
                             val panBase = panOffset
                             val centroidStart = centroidOfOffsets(pressedForPan.map { it.position })
                             event.changes.forEach { it.consume() }
@@ -229,11 +242,10 @@ internal fun SchemaCanvas(
             }
             .pointerInput(Unit) {
                 awaitEachGesture {
-                    // Re-evaluate bulk-delete arming on every pointer event while waiting for a down;
-                    // a frozen boolean caused right-button pan to lag tool toggles until another gesture (e.g. middle) ran.
+                    // Re-evaluate on every pointer event while waiting for a down (see [conceptualToolAllowsRightButtonCanvasPan]).
                     val down = awaitCanvasGestureFirstDown(
                         bulkDeleteAllowsSecondaryPan = {
-                            currentConceptualTool is ConceptualCanvasTool.BulkDeleteObjects
+                            conceptualToolAllowsRightButtonCanvasPan(currentConceptualTool)
                         },
                     )
                     currentCanvasFocusRequester?.requestFocus()
@@ -251,7 +263,7 @@ internal fun SchemaCanvas(
                         return@awaitEachGesture
                     }
 
-                    if (currentConceptualTool is ConceptualCanvasTool.BulkDeleteObjects &&
+                    if (conceptualToolAllowsRightButtonCanvasPan(currentConceptualTool) &&
                         currentEvent.buttons.isSecondaryPressed
                     ) {
                         val panAtStart = currentPanOffset
@@ -282,6 +294,7 @@ internal fun SchemaCanvas(
                             val pressedChanges = event.changes.filter { it.pressed }
                             if (pressedChanges.size >= 2) {
                                 onUi(null)
+                                currentOnSelectionBandUiChange(null)
                                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
                                 lastPointer = change.position
                                 if (!change.pressed) {
@@ -349,7 +362,47 @@ internal fun SchemaCanvas(
                         return@awaitEachGesture
                     }
 
+                    val rectangleTool = currentConceptualTool is ConceptualCanvasTool.RectangleSelection
+                    val shiftHeldOnPrimary = currentEvent.keyboardModifiers.isShiftPressed
+                    if (schemaAtGestureStart != null &&
+                        currentEvent.buttons.isPrimaryPressed &&
+                        rectangleTool
+                    ) {
+                        runRectangleSelectionGesture(
+                            down = down,
+                            panAtGestureStart = panAtGestureStart,
+                            schema = schemaAtGestureStart,
+                            selectionAtStart = selAtGestureStart,
+                            additive = shiftHeldOnPrimary,
+                            slop = viewConfiguration.touchSlop,
+                            textMeasurer = currentTextMeasurer,
+                            onBandUi = currentOnSelectionBandUiChange,
+                            onSelectionChange = currentOnSelectionChange,
+                        )
+                        return@awaitEachGesture
+                    }
+
+                    if (schemaAtGestureStart != null &&
+                        currentConceptualTool is ConceptualCanvasTool.None &&
+                        currentEvent.keyboardModifiers.isShiftPressed &&
+                        currentEvent.buttons.isPrimaryPressed
+                    ) {
+                        runRectangleSelectionGesture(
+                            down = down,
+                            panAtGestureStart = panAtGestureStart,
+                            schema = schemaAtGestureStart,
+                            selectionAtStart = selAtGestureStart,
+                            additive = true,
+                            slop = viewConfiguration.touchSlop,
+                            textMeasurer = currentTextMeasurer,
+                            onBandUi = currentOnSelectionBandUiChange,
+                            onSelectionChange = currentOnSelectionChange,
+                        )
+                        return@awaitEachGesture
+                    }
+
                     val schemaPoint = down.position - panAtGestureStart
+                    val shiftHeldAtGestureStart = currentEvent.keyboardModifiers.isShiftPressed
 
                     val autoRelTool = currentConceptualTool as? ConceptualCanvasTool.AutoSelfRelationship
                     if (autoRelTool != null && schemaAtGestureStart != null) {
@@ -504,11 +557,31 @@ internal fun SchemaCanvas(
 
                     // Check if the pointer is on a resize handle of the currently selected element
                     // or of the cardinality label (manual size).
-                    val selectedElem = (selAtGestureStart as? CanvasSelection.Element)
-                        ?.let { schemaAtGestureStart?.elements?.get(it.id) }
-                    val cardinalitySel = selAtGestureStart as? CanvasSelection.Cardinality
-                    val cardinalityConn = cardinalitySel?.let { sid ->
-                        schemaAtGestureStart?.connections?.firstOrNull { it.id == sid.connectionId }
+                    val selectedElem: SchemaElement? = when (val sel = selAtGestureStart) {
+                        is CanvasSelection.Element ->
+                            schemaAtGestureStart?.elements?.get(sel.id)
+                        is CanvasSelection.Multiple -> {
+                            val id = (hitResult as? CanvasSelection.Element)?.id
+                            if (id != null && id in sel.elementIds) {
+                                schemaAtGestureStart?.elements?.get(id)
+                            } else {
+                                null
+                            }
+                        }
+                        else -> null
+                    }
+                    val cardinalityConn = when (val sel = selAtGestureStart) {
+                        is CanvasSelection.Cardinality ->
+                            schemaAtGestureStart?.connections?.firstOrNull { it.id == sel.connectionId }
+                        is CanvasSelection.Multiple -> {
+                            val cid = (hitResult as? CanvasSelection.Cardinality)?.connectionId
+                            if (cid != null && cid in sel.cardinalityConnectionIds) {
+                                schemaAtGestureStart?.connections?.firstOrNull { it.id == cid }
+                            } else {
+                                null
+                            }
+                        }
+                        else -> null
                     }
                     val cardinalityResizeBox =
                         if (cardinalityConn != null &&
@@ -535,8 +608,20 @@ internal fun SchemaCanvas(
 
                     // Pascal behaviour: select immediately on pointer-down, not on pointer-up.
                     // Only skip if we're about to resize (the selection stays as-is).
-                    if (hitHandle == null && hitResult != selAtGestureStart) {
-                        currentOnSelectionChange(hitResult)
+                    if (hitHandle == null) {
+                        val shouldReplaceSelection = when {
+                            hitResult == CanvasSelection.None -> true
+                            selAtGestureStart is CanvasSelection.Multiple &&
+                                hitResult is CanvasSelection.Element ->
+                                hitResult.id !in selAtGestureStart.elementIds
+                            selAtGestureStart is CanvasSelection.Multiple &&
+                                hitResult is CanvasSelection.Cardinality ->
+                                hitResult.connectionId !in selAtGestureStart.cardinalityConnectionIds
+                            else -> hitResult != selAtGestureStart
+                        }
+                        if (shouldReplaceSelection) {
+                            currentOnSelectionChange(hitResult)
+                        }
                     }
 
                     // Snapshot the element/connection to be dragged at gesture start,
@@ -544,7 +629,13 @@ internal fun SchemaCanvas(
                     val resizeCardinalityConnId =
                         if (hitHandleCard != null) cardinalityConn?.id else null
                     val dragElementId = (hitResult as? CanvasSelection.Element)?.id
-                        ?: (hitHandleElem?.let { (selAtGestureStart as? CanvasSelection.Element)?.id })
+                        ?: (hitHandleElem?.let {
+                            when (val sel = selAtGestureStart) {
+                                is CanvasSelection.Element -> sel.id
+                                is CanvasSelection.Multiple -> selectedElem?.id
+                                else -> null
+                            }
+                        })
                     val dragConnectionId =
                         if (resizeCardinalityConnId != null) {
                             null
@@ -603,7 +694,7 @@ internal fun SchemaCanvas(
                                     )
                                     currentOnSchemaCommit(newSchema)
                                     currentOnSelectionChange(CanvasSelection.Element(newId))
-                                } else {
+                                } else if (!shiftHeldAtGestureStart) {
                                     // Tap on empty canvas (no tool or no model) → deselect
                                     currentOnSelectionChange(CanvasSelection.None)
                                 }
@@ -754,12 +845,17 @@ internal fun SchemaCanvas(
                             else -> null
                         }
                     val bulkHighlightIds = bulkDeleteUiState?.markedElementIds ?: emptySet()
+                    val selectionBandHighlightIds = selectionBandUiState?.markedElementIds ?: emptySet()
+                    val selectionBandCardinalityIds =
+                        selectionBandUiState?.markedCardinalityConnectionIds ?: emptySet()
                     drawSchema(
                         schema,
                         textMeasurer,
                         selection,
                         linkHighlightId,
                         bulkHighlightIds,
+                        selectionBandHighlightIds,
+                        selectionBandHighlightCardinalityConnectionIds = selectionBandCardinalityIds,
                     )
                 }
             }
@@ -772,6 +868,19 @@ internal fun SchemaCanvas(
                 )
                 drawRect(
                     color = BULK_BAND_STROKE,
+                    topLeft = Offset(vr.left, vr.top),
+                    size = Size(vr.width, vr.height),
+                    style = Stroke(width = 2f),
+                )
+            }
+            selectionBandUiState?.viewSelectionRect?.let { vr ->
+                drawRect(
+                    color = SELECTION_BAND_FILL,
+                    topLeft = Offset(vr.left, vr.top),
+                    size = Size(vr.width, vr.height),
+                )
+                drawRect(
+                    color = SELECTION_BAND_STROKE,
                     topLeft = Offset(vr.left, vr.top),
                     size = Size(vr.width, vr.height),
                     style = Stroke(width = 2f),
@@ -793,9 +902,122 @@ internal fun SchemaCanvas(
 }
 
 /**
+ * Rectangle multi-select: geometric hits only (no bulk-delete closure). When [additive] is true,
+ * band picks union with [selectionAtStart] (Shift+ additive click / Shift+ additive drag).
+ */
+private suspend fun AwaitPointerEventScope.runRectangleSelectionGesture(
+    down: PointerInputChange,
+    panAtGestureStart: Offset,
+    schema: ConceptualSchema,
+    selectionAtStart: CanvasSelection,
+    additive: Boolean,
+    slop: Float,
+    textMeasurer: TextMeasurer,
+    onBandUi: (SelectionBandUiState?) -> Unit,
+    onSelectionChange: (CanvasSelection) -> Unit,
+) {
+    fun commitBandSelection(start: Offset, end: Offset) {
+        val band = ConceptualBulkDeleteBand.fromCorners(
+            start.x - panAtGestureStart.x,
+            start.y - panAtGestureStart.y,
+            end.x - panAtGestureStart.x,
+            end.y - panAtGestureStart.y,
+        )
+        val pick = selectionBandGeometricPick(schema, band, textMeasurer)
+        onSelectionChange(
+            mergeCanvasBandPick(additive, selectionAtStart, pick.elementIds, pick.cardinalityConnectionIds),
+        )
+    }
+
+    val startPointer = down.position
+    var isDraggingBand = false
+    var lastPointer = startPointer
+    while (true) {
+        val event = awaitPointerEvent()
+        val pressedChanges = event.changes.filter { it.pressed }
+        if (pressedChanges.size >= 2) {
+            onBandUi(null)
+            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+            lastPointer = change.position
+            if (!change.pressed) {
+                if (isDraggingBand) {
+                    commitBandSelection(startPointer, lastPointer)
+                }
+                onBandUi(null)
+                break
+            }
+            continue
+        }
+        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+        lastPointer = change.position
+        if (!change.pressed) {
+            onBandUi(null)
+            if (isDraggingBand) {
+                commitBandSelection(startPointer, lastPointer)
+            } else {
+                val schemaPoint = down.position - panAtGestureStart
+                val hit = hitTest(schema, schemaPoint, textMeasurer)
+                if (additive) {
+                    when (hit) {
+                        is CanvasSelection.Element ->
+                            onSelectionChange(toggleElementInMultiSelection(selectionAtStart, hit.id))
+                        is CanvasSelection.Cardinality ->
+                            onSelectionChange(
+                                toggleCardinalityInMultiSelection(selectionAtStart, hit.connectionId),
+                            )
+                        CanvasSelection.None ->
+                            onSelectionChange(selectionAtStart)
+                        is CanvasSelection.Multiple -> Unit
+                    }
+                } else {
+                    when (hit) {
+                        is CanvasSelection.Element,
+                        is CanvasSelection.Cardinality,
+                        -> onSelectionChange(hit)
+                        else -> onSelectionChange(CanvasSelection.None)
+                    }
+                }
+            }
+            break
+        }
+        val dragVec = lastPointer - startPointer
+        if (!isDraggingBand && dragVec.getDistance() > slop) {
+            isDraggingBand = true
+        }
+        if (isDraggingBand) {
+            change.consume()
+            val band = ConceptualBulkDeleteBand.fromCorners(
+                startPointer.x - panAtGestureStart.x,
+                startPointer.y - panAtGestureStart.y,
+                lastPointer.x - panAtGestureStart.x,
+                lastPointer.y - panAtGestureStart.y,
+            )
+            val pick = selectionBandGeometricPick(schema, band, textMeasurer)
+            val (e0, c0) = selectionAtStart.toMultiPickSets()
+            val displayE = if (additive) e0 + pick.elementIds else pick.elementIds
+            val displayC = if (additive) c0 + pick.cardinalityConnectionIds else pick.cardinalityConnectionIds
+            val counts = bulkDeleteCategoryCounts(schema, displayE, displayC)
+            val viewRect = normalizedBulkDeleteViewRect(startPointer, lastPointer)
+            onBandUi(
+                SelectionBandUiState(
+                    viewSelectionRect = viewRect,
+                    markedElementIds = displayE,
+                    markedCardinalityConnectionIds = displayC,
+                    counts = counts,
+                ),
+            )
+        }
+    }
+}
+
+private fun conceptualToolAllowsRightButtonCanvasPan(tool: ConceptualCanvasTool): Boolean =
+    tool is ConceptualCanvasTool.BulkDeleteObjects || tool is ConceptualCanvasTool.RectangleSelection
+
+/**
  * Same idea as [androidx.compose.foundation.gestures.awaitFirstDown], but [awaitFirstDown] only reacts to the
  * **primary** mouse button; middle and right never start a gesture. This variant also accepts **tertiary**
- * (middle) always, and **secondary** (right) when [bulkDeleteAllowsSecondaryPan] is true for that frame.
+ * (middle) always, and **secondary** (right) when [bulkDeleteAllowsSecondaryPan] is true for that frame
+ * (bulk delete and rectangle-selection tools).
  */
 private fun PointerEvent.isCanvasGestureStartDown(
     requireUnconsumed: Boolean,

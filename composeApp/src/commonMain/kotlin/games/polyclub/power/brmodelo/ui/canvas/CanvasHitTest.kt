@@ -22,8 +22,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.text.TextMeasurer
 import games.polyclub.power.brmodelo.domain.CanvasSelection
+import games.polyclub.power.brmodelo.domain.ConceptualBulkDeleteBand
 import games.polyclub.power.brmodelo.domain.ConceptualLinkPick
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
+import games.polyclub.power.brmodelo.domain.elementsIntersectingBulkDeleteBand
 import games.polyclub.power.brmodelo.domain.ElementPosition
 import games.polyclub.power.brmodelo.domain.SchemaElement
 import games.polyclub.power.brmodelo.ui.canvas.toRect
@@ -88,6 +90,41 @@ fun hitTestElement(schema: ConceptualSchema, point: Offset): CanvasSelection {
         }
     }
     return CanvasSelection.None
+}
+
+private fun Rect.overlapsBand(band: ConceptualBulkDeleteBand): Boolean =
+    left < band.right && right > band.left && top < band.bottom && bottom > band.top
+
+/**
+ * Connection ids whose cardinality label interaction rect intersects [band] (rectangle multi-select).
+ */
+fun cardinalityLabelsIntersectingSelectionBand(
+    schema: ConceptualSchema,
+    band: ConceptualBulkDeleteBand,
+    textMeasurer: TextMeasurer,
+): Set<Int> {
+    val out = mutableSetOf<Int>()
+    for (conn in schema.connections) {
+        val rect = cardinalityLabelInteractionRect(schema, conn, textMeasurer) ?: continue
+        if (rect.overlapsBand(band)) out.add(conn.id)
+    }
+    return out
+}
+
+/** Geometric picks inside the selection rectangle: no attribute/specialization closure. */
+data class SelectionBandGeometricPick(
+    val elementIds: Set<Int>,
+    val cardinalityConnectionIds: Set<Int>,
+)
+
+fun selectionBandGeometricPick(
+    schema: ConceptualSchema,
+    band: ConceptualBulkDeleteBand,
+    textMeasurer: TextMeasurer,
+): SelectionBandGeometricPick {
+    val elements = elementsIntersectingBulkDeleteBand(schema, band)
+    val cards = cardinalityLabelsIntersectingSelectionBand(schema, band, textMeasurer)
+    return SelectionBandGeometricPick(elements, cards)
 }
 
 // ── Resize handle hit-test ────────────────────────────────────────────────────

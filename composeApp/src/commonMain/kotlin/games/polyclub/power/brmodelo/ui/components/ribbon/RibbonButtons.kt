@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.sp
 import games.polyclub.power.brmodelo.ui.AttributeToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.DropdownEntry
 import games.polyclub.power.brmodelo.ui.BulkDeleteObjectsToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.RectangleSelectionToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
@@ -300,6 +301,7 @@ internal fun RibbonMenuEntryButton(
     specializationToolBinding: SpecializationToolRibbonBinding? = null,
     attributeToolBinding: AttributeToolRibbonBinding? = null,
     bulkDeleteObjectsToolBinding: BulkDeleteObjectsToolRibbonBinding? = null,
+    rectangleSelectionToolBinding: RectangleSelectionToolRibbonBinding? = null,
 ) {
     if (entry.title == "Observação" && observationToolBinding != null) {
         RibbonArmedToolButton(
@@ -324,6 +326,12 @@ internal fun RibbonMenuEntryButton(
             entry = entry,
             isArmed = bulkDeleteObjectsToolBinding.isArmed,
             onClick = bulkDeleteObjectsToolBinding.onClick,
+        )
+    } else if (entry.title == "Seleção" && rectangleSelectionToolBinding != null) {
+        RibbonArmedToolButton(
+            entry = entry,
+            isArmed = rectangleSelectionToolBinding.isArmed,
+            onClick = rectangleSelectionToolBinding.onClick,
         )
     } else if (entry.title == "Entidade" && entityToolBinding != null && !entry.dropdown.isNullOrEmpty()) {
         RibbonSplitDropdownButton(

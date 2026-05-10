@@ -204,6 +204,8 @@ private suspend fun loadAwtPointerIconAndCursor(tool: ConceptualCanvasTool): Pai
             "files/brmodelo_cursors/png/cursor_atributo.png"
         is ConceptualCanvasTool.BulkDeleteObjects ->
             "files/brmodelo_cursors/png/cursor_apagar.png"
+        is ConceptualCanvasTool.RectangleSelection ->
+            return null to null
         ConceptualCanvasTool.None -> return null to null
     }
     return withContext(Dispatchers.IO) {

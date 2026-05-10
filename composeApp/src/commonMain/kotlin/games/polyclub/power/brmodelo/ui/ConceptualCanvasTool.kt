@@ -72,6 +72,12 @@ internal sealed class ConceptualCanvasTool {
      */
     internal data object BulkDeleteObjects : ConceptualCanvasTool()
 
+    /**
+     * Rubber-band multi-selection (ribbon “Seleção”). No custom cursor; **right-button drag** pans the canvas
+     * like [BulkDeleteObjects].
+     */
+    internal data object RectangleSelection : ConceptualCanvasTool()
+
     internal sealed class Entity : ConceptualCanvasTool() {
         internal data object Plain : Entity()
         internal data object Relation : Entity()

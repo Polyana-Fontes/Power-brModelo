@@ -21,8 +21,8 @@ package games.polyclub.power.brmodelo.domain
 /**
  * Represents the current selection state on the conceptual schema canvas.
  *
- * Mirrors [TModelo.FSelecionado] from the original Pascal source: a model can
- * have exactly one selected object at a time (or nothing selected).
+ * Mirrors [TModelo.FSelecionado] from the original Pascal source: typically one selected object,
+ * or [Multiple] after a rubber-band / Shift multi-select.
  *
  * Unlike the Pascal implementation — where [TCardinalidade] was a full [TBase]
  * component — cardinality labels are encoded as virtual selections that reference
@@ -42,9 +42,86 @@ sealed class CanvasSelection {
     data class Element(val id: Int) : CanvasSelection()
 
     /**
+     * Several picks are selected (rectangle tool, Shift+click, or both).
+     *
+     * [elementIds] lists [SchemaElement] ids; [cardinalityConnectionIds] lists [Connection] ids whose
+     * cardinality label is part of the selection (labels are not schema elements).
+     */
+    data class Multiple(
+        val elementIds: Set<Int> = emptySet(),
+        val cardinalityConnectionIds: Set<Int> = emptySet(),
+    ) : CanvasSelection()
+
+    /**
      * The cardinality label of the [games.polyclub.power.brmodelo.domain.Connection] with the given [connectionId] is selected.
      *
      * Corresponds to [TCardinalidade] being the [TModelo.FSelecionado] in the original Pascal.
      */
     data class Cardinality(val connectionId: Int) : CanvasSelection()
+}
+
+/** Number of distinct picks in a multi-selection (elements + cardinality labels). */
+fun CanvasSelection.Multiple.totalPickCount(): Int =
+    elementIds.size + cardinalityConnectionIds.size
+
+/** Count of selected canvas picks (0, 1, or multi total). Used by the inspector summary. */
+fun CanvasSelection.selectedPickCount(): Int = when (this) {
+    CanvasSelection.None -> 0
+    is CanvasSelection.Element,
+    is CanvasSelection.Cardinality,
+    -> 1
+    is CanvasSelection.Multiple -> totalPickCount()
+}
+
+/**
+ * Builds the selection after a geometric rectangle pick on the schema.
+ *
+ * When [additive] is true, union [bandElementIds] / [bandCardinalityIds] with the picks already in
+ * [selectionAtStart]; when false, the band replaces the selection (unless both band sets are empty,
+ * in which case the result is [CanvasSelection.None]).
+ */
+fun mergeCanvasBandPick(
+    additive: Boolean,
+    selectionAtStart: CanvasSelection,
+    bandElementIds: Set<Int>,
+    bandCardinalityIds: Set<Int>,
+): CanvasSelection {
+    val (e0, c0) = selectionAtStart.toMultiPickSets()
+    val e = if (additive) e0 + bandElementIds else bandElementIds
+    val c = if (additive) c0 + bandCardinalityIds else bandCardinalityIds
+    return canvasSelectionFromPickSets(e, c)
+}
+
+/** Canonical [CanvasSelection] from merged pick sets (empty → [CanvasSelection.None]). */
+fun canvasSelectionFromPickSets(
+    elementIds: Set<Int>,
+    cardinalityConnectionIds: Set<Int>,
+): CanvasSelection {
+    if (elementIds.isEmpty() && cardinalityConnectionIds.isEmpty()) return CanvasSelection.None
+    return CanvasSelection.Multiple(elementIds = elementIds, cardinalityConnectionIds = cardinalityConnectionIds)
+}
+
+/**
+ * Splits the current selection into sets used for Shift additive multi-select.
+ * [Element] and [Cardinality] each contribute one pick; [Multiple] is merged as-is.
+ */
+fun CanvasSelection.toMultiPickSets(): Pair<Set<Int>, Set<Int>> = when (this) {
+    is CanvasSelection.Element -> setOf(id) to emptySet()
+    is CanvasSelection.Cardinality -> emptySet<Int>() to setOf(connectionId)
+    is CanvasSelection.Multiple -> elementIds to cardinalityConnectionIds
+    CanvasSelection.None -> emptySet<Int>() to emptySet()
+}
+
+/** Shift+ additive click: add [elementId], or remove it if already selected. */
+fun toggleElementInMultiSelection(current: CanvasSelection, elementId: Int): CanvasSelection {
+    val (e, c) = current.toMultiPickSets()
+    val nextE = if (elementId in e) e - elementId else e + elementId
+    return canvasSelectionFromPickSets(nextE, c)
+}
+
+/** Shift+ additive click: add cardinality label [connectionId], or remove if already selected. */
+fun toggleCardinalityInMultiSelection(current: CanvasSelection, connectionId: Int): CanvasSelection {
+    val (e, c) = current.toMultiPickSets()
+    val nextC = if (connectionId in c) c - connectionId else c + connectionId
+    return canvasSelectionFromPickSets(e, nextC)
 }

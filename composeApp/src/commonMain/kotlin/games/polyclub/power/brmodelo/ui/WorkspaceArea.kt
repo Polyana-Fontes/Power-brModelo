@@ -51,6 +51,8 @@ internal fun WorkspaceArea(
     onClearConceptualCanvasTool: () -> Unit = {},
     bulkDeleteUiState: BulkDeleteUiState? = null,
     onBulkDeleteUiChange: (BulkDeleteUiState?) -> Unit = {},
+    selectionBandUiState: SelectionBandUiState? = null,
+    onSelectionBandUiChange: (SelectionBandUiState?) -> Unit = {},
 ) {
     Row(modifier = Modifier.fillMaxSize().padding(8.dp)) {
         MainCanvasPanel(
@@ -72,6 +74,8 @@ internal fun WorkspaceArea(
             onClearConceptualCanvasTool = onClearConceptualCanvasTool,
             bulkDeleteUiState = bulkDeleteUiState,
             onBulkDeleteUiChange = onBulkDeleteUiChange,
+            selectionBandUiState = selectionBandUiState,
+            onSelectionBandUiChange = onSelectionBandUiChange,
             modifier = Modifier.weight(1f),
         )
         Spacer(modifier = Modifier.width(8.dp))
@@ -81,6 +85,7 @@ internal fun WorkspaceArea(
             selection = selection,
             conceptualCanvasTool = conceptualCanvasTool,
             bulkDeleteUiState = bulkDeleteUiState,
+            selectionBandUiState = selectionBandUiState,
             onSchemaPreview = onSchemaPreview,
             onSchemaCommit = onSchemaCommit,
             onRevertSchemaPreview = onRevertSchemaPreview,

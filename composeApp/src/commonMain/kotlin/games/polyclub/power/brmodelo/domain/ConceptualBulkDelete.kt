@@ -64,8 +64,11 @@ fun elementsIntersectingBulkDeleteBand(schema: ConceptualSchema, band: Conceptua
 
 /**
  * Expands [seedIds] with every element that must be removed together for a consistent model:
- * owned attributes, composite children, self-relationships whose owner is removed, and
- * specializations whose base entity is removed.
+ * owned attributes, composite children, and specializations whose base entity is removed.
+ *
+ * [SchemaElement.SelfRelationship] is **not** pulled in when its owner entity is removed: the entity
+ * is deleted and incident connections are dropped, while the self-relationship element may remain
+ * (see [ConceptualSchema.withoutElements]).
  */
 fun expandBulkDeleteClosure(schema: ConceptualSchema, seedIds: Set<Int>): Set<Int> {
     if (seedIds.isEmpty()) return emptySet()
@@ -78,12 +81,6 @@ fun expandBulkDeleteClosure(schema: ConceptualSchema, seedIds: Set<Int>): Set<In
             when (el) {
                 is SchemaElement.Attribute -> {
                     if (el.ownerId in result) {
-                        result.add(id)
-                        changed = true
-                    }
-                }
-                is SchemaElement.SelfRelationship -> {
-                    if (el.ownerEntityId in result) {
                         result.add(id)
                         changed = true
                     }
@@ -115,6 +112,7 @@ fun expandBulkDeleteClosure(schema: ConceptualSchema, seedIds: Set<Int>): Set<In
  * Counts shown in the inspector during bulk delete preview.
  *
  * [relationships] includes [SchemaElement.Relationship] and [SchemaElement.SelfRelationship].
+ * [cardinalityLabels] counts selected cardinality labels ([Connection] ids), used for multi-select UI only.
  * [hiddenAttributesLeaves] sums [HiddenAttribute.physicalFieldLeafCount] for every removed element.
  * [total] is the sum of all categories (one undoable operation is still a single [SchemaHistory.push]).
  */
@@ -126,14 +124,19 @@ data class BulkDeleteCategoryCounts(
     val attributes: Int = 0,
     val hiddenAttributesLeaves: Int = 0,
     val observations: Int = 0,
+    val cardinalityLabels: Int = 0,
 ) {
     val total: Int =
         entities + relationships + associativeEntities + specializations +
-            attributes + hiddenAttributesLeaves + observations
+            attributes + hiddenAttributesLeaves + observations + cardinalityLabels
 }
 
-fun bulkDeleteCategoryCounts(schema: ConceptualSchema, idsToRemove: Set<Int>): BulkDeleteCategoryCounts {
-    if (idsToRemove.isEmpty()) {
+fun bulkDeleteCategoryCounts(
+    schema: ConceptualSchema,
+    elementIds: Set<Int>,
+    cardinalityLabelConnectionIds: Set<Int> = emptySet(),
+): BulkDeleteCategoryCounts {
+    if (elementIds.isEmpty() && cardinalityLabelConnectionIds.isEmpty()) {
         return BulkDeleteCategoryCounts()
     }
     var entities = 0
@@ -143,7 +146,7 @@ fun bulkDeleteCategoryCounts(schema: ConceptualSchema, idsToRemove: Set<Int>): B
     var attributes = 0
     var observations = 0
     var hiddenLeaves = 0
-    for (id in idsToRemove) {
+    for (id in elementIds) {
         val el = schema.elements[id] ?: continue
         hiddenLeaves += el.hiddenAttributes.sumOf { it.physicalFieldLeafCount() }
         when (el) {
@@ -156,6 +159,9 @@ fun bulkDeleteCategoryCounts(schema: ConceptualSchema, idsToRemove: Set<Int>): B
             is SchemaElement.Annotation -> observations++
         }
     }
+    val cardinalityLabels = cardinalityLabelConnectionIds.count { cid ->
+        schema.connections.any { it.id == cid }
+    }
     return BulkDeleteCategoryCounts(
         entities = entities,
         relationships = relationships,
@@ -164,12 +170,24 @@ fun bulkDeleteCategoryCounts(schema: ConceptualSchema, idsToRemove: Set<Int>): B
         attributes = attributes,
         hiddenAttributesLeaves = hiddenLeaves,
         observations = observations,
+        cardinalityLabels = cardinalityLabels,
     )
 }
 
-/**
- * Geometric hits in [band], expanded with [expandBulkDeleteClosure], ready for [ConceptualSchema.withoutElements].
- */
+/** Category counts for whatever is currently selected on the canvas (inspector summary). */
+fun bulkDeleteCategoryCountsForCanvasSelection(
+    schema: ConceptualSchema,
+    selection: CanvasSelection,
+): BulkDeleteCategoryCounts =
+    when (selection) {
+        CanvasSelection.None -> BulkDeleteCategoryCounts()
+        is CanvasSelection.Element -> bulkDeleteCategoryCounts(schema, setOf(selection.id), emptySet())
+        is CanvasSelection.Cardinality ->
+            bulkDeleteCategoryCounts(schema, emptySet(), setOf(selection.connectionId))
+        is CanvasSelection.Multiple ->
+            bulkDeleteCategoryCounts(schema, selection.elementIds, selection.cardinalityConnectionIds)
+    }
+
 fun bulkDeleteResolvedIds(schema: ConceptualSchema, band: ConceptualBulkDeleteBand): Set<Int> {
     val seed = elementsIntersectingBulkDeleteBand(schema, band)
     return expandBulkDeleteClosure(schema, seed)

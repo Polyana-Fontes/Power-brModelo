@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
+import games.polyclub.power.brmodelo.domain.expandBulkDeleteClosure
 import games.polyclub.power.brmodelo.domain.singleElementDeletionClosure
 import games.polyclub.power.brmodelo.ui.ConceptualCanvasTool
 import games.polyclub.power.brmodelo.ui.canvas.SchemaCanvas
@@ -95,6 +96,8 @@ internal fun MainCanvasPanel(
     onClearConceptualCanvasTool: () -> Unit = {},
     bulkDeleteUiState: BulkDeleteUiState? = null,
     onBulkDeleteUiChange: (BulkDeleteUiState?) -> Unit = {},
+    selectionBandUiState: SelectionBandUiState? = null,
+    onSelectionBandUiChange: (SelectionBandUiState?) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val selectedTab = canvasTabs.getOrNull(selectedCanvasTabIndex)
@@ -145,9 +148,9 @@ internal fun MainCanvasPanel(
                         (event.key == Key.Delete || event.key == Key.Backspace)
                     ) {
                         val sch = schema
-                        val elemId = (selection as? CanvasSelection.Element)?.id
-                        if (sch != null && elemId != null) {
-                            val ids = singleElementDeletionClosure(sch, elemId)
+                        val multi = selection as? CanvasSelection.Multiple
+                        if (sch != null && multi != null && multi.elementIds.isNotEmpty()) {
+                            val ids = expandBulkDeleteClosure(sch, multi.elementIds)
                             if (ids.isNotEmpty()) {
                                 onSchemaCommit(
                                     sch.withoutElements(ids).withNormalizedAttributeMultiValuedCounts(),
@@ -158,7 +161,21 @@ internal fun MainCanvasPanel(
                                 false
                             }
                         } else {
-                            false
+                            val elemId = (selection as? CanvasSelection.Element)?.id
+                            if (sch != null && elemId != null) {
+                                val ids = singleElementDeletionClosure(sch, elemId)
+                                if (ids.isNotEmpty()) {
+                                    onSchemaCommit(
+                                        sch.withoutElements(ids).withNormalizedAttributeMultiValuedCounts(),
+                                    )
+                                    onSelectionChange(CanvasSelection.None)
+                                    true
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            }
                         }
                     } else {
                         false
@@ -181,6 +198,8 @@ internal fun MainCanvasPanel(
                     onTransientUserMessage = onTransientUserMessage,
                     bulkDeleteUiState = bulkDeleteUiState,
                     onBulkDeleteUiChange = onBulkDeleteUiChange,
+                    selectionBandUiState = selectionBandUiState,
+                    onSelectionBandUiChange = onSelectionBandUiChange,
                     editorTabSessionId = selectedTab?.id ?: -1L,
                     keyboardRemapVerticalScrollPanToHorizontal = keyboardRemapVerticalScrollPan,
                     toolCursorModifier = toolCursorModifier,

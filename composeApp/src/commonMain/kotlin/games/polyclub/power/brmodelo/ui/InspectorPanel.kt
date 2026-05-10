@@ -82,6 +82,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import games.polyclub.power.brmodelo.domain.BulkDeleteCategoryCounts
+import games.polyclub.power.brmodelo.domain.bulkDeleteCategoryCounts
+import games.polyclub.power.brmodelo.domain.bulkDeleteCategoryCountsForCanvasSelection
 import games.polyclub.power.brmodelo.domain.AnnotationType
 import games.polyclub.power.brmodelo.domain.ArrowDirection
 import games.polyclub.power.brmodelo.domain.CanvasSelection
@@ -91,7 +93,8 @@ import games.polyclub.power.brmodelo.domain.ElementPosition
 import games.polyclub.power.brmodelo.domain.HiddenAttribute
 import games.polyclub.power.brmodelo.domain.LineOrientation
 import games.polyclub.power.brmodelo.domain.SchemaElement
-import games.polyclub.power.brmodelo.domain.SpecializationType
+import games.polyclub.power.brmodelo.domain.selectedPickCount
+import games.polyclub.power.brmodelo.domain.totalPickCount
 import games.polyclub.power.brmodelo.domain.TextAlignment
 import games.polyclub.power.brmodelo.ui.canvas.autoSizedAttributePosition
 import games.polyclub.power.brmodelo.ui.canvas.connectionCardinalityBoxForModel
@@ -209,6 +212,7 @@ internal fun InspectorPanel(
     selection: CanvasSelection = CanvasSelection.None,
     conceptualCanvasTool: ConceptualCanvasTool = ConceptualCanvasTool.None,
     bulkDeleteUiState: BulkDeleteUiState? = null,
+    selectionBandUiState: SelectionBandUiState? = null,
     onSchemaPreview: (ConceptualSchema) -> Unit = {},
     onSchemaCommit: (ConceptualSchema) -> Unit = {},
     onRevertSchemaPreview: () -> Unit = {},
@@ -239,6 +243,7 @@ internal fun InspectorPanel(
                 selection = selection,
                 conceptualCanvasTool = conceptualCanvasTool,
                 bulkDeleteUiState = bulkDeleteUiState,
+                selectionBandUiState = selectionBandUiState,
                 focusedKey = focusedKey,
                 onFocusChange = { focusedKey = it },
                 onSchemaPreview = onSchemaPreview,
@@ -326,6 +331,59 @@ private fun InspectorTabStrip(
 // ChromiumTab is defined in components/ChromiumTabs.kt.
 
 @Composable
+private fun BulkDeleteCategoryCountLines(c: BulkDeleteCategoryCounts) {
+    if (c.total <= 0) return
+    if (c.entities > 0) {
+        Text("Entidades: ${c.entities}", fontSize = 9.sp, color = VALUE_COLOR, modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp))
+    }
+    if (c.relationships > 0) {
+        Text("Relações: ${c.relationships}", fontSize = 9.sp, color = VALUE_COLOR, modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp))
+    }
+    if (c.associativeEntities > 0) {
+        Text(
+            "Entidades associativas: ${c.associativeEntities}",
+            fontSize = 9.sp,
+            color = VALUE_COLOR,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+        )
+    }
+    if (c.specializations > 0) {
+        Text(
+            "Especializações: ${c.specializations}",
+            fontSize = 9.sp,
+            color = VALUE_COLOR,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+        )
+    }
+    if (c.attributes > 0) {
+        Text("Atributos: ${c.attributes}", fontSize = 9.sp, color = VALUE_COLOR, modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp))
+    }
+    if (c.hiddenAttributesLeaves > 0) {
+        Text(
+            "Atributos ocultos (total na árvore): ${c.hiddenAttributesLeaves}",
+            fontSize = 9.sp,
+            color = VALUE_COLOR,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+        )
+    }
+    if (c.cardinalityLabels > 0) {
+        Text(
+            "Cardinalidades: ${c.cardinalityLabels}",
+            fontSize = 9.sp,
+            color = VALUE_COLOR,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+        )
+    }
+    Text(
+        "Total: ${c.total}",
+        fontSize = 9.sp,
+        fontWeight = FontWeight.Bold,
+        color = VALUE_COLOR,
+        modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+    )
+}
+
+@Composable
 private fun BulkDeleteToolInspectorSection(ui: BulkDeleteUiState?) {
     SectionTitle("Ferramenta: excluir objetos")
     Text(
@@ -338,52 +396,13 @@ private fun BulkDeleteToolInspectorSection(ui: BulkDeleteUiState?) {
         lineHeight = 12.sp,
         modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
     )
-    val c = ui?.counts
-    if (c != null && c.total > 0) {
-        if (c.entities > 0) {
-            Text("Entidades: ${c.entities}", fontSize = 9.sp, color = VALUE_COLOR, modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp))
-        }
-        if (c.relationships > 0) {
-            Text("Relações: ${c.relationships}", fontSize = 9.sp, color = VALUE_COLOR, modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp))
-        }
-        if (c.associativeEntities > 0) {
-            Text(
-                "Entidades associativas: ${c.associativeEntities}",
-                fontSize = 9.sp,
-                color = VALUE_COLOR,
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
-            )
-        }
-        if (c.specializations > 0) {
-            Text(
-                "Especializações: ${c.specializations}",
-                fontSize = 9.sp,
-                color = VALUE_COLOR,
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
-            )
-        }
-        if (c.attributes > 0) {
-            Text("Atributos: ${c.attributes}", fontSize = 9.sp, color = VALUE_COLOR, modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp))
-        }
-        if (c.hiddenAttributesLeaves > 0) {
-            Text(
-                "Atributos ocultos (total na árvore): ${c.hiddenAttributesLeaves}",
-                fontSize = 9.sp,
-                color = VALUE_COLOR,
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
-            )
-        }
-        if (c.observations > 0) {
-            Text("Observações: ${c.observations}", fontSize = 9.sp, color = VALUE_COLOR, modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp))
-        }
-        Text(
-            "Total: ${c.total}",
-            fontSize = 9.sp,
-            fontWeight = FontWeight.Bold,
-            color = VALUE_COLOR,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
-        )
-    }
+    ui?.counts?.let { BulkDeleteCategoryCountLines(it) }
+}
+
+@Composable
+private fun SelectionBandInspectorSection(ui: SelectionBandUiState) {
+    SectionTitle("Seleção na área")
+    BulkDeleteCategoryCountLines(ui.counts)
 }
 
 // ── Selection tab ─────────────────────────────────────────────────────────────
@@ -395,6 +414,7 @@ private fun SelectionTab(
     selection: CanvasSelection,
     conceptualCanvasTool: ConceptualCanvasTool,
     bulkDeleteUiState: BulkDeleteUiState?,
+    selectionBandUiState: SelectionBandUiState?,
     focusedKey: String?,
     onFocusChange: (String?) -> Unit,
     onSchemaPreview: (ConceptualSchema) -> Unit,
@@ -405,6 +425,18 @@ private fun SelectionTab(
     val layoutDirection = LocalLayoutDirection.current
     val hintText = focusedKey?.let { HINTS[it] } ?: ""
 
+    val bulkToolArmed = conceptualCanvasTool is ConceptualCanvasTool.BulkDeleteObjects
+    val bulkDragging = bulkDeleteUiState != null
+    val selectionToolArmed = conceptualCanvasTool is ConceptualCanvasTool.RectangleSelection
+    val committedPickCount = selection.selectedPickCount()
+    val previewPickCount = selectionBandUiState?.let { band ->
+        band.markedElementIds.size + band.markedCardinalityConnectionIds.size
+    } ?: 0
+    val multiCount = (selection as? CanvasSelection.Multiple)?.totalPickCount() ?: 0
+    val hideDetailGrid = bulkToolArmed || bulkDragging ||
+        (selectionToolArmed && (committedPickCount >= 2 || previewPickCount >= 2)) ||
+        (!selectionToolArmed && selection is CanvasSelection.Multiple && multiCount >= 2)
+
     Column(modifier = modifier) {
         // Scrollable properties grid
         Column(
@@ -412,45 +444,18 @@ private fun SelectionTab(
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
         ) {
-            if (conceptualCanvasTool is ConceptualCanvasTool.BulkDeleteObjects) {
+            if (bulkToolArmed) {
                 BulkDeleteToolInspectorSection(bulkDeleteUiState)
-                HorizontalDivider(color = Color(0xFF7A9ABF), thickness = 1.dp)
             }
-            when {
-                schema == null -> Unit
+            selectionBandUiState?.takeIf { ui ->
+                ui.markedElementIds.isNotEmpty() || ui.markedCardinalityConnectionIds.isNotEmpty()
+            }?.let { SelectionBandInspectorSection(it) }
+            if (!hideDetailGrid) {
+                when {
+                    schema == null -> Unit
 
-                selection == CanvasSelection.None ->
-                    SchemaMetaContent(
-                        schema = schema,
-                        committedSchema = committedSchema,
-                        focusedKey = focusedKey,
-                        onFocusChange = onFocusChange,
-                        onSchemaPreview = onSchemaPreview,
-                        onSchemaCommit = onSchemaCommit,
-                    )
-
-                selection is CanvasSelection.Element -> {
-                    val elem = schema.elements[selection.id]
-                    if (elem != null) {
-                        ElementContent(
-                            element = elem,
-                            schema = schema,
-                            committedSchema = committedSchema,
-                            focusedKey = focusedKey,
-                            onFocusChange = onFocusChange,
-                            onSchemaPreview = onSchemaPreview,
-                            onSchemaCommit = onSchemaCommit,
-                            textMeasurer = textMeasurer,
-                            layoutDirection = layoutDirection,
-                        )
-                    }
-                }
-
-                selection is CanvasSelection.Cardinality -> {
-                    val conn = schema.connections.firstOrNull { it.id == selection.connectionId }
-                    if (conn != null) {
-                        CardinalityContent(
-                            conn = conn,
+                    selection == CanvasSelection.None ->
+                        SchemaMetaContent(
                             schema = schema,
                             committedSchema = committedSchema,
                             focusedKey = focusedKey,
@@ -458,8 +463,103 @@ private fun SelectionTab(
                             onSchemaPreview = onSchemaPreview,
                             onSchemaCommit = onSchemaCommit,
                         )
+
+                    selection is CanvasSelection.Element -> {
+                        val elem = schema.elements[selection.id]
+                        if (elem != null) {
+                            ElementContent(
+                                element = elem,
+                                schema = schema,
+                                committedSchema = committedSchema,
+                                focusedKey = focusedKey,
+                                onFocusChange = onFocusChange,
+                                onSchemaPreview = onSchemaPreview,
+                                onSchemaCommit = onSchemaCommit,
+                                textMeasurer = textMeasurer,
+                                layoutDirection = layoutDirection,
+                            )
+                        }
                     }
+
+                    selection is CanvasSelection.Cardinality -> {
+                        val conn = schema.connections.firstOrNull { it.id == selection.connectionId }
+                        if (conn != null) {
+                            CardinalityContent(
+                                conn = conn,
+                                schema = schema,
+                                committedSchema = committedSchema,
+                                focusedKey = focusedKey,
+                                onFocusChange = onFocusChange,
+                                onSchemaPreview = onSchemaPreview,
+                                onSchemaCommit = onSchemaCommit,
+                            )
+                        }
+                    }
+
+                    selection is CanvasSelection.Multiple -> {
+                        if (!selectionToolArmed && multiCount == 1) {
+                            val onlyE = selection.elementIds.singleOrNull()
+                            val onlyC = selection.cardinalityConnectionIds.singleOrNull()
+                            when {
+                                onlyE != null -> {
+                                    val elem = schema.elements[onlyE]
+                                    if (elem != null) {
+                                        ElementContent(
+                                            element = elem,
+                                            schema = schema,
+                                            committedSchema = committedSchema,
+                                            focusedKey = focusedKey,
+                                            onFocusChange = onFocusChange,
+                                            onSchemaPreview = onSchemaPreview,
+                                            onSchemaCommit = onSchemaCommit,
+                                            textMeasurer = textMeasurer,
+                                            layoutDirection = layoutDirection,
+                                        )
+                                    }
+                                }
+                                onlyC != null -> {
+                                    val conn = schema.connections.firstOrNull { it.id == onlyC }
+                                    if (conn != null) {
+                                        CardinalityContent(
+                                            conn = conn,
+                                            schema = schema,
+                                            committedSchema = committedSchema,
+                                            focusedKey = focusedKey,
+                                            onFocusChange = onFocusChange,
+                                            onSchemaPreview = onSchemaPreview,
+                                            onSchemaCommit = onSchemaCommit,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    else -> Unit
                 }
+            } else if (
+                selectionToolArmed &&
+                    schema != null &&
+                    committedPickCount >= 2 &&
+                    previewPickCount == 0
+            ) {
+                SectionTitle("Seleção")
+                BulkDeleteCategoryCountLines(bulkDeleteCategoryCountsForCanvasSelection(schema, selection))
+            } else if (
+                !selectionToolArmed &&
+                    selection is CanvasSelection.Multiple &&
+                    schema != null &&
+                    multiCount >= 2 &&
+                    selectionBandUiState == null
+            ) {
+                SectionTitle("Seleção múltipla")
+                BulkDeleteCategoryCountLines(
+                    bulkDeleteCategoryCounts(
+                        schema,
+                        selection.elementIds,
+                        selection.cardinalityConnectionIds,
+                    ),
+                )
             }
         }
 
@@ -1842,6 +1942,7 @@ private fun HiddenAttributesTab(
 ) {
     val hiddenAttrs: List<HiddenAttribute> = when (selection) {
         is CanvasSelection.Element -> schema?.elements?.get(selection.id)?.hiddenAttributes ?: emptyList()
+        is CanvasSelection.Multiple -> emptyList()
         else -> emptyList()
     }
 

@@ -28,11 +28,12 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import games.polyclub.power.brmodelo.ui.AttributeToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.BulkDeleteObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.OperationsMenuRibbonBinding
-import games.polyclub.power.brmodelo.ui.BulkDeleteObjectsToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.RectangleSelectionToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.RibbonTab
 import games.polyclub.power.brmodelo.ui.SpecializationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.components.AppColors
@@ -47,6 +48,7 @@ internal fun HeaderRibbon(
     specializationToolBinding: SpecializationToolRibbonBinding? = null,
     attributeToolBinding: AttributeToolRibbonBinding? = null,
     bulkDeleteObjectsToolBinding: BulkDeleteObjectsToolRibbonBinding? = null,
+    rectangleSelectionToolBinding: RectangleSelectionToolRibbonBinding? = null,
     operationsMenuBinding: OperationsMenuRibbonBinding? = null,
     onMainMenuClick: () -> Unit,
     onTabSelect: (RibbonTab) -> Unit,
@@ -73,6 +75,7 @@ internal fun HeaderRibbon(
                 specializationToolBinding = specializationToolBinding,
                 attributeToolBinding = attributeToolBinding,
                 bulkDeleteObjectsToolBinding = bulkDeleteObjectsToolBinding,
+                rectangleSelectionToolBinding = rectangleSelectionToolBinding,
                 operationsMenuBinding = operationsMenuBinding,
             )
             RibbonTab.Opcoes            -> RibbonOpcoes()

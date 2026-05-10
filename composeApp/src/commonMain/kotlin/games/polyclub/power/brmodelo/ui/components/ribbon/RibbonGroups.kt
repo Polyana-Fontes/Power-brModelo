@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import games.polyclub.power.brmodelo.ui.AttributeToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.BulkDeleteObjectsToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.RectangleSelectionToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
@@ -109,6 +110,7 @@ internal fun RibbonGroupWithSeparators(
     specializationToolBinding: SpecializationToolRibbonBinding? = null,
     attributeToolBinding: AttributeToolRibbonBinding? = null,
     bulkDeleteObjectsToolBinding: BulkDeleteObjectsToolRibbonBinding? = null,
+    rectangleSelectionToolBinding: RectangleSelectionToolRibbonBinding? = null,
 ) {
     Column(
         modifier = Modifier
@@ -136,6 +138,7 @@ internal fun RibbonGroupWithSeparators(
                         specializationToolBinding,
                         attributeToolBinding,
                         bulkDeleteObjectsToolBinding,
+                        rectangleSelectionToolBinding,
                     )
                 }
             }
