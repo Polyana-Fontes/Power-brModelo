@@ -80,6 +80,7 @@ internal fun RibbonGroup(
                         binding?.organizeAttributesEnabled ?: false,
                         binding?.selectAttributesEnabled ?: false,
                         binding?.promoteToAssociativeEnabled ?: false,
+                        binding?.promoteAttributeToEntityEnabled ?: false,
                     )
                     RibbonButton(
                         entry = item.copy(dropdown = entries),
@@ -91,6 +92,8 @@ internal fun RibbonGroup(
                                     binding?.onSelectAttributes?.invoke()
                                 ConceptualRibbonOperation.PromoteToAssociativeEntity ->
                                     binding?.onPromoteToAssociative?.invoke()
+                                ConceptualRibbonOperation.PromoteAttributeToEntity ->
+                                    binding?.onPromoteAttributeToEntity?.invoke()
                                 null -> Unit
                             }
                         },

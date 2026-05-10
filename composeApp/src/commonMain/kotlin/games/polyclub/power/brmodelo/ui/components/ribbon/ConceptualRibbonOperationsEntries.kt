@@ -33,6 +33,7 @@ internal fun conceptualOperationsDropdownEntries(
     organizeAttributesEnabled: Boolean,
     selectAttributesEnabled: Boolean,
     promoteToAssociativeEnabled: Boolean,
+    promoteAttributeToEntityEnabled: Boolean,
 ): List<DropdownEntry> =
     listOf(
         DropdownEntry(
@@ -62,6 +63,8 @@ internal fun conceptualOperationsDropdownEntries(
         DropdownEntry(
             label = "Converter em Entidade",
             icon = Res.drawable.entidade_s,
+            enabled = promoteAttributeToEntityEnabled,
+            conceptualOperation = ConceptualRibbonOperation.PromoteAttributeToEntity,
         ),
         DropdownEntry(
             label = "Converter Esp. para Restrita",

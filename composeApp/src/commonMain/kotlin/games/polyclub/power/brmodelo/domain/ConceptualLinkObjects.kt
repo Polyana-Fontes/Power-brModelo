@@ -74,7 +74,7 @@ private fun conceptualRelToEntityLegCount(schema: ConceptualSchema, relId: Int, 
  * - [SchemaElement.Relationship]: normally one leg per entity; a **second** leg to the **same** entity is allowed
  *   only when that diamond still links exclusively to that entity (manual auto-rel: E–R then R–E).
  */
-private fun isDuplicateConceptualRelEntityConnection(schema: ConceptualSchema, relId: Int, entityId: Int): Boolean {
+internal fun isDuplicateConceptualRelEntityConnection(schema: ConceptualSchema, relId: Int, entityId: Int): Boolean {
     val n = conceptualRelToEntityLegCount(schema, relId, entityId)
     if (n == 0) return false
     val rel = schema.elements[relId] ?: return true

@@ -38,8 +38,10 @@ import androidx.compose.ui.graphics.Color
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolVariant
 import games.polyclub.power.brmodelo.domain.applyOrganizeAttributesMenuAction
+import games.polyclub.power.brmodelo.domain.applyPromoteAttributeToEntity
 import games.polyclub.power.brmodelo.domain.applyPromoteRelationshipsToAssociativeEntities
 import games.polyclub.power.brmodelo.domain.canOrganizeAttributesMenuSelection
+import games.polyclub.power.brmodelo.domain.canPromoteAttributeToEntityMenu
 import games.polyclub.power.brmodelo.domain.canPromoteToAssociativeEntityMenu
 import games.polyclub.power.brmodelo.domain.canSelectAttributeTreeMenu
 import games.polyclub.power.brmodelo.domain.expandCanvasSelectionWithAttributeTrees
@@ -450,6 +452,12 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         val updated = applyPromoteRelationshipsToAssociativeEntities(tab.schema, tab.selection) ?: return@promote
         pushCommitOnSelected(updated.withNormalizedAttributeMultiValuedCounts())
     }
+    val promoteAttributeToEntityEnabled = canPromoteAttributeToEntityMenu(sel.schema, sel.selection)
+    val onPromoteAttributeToEntity: () -> Unit = promoteEnt@{
+        val tab = tabSessions.getOrNull(selectedTabIndex) ?: return@promoteEnt
+        val updated = applyPromoteAttributeToEntity(tab.schema, tab.selection) ?: return@promoteEnt
+        pushCommitOnSelected(updated.withNormalizedAttributeMultiValuedCounts())
+    }
     val operationsMenuBinding = OperationsMenuRibbonBinding(
         organizeAttributesEnabled = organizeAttrsEnabled,
         onOrganizeAttributes = onOrganizeAttributes,
@@ -457,6 +465,8 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         onSelectAttributes = onSelectAttributes,
         promoteToAssociativeEnabled = promoteAssociativeEnabled,
         onPromoteToAssociative = onPromoteToAssociative,
+        promoteAttributeToEntityEnabled = promoteAttributeToEntityEnabled,
+        onPromoteAttributeToEntity = onPromoteAttributeToEntity,
     )
 
     MaterialTheme {
