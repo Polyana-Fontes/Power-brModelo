@@ -42,6 +42,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
+import games.polyclub.power.brmodelo.ui.OperationsMenuRibbonBinding
 import games.polyclub.power.brmodelo.ui.canvas.renderSchemaToImageBitmap
 import games.polyclub.power.brmodelo.ui.components.ribbon.HeaderRibbon
 import kotlinx.coroutines.launch
@@ -81,6 +82,8 @@ internal fun BrModeloScreen(
     linkObjectsToolBinding: LinkObjectsToolRibbonBinding? = null,
     autoSelfRelationshipToolBinding: AutoSelfRelationshipToolRibbonBinding? = null,
     specializationToolBinding: SpecializationToolRibbonBinding? = null,
+    attributeToolBinding: AttributeToolRibbonBinding? = null,
+    operationsMenuBinding: OperationsMenuRibbonBinding? = null,
     conceptualCanvasTool: ConceptualCanvasTool = ConceptualCanvasTool.None,
     onConceptualCanvasToolChange: (ConceptualCanvasTool) -> Unit = {},
     onClearConceptualCanvasTool: () -> Unit = {},
@@ -113,6 +116,8 @@ internal fun BrModeloScreen(
                 linkObjectsToolBinding = linkObjectsToolBinding,
                 autoSelfRelationshipToolBinding = autoSelfRelationshipToolBinding,
                 specializationToolBinding = specializationToolBinding,
+                attributeToolBinding = attributeToolBinding,
+                operationsMenuBinding = operationsMenuBinding,
                 onMainMenuClick = onMainMenuToggle,
                 onTabSelect = onTabSelect,
             )

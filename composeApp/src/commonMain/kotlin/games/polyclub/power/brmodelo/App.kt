@@ -36,10 +36,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import games.polyclub.power.brmodelo.domain.CanvasSelection
+import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolVariant
+import games.polyclub.power.brmodelo.domain.applyOrganizeAttributesMenuAction
+import games.polyclub.power.brmodelo.domain.canOrganizeAttributesMenu
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolVariant
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaBrmParser
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaXmlParser
+import games.polyclub.power.brmodelo.ui.AttributeToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.BrModeloScreen
 import games.polyclub.power.brmodelo.ui.CloseTabUnsavedDialog
@@ -48,6 +52,7 @@ import games.polyclub.power.brmodelo.ui.EditorTabSession
 import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.OperationsMenuRibbonBinding
 import games.polyclub.power.brmodelo.ui.SpecializationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.EntityToolVariant
 import games.polyclub.power.brmodelo.ui.MainMenuType
@@ -59,8 +64,10 @@ import games.polyclub.power.brmodelo.ui.isDesktopTarget
 import games.polyclub.power.brmodelo.ui.isWindowDragActive
 import games.polyclub.power.brmodelo.ui.setupWindowDragDrop
 import games.polyclub.power.brmodelo.ui.showNativeFilePicker
+import games.polyclub.power.brmodelo.ui.components.ribbon.attributeVariantRibbonPresentation
 import games.polyclub.power.brmodelo.ui.components.ribbon.entityVariantRibbonPresentation
 import games.polyclub.power.brmodelo.ui.components.ribbon.specializationVariantRibbonPresentation
+import games.polyclub.power.brmodelo.ui.matchesAttributeVariant
 import games.polyclub.power.brmodelo.ui.matchesEntityVariant
 import games.polyclub.power.brmodelo.ui.matchesSpecializationVariant
 import games.polyclub.power.brmodelo.ui.toConceptualTool
@@ -76,6 +83,7 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
     var conceptualCanvasTool by remember { mutableStateOf<ConceptualCanvasTool>(ConceptualCanvasTool.None) }
     var entityToolVariant by remember { mutableStateOf(EntityToolVariant.Plain) }
     var specializationToolVariant by remember { mutableStateOf(ConceptualSpecializationToolVariant.Basic) }
+    var attributeToolVariant by remember { mutableStateOf(ConceptualAttributeToolVariant.Basic) }
 
     val initialTabId = 1L
     var nextTabId by remember { mutableLongStateOf(initialTabId + 1) }
@@ -352,6 +360,38 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         },
     )
 
+    val (attributeTitle, attributeIcon) = attributeVariantRibbonPresentation(attributeToolVariant)
+    val attributeToolBinding = AttributeToolRibbonBinding(
+        variant = attributeToolVariant,
+        isArmed = conceptualCanvasTool.matchesAttributeVariant(attributeToolVariant),
+        displayTitle = attributeTitle,
+        displayIcon = attributeIcon,
+        onMainClick = {
+            if (conceptualCanvasTool.matchesAttributeVariant(attributeToolVariant)) {
+                conceptualCanvasTool = ConceptualCanvasTool.None
+            } else {
+                conceptualCanvasTool = attributeToolVariant.toConceptualTool()
+            }
+        },
+        onDropdownVariant = { v ->
+            attributeToolVariant = v
+            conceptualCanvasTool = v.toConceptualTool()
+        },
+    )
+
+    val selElementId = (sel.selection as? CanvasSelection.Element)?.id
+    val organizeAttrsEnabled =
+        selElementId != null && canOrganizeAttributesMenu(sel.schema, selElementId)
+    val operationsMenuBinding = OperationsMenuRibbonBinding(
+        organizeAttributesEnabled = organizeAttrsEnabled,
+        onOrganizeAttributes = {
+            val tab = tabSessions.getOrNull(selectedTabIndex) ?: return@OperationsMenuRibbonBinding
+            val id = (tab.selection as? CanvasSelection.Element)?.id ?: return@OperationsMenuRibbonBinding
+            val updated = applyOrganizeAttributesMenuAction(tab.schema, id) ?: return@OperationsMenuRibbonBinding
+            pushCommitOnSelected(updated.withNormalizedAttributeMultiValuedCounts())
+        },
+    )
+
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFE3E3E3)) {
             Box(modifier = Modifier.fillMaxSize()) {
@@ -395,6 +435,8 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                     linkObjectsToolBinding = linkObjectsToolBinding,
                     autoSelfRelationshipToolBinding = autoSelfRelationshipToolBinding,
                     specializationToolBinding = specializationToolBinding,
+                    attributeToolBinding = attributeToolBinding,
+                    operationsMenuBinding = operationsMenuBinding,
                     conceptualCanvasTool = conceptualCanvasTool,
                     onConceptualCanvasToolChange = { conceptualCanvasTool = it },
                     onClearConceptualCanvasTool = { conceptualCanvasTool = ConceptualCanvasTool.None },

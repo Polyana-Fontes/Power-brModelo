@@ -29,33 +29,24 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import games.polyclub.power.brmodelo.ui.DropdownEntry
+import games.polyclub.power.brmodelo.ui.AttributeToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.components.AppColors
 import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.MenuEntry
+import games.polyclub.power.brmodelo.ui.OperationsMenuRibbonBinding
 import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.SpecializationToolRibbonBinding
-import games.polyclub.power.brmodelo.ui.components.AppColors
 import games.polyclub.power.brmodelo.generated.resources.Res
 import games.polyclub.power.brmodelo.generated.resources.apagar_s
-import games.polyclub.power.brmodelo.generated.resources.atributo_composto_s
-import games.polyclub.power.brmodelo.generated.resources.atributo_identificador_s
 import games.polyclub.power.brmodelo.generated.resources.atributo_l
-import games.polyclub.power.brmodelo.generated.resources.atributo_multivalorado_s
-import games.polyclub.power.brmodelo.generated.resources.atributo_opcional_s
-import games.polyclub.power.brmodelo.generated.resources.atributo_s
 import games.polyclub.power.brmodelo.generated.resources.autorelacionamento_l
 import games.polyclub.power.brmodelo.generated.resources.colar_l
 import games.polyclub.power.brmodelo.generated.resources.copiar_s
 import games.polyclub.power.brmodelo.generated.resources.cursor_l
-import games.polyclub.power.brmodelo.generated.resources.dicionario_dados_3s
-import games.polyclub.power.brmodelo.generated.resources.entidade_associativa_s
 import games.polyclub.power.brmodelo.generated.resources.entidade_l
-import games.polyclub.power.brmodelo.generated.resources.entidade_s
-import games.polyclub.power.brmodelo.generated.resources.especializacao_exclusiva_s
 import games.polyclub.power.brmodelo.generated.resources.especializacao_l
-import games.polyclub.power.brmodelo.generated.resources.especializacao_nao_exclusiva_s
 import games.polyclub.power.brmodelo.generated.resources.excluir_2l
 import games.polyclub.power.brmodelo.generated.resources.fonte_l
 import games.polyclub.power.brmodelo.generated.resources.gerar_logico_l
@@ -63,9 +54,7 @@ import games.polyclub.power.brmodelo.generated.resources.ligacao_l
 import games.polyclub.power.brmodelo.generated.resources.log_s
 import games.polyclub.power.brmodelo.generated.resources.operacoes_l
 import games.polyclub.power.brmodelo.generated.resources.recortar_s
-import games.polyclub.power.brmodelo.generated.resources.relacao_s
 import games.polyclub.power.brmodelo.generated.resources.salvar_s
-import games.polyclub.power.brmodelo.generated.resources.selecionar_s
 import games.polyclub.power.brmodelo.generated.resources.texto_l
 import games.polyclub.power.brmodelo.generated.resources.visualizar_l
 
@@ -79,6 +68,8 @@ internal fun RibbonEsquemaConceitual(
     linkObjectsToolBinding: LinkObjectsToolRibbonBinding? = null,
     autoSelfRelationshipToolBinding: AutoSelfRelationshipToolRibbonBinding? = null,
     specializationToolBinding: SpecializationToolRibbonBinding? = null,
+    attributeToolBinding: AttributeToolRibbonBinding? = null,
+    operationsMenuBinding: OperationsMenuRibbonBinding? = null,
 ) {
     Row(
         modifier = Modifier
@@ -95,6 +86,7 @@ internal fun RibbonEsquemaConceitual(
             linkObjectsToolBinding = linkObjectsToolBinding,
             autoSelfRelationshipToolBinding = autoSelfRelationshipToolBinding,
             specializationToolBinding = specializationToolBinding,
+            attributeToolBinding = attributeToolBinding,
             groups = listOf(
                 listOf(MenuEntry("Seleção", Res.drawable.cursor_l)),
                 listOf(
@@ -111,28 +103,7 @@ internal fun RibbonEsquemaConceitual(
                     MenuEntry(
                         title = "Atributo",
                         icon = Res.drawable.atributo_l,
-                        dropdown = listOf(
-                            DropdownEntry(
-                                "Atributo",
-                                Res.drawable.atributo_s
-                            ),
-                            DropdownEntry(
-                                "Atributo Identificador",
-                                Res.drawable.atributo_identificador_s
-                            ),
-                            DropdownEntry(
-                                "Atributo Multivalorado",
-                                Res.drawable.atributo_multivalorado_s
-                            ),
-                            DropdownEntry(
-                                "Atributo Composto",
-                                Res.drawable.atributo_composto_s
-                            ),
-                            DropdownEntry(
-                                "Atributo Opcional",
-                                Res.drawable.atributo_opcional_s
-                            )
-                        )
+                        dropdown = conceptualAttributeDropdownEntries(),
                     )
                 ),
                 listOf(
@@ -159,47 +130,12 @@ internal fun RibbonEsquemaConceitual(
         Spacer(modifier = Modifier.width(5.dp))
         RibbonGroup(
             title = "Operações",
+            operationsMenuBinding = operationsMenuBinding,
             items = listOf(
                 MenuEntry(
                     title = "Operações",
                     icon = Res.drawable.operacoes_l,
-                    dropdown = listOf(
-                        DropdownEntry(
-                            "Ocultar Atributo",
-                            Res.drawable.atributo_s,
-                            enabled = false
-                        ),
-                        DropdownEntry(
-                            "Organizar Atributos",
-                            Res.drawable.atributo_s,
-                            enabled = false
-                        ),
-                        DropdownEntry(
-                            "Selecionar Atributo",
-                            Res.drawable.selecionar_s,
-                            isSeparatorAbove = true
-                        ),
-                        DropdownEntry(
-                            "Promover à Entidade Associativa",
-                            Res.drawable.entidade_associativa_s
-                        ),
-                        DropdownEntry(
-                            "Promover à Entidade",
-                            Res.drawable.entidade_s
-                        ),
-                        DropdownEntry(
-                            "Converter Esp. para Restrita",
-                            Res.drawable.especializacao_exclusiva_s
-                        ),
-                        DropdownEntry(
-                            "Converter Esp. para Opcional",
-                            Res.drawable.especializacao_nao_exclusiva_s
-                        ),
-                        DropdownEntry(
-                            "Dicionário de Dados do Objeto",
-                            Res.drawable.dicionario_dados_3s
-                        )
-                    )
+                    dropdown = emptyList(),
                 ),
                 MenuEntry(
                     "Gerar Esquema\nLógico",

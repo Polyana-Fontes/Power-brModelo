@@ -39,17 +39,24 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import games.polyclub.power.brmodelo.ui.AttributeToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.MenuEntry
 import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.OperationsMenuRibbonBinding
 import games.polyclub.power.brmodelo.ui.SpecializationToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.ConceptualRibbonOperation
 import games.polyclub.power.brmodelo.ui.components.AppColors
 
 /** Standard group: all buttons in a single row, group title below. */
 @Composable
-internal fun RibbonGroup(title: String, items: List<MenuEntry>) {
+internal fun RibbonGroup(
+    title: String,
+    items: List<MenuEntry>,
+    operationsMenuBinding: OperationsMenuRibbonBinding? = null,
+) {
     Column(
         modifier = Modifier
             .fillMaxHeight()
@@ -64,7 +71,26 @@ internal fun RibbonGroup(title: String, items: List<MenuEntry>) {
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.Top
         ) {
-            items.forEach { RibbonButton(it) }
+            items.forEach { item ->
+                if (item.title == "Operações") {
+                    val binding = operationsMenuBinding
+                    val entries = conceptualOperationsDropdownEntries(
+                        binding?.organizeAttributesEnabled ?: false,
+                    )
+                    RibbonButton(
+                        entry = item.copy(dropdown = entries),
+                        onDropdownItemSelected = { row ->
+                            when (row.conceptualOperation) {
+                                ConceptualRibbonOperation.OrganizeAttributes ->
+                                    binding?.onOrganizeAttributes?.invoke()
+                                null -> Unit
+                            }
+                        },
+                    )
+                } else {
+                    RibbonButton(item)
+                }
+            }
         }
         RibbonGroupTitle(title)
     }
@@ -80,6 +106,7 @@ internal fun RibbonGroupWithSeparators(
     linkObjectsToolBinding: LinkObjectsToolRibbonBinding? = null,
     autoSelfRelationshipToolBinding: AutoSelfRelationshipToolRibbonBinding? = null,
     specializationToolBinding: SpecializationToolRibbonBinding? = null,
+    attributeToolBinding: AttributeToolRibbonBinding? = null,
 ) {
     Column(
         modifier = Modifier
@@ -105,6 +132,7 @@ internal fun RibbonGroupWithSeparators(
                         linkObjectsToolBinding,
                         autoSelfRelationshipToolBinding,
                         specializationToolBinding,
+                        attributeToolBinding,
                     )
                 }
             }

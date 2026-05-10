@@ -62,4 +62,17 @@ object ConceptualPlacementDefaults {
      * Matches `valores-padroes.xml` / [TEspecializacao.Create] in `mer.pas`.
      */
     val specializationLabelStyle: LabelStyle = LabelStyle(color = 32896, bold = true, italic = true)
+
+    /** Default attribute size from `valores-padroes.xml` (`Atributo1`: 73×16). */
+    const val attributeWidth: Int = 73
+    const val attributeHeight: Int = 16
+
+    /** Horizontal gap between owner and attribute (`OrganizeAtributos` uses 35 px in mer.pas). */
+    const val attributeHorizontalGap: Int = 35
+
+    /** Base vertical gap for top/bottom attributes (`10` in mer.pas `OrganizeAtributos`). */
+    const val attributeVerticalGapBase: Int = 10
+
+    /** Minimum stacking step derived from attribute height (`Distancia := max(A.Height, 16)`). */
+    const val attributeStackSpacingMin: Int = 16
 }

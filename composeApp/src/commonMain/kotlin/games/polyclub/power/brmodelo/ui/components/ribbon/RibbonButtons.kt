@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import games.polyclub.power.brmodelo.ui.DropdownEntry
+import games.polyclub.power.brmodelo.ui.AttributeToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
@@ -296,6 +297,7 @@ internal fun RibbonMenuEntryButton(
     linkObjectsToolBinding: LinkObjectsToolRibbonBinding? = null,
     autoSelfRelationshipToolBinding: AutoSelfRelationshipToolRibbonBinding? = null,
     specializationToolBinding: SpecializationToolRibbonBinding? = null,
+    attributeToolBinding: AttributeToolRibbonBinding? = null,
 ) {
     if (entry.title == "Observação" && observationToolBinding != null) {
         RibbonArmedToolButton(
@@ -337,6 +339,17 @@ internal fun RibbonMenuEntryButton(
                 row.specializationVariant?.let { specializationToolBinding.onDropdownVariant(it) }
             },
         )
+    } else if (entry.title == "Atributo" && attributeToolBinding != null && !entry.dropdown.isNullOrEmpty()) {
+        RibbonSplitDropdownButton(
+            entry = entry,
+            displayTitle = attributeToolBinding.displayTitle,
+            displayIcon = attributeToolBinding.displayIcon,
+            isPrimaryToolArmed = attributeToolBinding.isArmed,
+            onMainClick = attributeToolBinding.onMainClick,
+            onDropdownItemSelected = { row ->
+                row.attributeVariant?.let { attributeToolBinding.onDropdownVariant(it) }
+            },
+        )
     } else if (entry.title in RIBBON_SPLIT_DROPDOWN_TITLES && !entry.dropdown.isNullOrEmpty()) {
         RibbonSplitDropdownButton(entry = entry)
     } else {
@@ -349,7 +362,10 @@ internal fun RibbonMenuEntryButton(
  * When [entry.dropdown] is non-null the button shows a ▾ indicator and opens a dropdown on click.
  */
 @Composable
-internal fun RibbonButton(entry: MenuEntry) {
+internal fun RibbonButton(
+    entry: MenuEntry,
+    onDropdownItemSelected: (DropdownEntry) -> Unit = {},
+) {
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
     var showDropdown by remember { mutableStateOf(false) }
@@ -408,7 +424,11 @@ internal fun RibbonButton(entry: MenuEntry) {
             RibbonDropdownMenu(
                 items = entry.dropdown!!,
                 expanded = showDropdown,
-                onDismiss = { showDropdown = false }
+                onDismiss = { showDropdown = false },
+                onItemSelected = {
+                    onDropdownItemSelected(it)
+                    showDropdown = false
+                },
             )
         }
     }

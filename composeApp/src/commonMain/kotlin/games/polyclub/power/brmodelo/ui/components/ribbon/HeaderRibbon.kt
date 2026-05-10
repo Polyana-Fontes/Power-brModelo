@@ -26,10 +26,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
+import games.polyclub.power.brmodelo.ui.AttributeToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.OperationsMenuRibbonBinding
 import games.polyclub.power.brmodelo.ui.RibbonTab
 import games.polyclub.power.brmodelo.ui.SpecializationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.components.AppColors
@@ -42,6 +44,8 @@ internal fun HeaderRibbon(
     linkObjectsToolBinding: LinkObjectsToolRibbonBinding? = null,
     autoSelfRelationshipToolBinding: AutoSelfRelationshipToolRibbonBinding? = null,
     specializationToolBinding: SpecializationToolRibbonBinding? = null,
+    attributeToolBinding: AttributeToolRibbonBinding? = null,
+    operationsMenuBinding: OperationsMenuRibbonBinding? = null,
     onMainMenuClick: () -> Unit,
     onTabSelect: (RibbonTab) -> Unit,
 ) {
@@ -65,6 +69,8 @@ internal fun HeaderRibbon(
                 linkObjectsToolBinding = linkObjectsToolBinding,
                 autoSelfRelationshipToolBinding = autoSelfRelationshipToolBinding,
                 specializationToolBinding = specializationToolBinding,
+                attributeToolBinding = attributeToolBinding,
+                operationsMenuBinding = operationsMenuBinding,
             )
             RibbonTab.Opcoes            -> RibbonOpcoes()
         }

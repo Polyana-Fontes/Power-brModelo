@@ -200,6 +200,8 @@ private suspend fun loadAwtPointerIconAndCursor(tool: ConceptualCanvasTool): Pai
             "files/brmodelo_cursors/png/cursor_ligacao.png"
         is ConceptualCanvasTool.LinkObjects.AwaitingSecond ->
             "files/brmodelo_cursors/png/cursor_ligacao2.png"
+        is ConceptualCanvasTool.Attribute ->
+            "files/brmodelo_cursors/png/cursor_atributo.png"
         else -> return null to null
     }
     return withContext(Dispatchers.IO) {

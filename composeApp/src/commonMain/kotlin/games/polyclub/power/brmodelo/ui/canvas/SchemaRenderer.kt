@@ -40,6 +40,7 @@ import games.polyclub.power.brmodelo.domain.ArrowDirection
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.Connection
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
+import games.polyclub.power.brmodelo.domain.conceptualAttributeAttachPonto
 import games.polyclub.power.brmodelo.domain.ElementPosition
 import games.polyclub.power.brmodelo.domain.SchemaElement
 import games.polyclub.power.brmodelo.ui.canvas.drawAnnotation
@@ -58,9 +59,7 @@ import games.polyclub.power.brmodelo.ui.canvas.drawRelationship
 import games.polyclub.power.brmodelo.ui.canvas.drawRelationshipDiamond
 import games.polyclub.power.brmodelo.ui.canvas.drawSpecialization
 import kotlin.math.abs
-import kotlin.math.atan2
 import kotlin.math.floor
-import kotlin.math.PI
 import kotlin.math.sqrt
 
 // ── Colors translated from the original Pascal source ─────────────────────────
@@ -523,6 +522,8 @@ private fun DrawScope.drawAssociativeEntity(assoc: SchemaElement.AssociativeEnti
  * relative to its owner element, since [games.polyclub.power.brmodelo.domain.SchemaElement.Attribute] stores coordinates
  * but not the VCL [Orientacao] enum value (computed dynamically in the original).
  *
+ * Uses [games.polyclub.power.brmodelo.domain.conceptualAttributeAttachPonto] (same rules as legacy `attrPontoByPosition`).
+ *
  * - Identifier attributes: ellipse filled with [games.polyclub.power.brmodelo.ui.canvas.IDENTIFIER_FILL] (#963636).
  * - Multi-valued: cardinality string appended to label.
  * - Composite: blue asterisk (*) drawn at the appropriate corner.
@@ -547,7 +548,7 @@ private fun DrawScope.drawAttribute(
     //   P≠1 (TOP/RIGHT/BOTTOM) → OrientacaoE → ellipse on LEFT
     val owner = schema.elements[attr.ownerId]
     val ellipseOnLeft = if (owner != null) {
-        attrPontoByPosition(owner.position, p) != 1
+        conceptualAttributeAttachPonto(owner.position, p) != 1
     } else false  // default: ellipse on right
 
     val textLabel = buildString {
@@ -1285,7 +1286,7 @@ private fun connectionEncaixes(
     if (elem is SchemaElement.Attribute) {
         val ownerPos = schema.elements[elem.ownerId]?.position
         // P≠1 → OrientacaoE → ellipse on LEFT (active left edge connects to owner)
-        val ellipseOnLeft = ownerPos?.let { attrPontoByPosition(
+        val ellipseOnLeft = ownerPos?.let { conceptualAttributeAttachPonto(
             it,
             p
         ) != 1 } ?: false
@@ -1603,7 +1604,7 @@ private fun connectionPonto(
     if (elem is SchemaElement.Attribute) {
         val ownerPos = schema.elements[elem.ownerId]?.position
         // P≠1 → OrientacaoE → ellipse on LEFT (active left edge connects to owner)
-        val ellipseOnLeft = ownerPos?.let { attrPontoByPosition(
+        val ellipseOnLeft = ownerPos?.let { conceptualAttributeAttachPonto(
             it,
             elem.position
         ) != 1 } ?: false
@@ -1627,7 +1628,7 @@ private fun connectionPonto(
                 isE1
             )
         }
-        return attrPontoByPosition(
+        return conceptualAttributeAttachPonto(
             elem.position,
             otherElem.position
         )
@@ -1661,61 +1662,6 @@ private fun connectionPonto(
             null,
         ), otherElem.position
     )
-}
-
-/**
- * Determines which edge (1=LEFT, 2=TOP, 3=RIGHT, 4=BOTTOM) of [elemPos] connects
- * to an attribute at [attrPos], using the **stored positions** that OrganizeAtributos
- * already baked in:
- * - attribute entirely to the left  → P=1
- * - attribute entirely to the right → P=3
- * - attribute entirely above        → P=2
- * - attribute entirely below        → P=4
- * - overlapping (unusual) → falls back to [games.polyclub.power.brmodelo.ui.canvas.angleBasedPonto]
- *
- * This is more reliable than pure angle-based classification for diagonal corners
- * like a TOP attribute whose center X is slightly to the right of the entity's
- * right edge (angle just above −45°).
- */
-private fun attrPontoByPosition(elemPos: ElementPosition, attrPos: ElementPosition): Int {
-    val eLeft   = elemPos.x.toFloat()
-    val eRight  = (elemPos.x + elemPos.width).toFloat()
-    val eTop    = elemPos.y.toFloat()
-    val eBottom = (elemPos.y + elemPos.height).toFloat()
-    val aLeft   = attrPos.x.toFloat()
-    val aRight  = (attrPos.x + attrPos.width).toFloat()
-    val aTop    = attrPos.y.toFloat()
-    val aBottom = (attrPos.y + attrPos.height).toFloat()
-    return when {
-        aRight <= eLeft   -> 1  // attribute entirely to the LEFT of entity
-        aLeft  >= eRight  -> 3  // attribute entirely to the RIGHT of entity
-        aBottom <= eTop   -> 2  // attribute entirely ABOVE entity
-        aTop   >= eBottom -> 4  // attribute entirely BELOW entity
-        else -> angleBasedPonto(
-            elemPos,
-            attrPos
-        )  // overlapping – fallback
-    }
-}
-
-/**
- * Angle-based quadrant fallback for [games.polyclub.power.brmodelo.ui.canvas.attrPontoByPosition]. Uses [atan2] from
- * [pos] center to [attrPos] center:
- * - [-135°, -45°) → 2 (TOP)
- * - [-45°,   45°) → 3 (RIGHT)
- * - [45°,   135°) → 4 (BOTTOM)
- * - otherwise     → 1 (LEFT)
- */
-private fun angleBasedPonto(pos: ElementPosition, attrPos: ElementPosition): Int {
-    val dx = (attrPos.x + attrPos.width  / 2.0) - (pos.x + pos.width  / 2.0)
-    val dy = (attrPos.y + attrPos.height / 2.0) - (pos.y + pos.height / 2.0)
-    val angle = atan2(dy, dx) * (180.0 / PI)
-    return when {
-        angle >= -135.0 && angle < -45.0 -> 2
-        angle >= -45.0  && angle <  45.0 -> 3
-        angle >=  45.0  && angle < 135.0 -> 4
-        else                             -> 1
-    }
 }
 
 /**
@@ -1849,7 +1795,7 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                     // its bar is on the OPPOSITE side. Children hang off the bar.
                     val compositeOwnerPos = schema.elements[otherElem.ownerId]?.position
                     val compPonto = if (compositeOwnerPos != null)
-                        attrPontoByPosition(
+                        conceptualAttributeAttachPonto(
                             compositeOwnerPos,
                             otherElem.position
                         ) else 3
@@ -1866,7 +1812,7 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                     // not an actual edge) — bypass the byPonto queue.
                     val parentOwnerPos = schema.elements[elem.ownerId]?.position
                     val compPonto = if (parentOwnerPos != null)
-                        attrPontoByPosition(
+                        conceptualAttributeAttachPonto(
                             parentOwnerPos,
                             elem.position
                         ) else 3

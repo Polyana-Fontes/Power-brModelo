@@ -18,6 +18,7 @@
 
 package games.polyclub.power.brmodelo.ui
 
+import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolVariant
 import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolVariant
 import org.jetbrains.compose.resources.DrawableResource
 
@@ -31,15 +32,24 @@ internal enum class RibbonTab {
     Opcoes
 }
 
+/** Ribbon **Operações** dropdown actions (conceptual schema tab). */
+internal enum class ConceptualRibbonOperation {
+    OrganizeAttributes,
+}
+
 internal data class DropdownEntry(
     val label: String,
     val icon: DrawableResource,
     val enabled: Boolean = true,
     val isSeparatorAbove: Boolean = false,
+    /** When set, choosing this row runs a conceptual-schema operation (e.g. Organizar Atributos). */
+    val conceptualOperation: ConceptualRibbonOperation? = null,
     /** When set, choosing this row selects an entity placement variant on the canvas. */
     val entityVariant: EntityToolVariant? = null,
     /** When set, choosing this row selects a specialization tool variant on the canvas. */
     val specializationVariant: ConceptualSpecializationToolVariant? = null,
+    /** When set, choosing this row selects an attribute tool variant on the canvas. */
+    val attributeVariant: ConceptualAttributeToolVariant? = null,
     /** Shorter label for the ribbon split button when this variant is selected (optional). */
     val ribbonShortTitle: String? = null,
 )
@@ -79,6 +89,22 @@ internal data class SpecializationToolRibbonBinding(
     val displayIcon: DrawableResource,
     val onMainClick: () -> Unit,
     val onDropdownVariant: (ConceptualSpecializationToolVariant) -> Unit,
+)
+
+/** Split-button binding for the conceptual-schema “Atributo” tools (Pascal `Tool_Atributo*`). */
+internal data class AttributeToolRibbonBinding(
+    val variant: ConceptualAttributeToolVariant,
+    val isArmed: Boolean,
+    val displayTitle: String,
+    val displayIcon: DrawableResource,
+    val onMainClick: () -> Unit,
+    val onDropdownVariant: (ConceptualAttributeToolVariant) -> Unit,
+)
+
+/** **Operações** split/dropdown: enables menu rows and dispatches conceptual commands. */
+internal data class OperationsMenuRibbonBinding(
+    val organizeAttributesEnabled: Boolean,
+    val onOrganizeAttributes: () -> Unit,
 )
 
 internal data class MenuEntry(

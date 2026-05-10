@@ -18,6 +18,7 @@
 
 package games.polyclub.power.brmodelo.ui
 
+import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolVariant
 import games.polyclub.power.brmodelo.domain.ConceptualLinkPick
 import games.polyclub.power.brmodelo.domain.ConceptualPlacementKind
 import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolVariant
@@ -53,6 +54,12 @@ internal sealed class ConceptualCanvasTool {
      */
     internal data class Specialization(val variant: ConceptualSpecializationToolVariant) : ConceptualCanvasTool()
 
+    /**
+     * Atributo — click an entity, relationship, associative entity, or attribute to add an attribute
+     * (Pascal `Tool_Atributo*`). All variants share cursor `cursor_atributo`.
+     */
+    internal data class Attribute(val variant: ConceptualAttributeToolVariant) : ConceptualCanvasTool()
+
     internal sealed class Entity : ConceptualCanvasTool() {
         internal data object Plain : Entity()
         internal data object Relation : Entity()
@@ -87,6 +94,12 @@ internal fun ConceptualSpecializationToolVariant.toConceptualTool(): ConceptualC
 
 internal fun ConceptualCanvasTool.matchesSpecializationVariant(variant: ConceptualSpecializationToolVariant): Boolean =
     this is ConceptualCanvasTool.Specialization && this.variant == variant
+
+internal fun ConceptualAttributeToolVariant.toConceptualTool(): ConceptualCanvasTool.Attribute =
+    ConceptualCanvasTool.Attribute(this)
+
+internal fun ConceptualCanvasTool.matchesAttributeVariant(variant: ConceptualAttributeToolVariant): Boolean =
+    this is ConceptualCanvasTool.Attribute && this.variant == variant
 
 internal fun ConceptualCanvasTool.toPlacementKindOrNull(): ConceptualPlacementKind? =
     when (this) {

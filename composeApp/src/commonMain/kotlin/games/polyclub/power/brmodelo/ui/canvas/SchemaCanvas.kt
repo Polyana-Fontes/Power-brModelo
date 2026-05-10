@@ -44,14 +44,19 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import games.polyclub.power.brmodelo.domain.applyConceptualAttributeTool
 import games.polyclub.power.brmodelo.domain.applyConceptualSpecializationTool
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualLinkValidationResult
+import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolResult
+import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolVariant
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolResult
+import games.polyclub.power.brmodelo.domain.SchemaElement
 import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolVariant
 import games.polyclub.power.brmodelo.domain.ElementPosition
-import games.polyclub.power.brmodelo.domain.SchemaElement
+import games.polyclub.power.brmodelo.domain.organizeAttributesOnOwnerSide
+import games.polyclub.power.brmodelo.domain.relayoutCompositeSubtree
 import games.polyclub.power.brmodelo.domain.placeConceptualItem
 import games.polyclub.power.brmodelo.domain.validateAndBuildConceptualLink
 import games.polyclub.power.brmodelo.ui.ConceptualCanvasTool
@@ -226,6 +231,40 @@ internal fun SchemaCanvas(
                                         toolState = linkTool,
                                         textMeasurer = currentTextMeasurer,
                                         onToolChange = currentOnConceptualCanvasToolChange,
+                                        onMessage = currentOnTransientUserMessage,
+                                        onSchemaCommit = currentOnSchemaCommit,
+                                        onSelectionChange = currentOnSelectionChange,
+                                    )
+                                }
+                                break
+                            }
+                            totalDrag = change.position - startPointer
+                            if (!isDragging && totalDrag.getDistance() > slop) {
+                                isDragging = true
+                            }
+                            if (isDragging) {
+                                change.consume()
+                                panOffset = panAtGestureStart + totalDrag
+                            }
+                        }
+                        return@awaitEachGesture
+                    }
+
+                    val attributeTool = currentConceptualTool as? ConceptualCanvasTool.Attribute
+                    if (attributeTool != null && schemaAtGestureStart != null) {
+                        val startPointer = down.position
+                        val slop = viewConfiguration.touchSlop
+                        var totalDrag = Offset.Zero
+                        var isDragging = false
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) {
+                                if (!isDragging) {
+                                    processAttributeToolTap(
+                                        schema = schemaAtGestureStart,
+                                        schemaPoint = schemaPoint,
+                                        variant = attributeTool.variant,
                                         onMessage = currentOnTransientUserMessage,
                                         onSchemaCommit = currentOnSchemaCommit,
                                         onSelectionChange = currentOnSelectionChange,
@@ -630,6 +669,40 @@ private fun processAutoSelfRelationshipTap(
             }
         }
         is ConceptualLinkValidationResult.Error -> onMessage(r.message)
+    }
+}
+
+private fun processAttributeToolTap(
+    schema: ConceptualSchema,
+    schemaPoint: Offset,
+    variant: ConceptualAttributeToolVariant,
+    onMessage: (String) -> Unit,
+    onSchemaCommit: (ConceptualSchema) -> Unit,
+    onSelectionChange: (CanvasSelection) -> Unit,
+) {
+    val pickId = (hitTestElement(schema, schemaPoint) as? CanvasSelection.Element)?.id
+    if (pickId == null) {
+        onMessage("Clique no objeto que receberá o atributo.")
+        return
+    }
+    when (val r = applyConceptualAttributeTool(schema, pickId, schemaPoint, variant)) {
+        is ConceptualAttributeToolResult.Ok -> {
+            var committed = r.schema
+            committed = organizeAttributesOnOwnerSide(
+                committed,
+                r.ownerElementId,
+                r.attachSide,
+            )
+            val placed = committed.elements[r.newPrimaryAttributeId] as? SchemaElement.Attribute
+            if (placed?.isComposite == true) {
+                committed = relayoutCompositeSubtree(committed, placed.id)
+            }
+            onSchemaCommit(committed)
+            onSelectionChange(CanvasSelection.Element(r.newPrimaryAttributeId))
+        }
+        is ConceptualAttributeToolResult.Error -> {
+            onMessage(r.message)
+        }
     }
 }
 
