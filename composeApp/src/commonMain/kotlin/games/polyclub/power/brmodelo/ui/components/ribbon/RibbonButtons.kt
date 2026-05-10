@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import games.polyclub.power.brmodelo.ui.DropdownEntry
 import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.MenuEntry
 import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.components.AppColors
@@ -290,12 +291,19 @@ internal fun RibbonMenuEntryButton(
     entry: MenuEntry,
     entityToolBinding: EntityToolRibbonBinding? = null,
     observationToolBinding: ObservationToolRibbonBinding? = null,
+    linkObjectsToolBinding: LinkObjectsToolRibbonBinding? = null,
 ) {
     if (entry.title == "Observação" && observationToolBinding != null) {
         RibbonArmedToolButton(
             entry = entry,
             isArmed = observationToolBinding.isArmed,
             onClick = observationToolBinding.onClick,
+        )
+    } else if (entry.title == "Ligar\nObjetos" && linkObjectsToolBinding != null) {
+        RibbonArmedToolButton(
+            entry = entry,
+            isArmed = linkObjectsToolBinding.isArmed,
+            onClick = linkObjectsToolBinding.onClick,
         )
     } else if (entry.title == "Entidade" && entityToolBinding != null && !entry.dropdown.isNullOrEmpty()) {
         RibbonSplitDropdownButton(

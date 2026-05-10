@@ -18,6 +18,7 @@
 
 package games.polyclub.power.brmodelo.ui
 
+import games.polyclub.power.brmodelo.domain.ConceptualLinkPick
 import games.polyclub.power.brmodelo.domain.ConceptualPlacementKind
 
 /**
@@ -29,6 +30,15 @@ internal sealed class ConceptualCanvasTool {
 
     /** Free-form observation / text box tool (ribbon button separate from entity split). */
     internal data object Observation : ConceptualCanvasTool()
+
+    /**
+     * "Ligar objetos" — first click picks an endpoint, second click completes the link.
+     * [AwaitingFirst] uses `cursor_ligacao`; [AwaitingSecond] uses `cursor_ligacao2`.
+     */
+    internal sealed class LinkObjects : ConceptualCanvasTool() {
+        internal data object AwaitingFirst : LinkObjects()
+        internal data class AwaitingSecond(val first: ConceptualLinkPick) : LinkObjects()
+    }
 
     internal sealed class Entity : ConceptualCanvasTool() {
         internal data object Plain : Entity()

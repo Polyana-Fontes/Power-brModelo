@@ -88,6 +88,8 @@ internal fun MainCanvasPanel(
     onSchemaPreview: (ConceptualSchema) -> Unit = {},
     onSchemaCommit: (ConceptualSchema) -> Unit = {},
     conceptualCanvasTool: ConceptualCanvasTool = ConceptualCanvasTool.None,
+    onConceptualCanvasToolChange: (ConceptualCanvasTool) -> Unit = {},
+    onTransientUserMessage: (String) -> Unit = {},
     onClearConceptualCanvasTool: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -117,7 +119,6 @@ internal fun MainCanvasPanel(
                     width = if (isDragOver) 3.dp else 1.dp,
                     color = if (isDragOver) DRAG_OVERLAY_BORDER else Color(0xFF7A7A7A),
                 )
-                .then(toolCursorModifier)
                 .focusRequester(focusRequester)
                 .focusable()
                 .onPreviewKeyEvent { event ->
@@ -150,6 +151,9 @@ internal fun MainCanvasPanel(
                     onSchemaPreview = onSchemaPreview,
                     onSchemaCommit = onSchemaCommit,
                     conceptualCanvasTool = conceptualCanvasTool,
+                    onConceptualCanvasToolChange = onConceptualCanvasToolChange,
+                    onTransientUserMessage = onTransientUserMessage,
+                    toolCursorModifier = toolCursorModifier,
                     canvasFocusRequester = focusRequester,
                     modifier = Modifier.fillMaxSize(),
                 )

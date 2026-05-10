@@ -56,6 +56,12 @@ internal data class ObservationToolRibbonBinding(
     val onClick: () -> Unit,
 )
 
+/** Toggle for the conceptual-schema "Ligar objetos" tool. */
+internal data class LinkObjectsToolRibbonBinding(
+    val isArmed: Boolean,
+    val onClick: () -> Unit,
+)
+
 internal data class MenuEntry(
     val title: String,
     val icon: DrawableResource,

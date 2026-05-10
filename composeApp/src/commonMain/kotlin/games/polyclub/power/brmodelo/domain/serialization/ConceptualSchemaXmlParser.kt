@@ -432,6 +432,9 @@ object ConceptualSchemaXmlParser {
         val isWeak = node.boolValor("Fraca")
         val orientation = LineOrientation.fromCode(node.intValor("Orientacao"))
 
+        val useOuterA = node.intValor("AssocOuterA", default = 0) != 0
+        val useOuterB = node.intValor("AssocOuterB", default = 0) != 0
+
         // Cardinality label position, role name, and fixed flag (only when label is shown)
         val cardNode = if (showCardinality) cardinalidadesNode.child("Cardinalidade") else null
         val cardPos = cardNode?.let { parsePosition(it) }
@@ -452,6 +455,8 @@ object ConceptualSchemaXmlParser {
                 cardinalityRole = cardRole,
                 cardinalityPosition = cardPos,
                 cardinalityAutoSize = cardAutoSize,
+                useAssociativeOuterForEndA = useOuterA,
+                useAssociativeOuterForEndB = useOuterB,
             )
         )
     }

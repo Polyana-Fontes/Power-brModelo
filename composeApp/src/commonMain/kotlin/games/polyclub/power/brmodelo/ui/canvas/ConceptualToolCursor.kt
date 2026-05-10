@@ -24,7 +24,10 @@ import games.polyclub.power.brmodelo.ui.ConceptualCanvasTool
 
 /**
  * Cursor for conceptual canvas entity tools (same PNGs as the original brModelo).
- * Desktop: AWT custom cursor via [androidx.compose.ui.input.pointer.pointerHoverIcon].
+ * Desktop: AWT custom cursor via [androidx.compose.ui.input.pointer.pointerHoverIcon] with
+ * `overrideDescendants = true`, plus an AWT listener that re-applies the cursor on mouse
+ * press/release/drag over Skiko layers, and an explicit refresh under the pointer when the
+ * active tool changes (so Esc / toolbar updates do not wait for the next move or click).
  * Wasm: CSS `cursor: url(...) 0 0, auto` while the pointer is over the canvas region.
  */
 @Composable

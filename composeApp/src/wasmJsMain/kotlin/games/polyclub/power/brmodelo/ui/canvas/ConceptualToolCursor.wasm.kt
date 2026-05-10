@@ -50,6 +50,10 @@ internal actual fun rememberConceptualCanvasToolCursorModifier(tool: ConceptualC
             "files/brmodelo_cursors/png/cursor_entassoss.png"
         is ConceptualCanvasTool.Observation ->
             "files/brmodelo_cursors/png/cursor_textoii.png"
+        is ConceptualCanvasTool.LinkObjects.AwaitingFirst ->
+            "files/brmodelo_cursors/png/cursor_ligacao.png"
+        is ConceptualCanvasTool.LinkObjects.AwaitingSecond ->
+            "files/brmodelo_cursors/png/cursor_ligacao2.png"
         else -> null
     }
     if (path == null) {

@@ -70,6 +70,11 @@ enum class LineOrientation(val code: Int) {
  *                            Corresponds to `TCardinalidade` Left/Top (a `TBase` subclass).
  * @param cardinalityAutoSize Whether the cardinality label box auto-resizes to fit its text.
  *                            Corresponds to `TCardinalidade.TamAuto`.
+ * @param useAssociativeOuterForEndA When [elementIdA] refers to an [SchemaElement.AssociativeEntity] and the
+ *                                   other end is not an attribute, use the outer rectangle for routing instead
+ *                                   of the inner diamond. Normally `false` because the relationship side uses the inner shape.
+ * @param useAssociativeOuterForEndB Same for [elementIdB] — typically `true` when the **entity** side of the link
+ *                                   was chosen on the outer rectangle of an associative entity.
  */
 data class Connection(
     val id: Int,
@@ -83,4 +88,6 @@ data class Connection(
     val cardinalityRole: String = "",
     val cardinalityPosition: ElementPosition? = null,
     val cardinalityAutoSize: Boolean = true,
+    val useAssociativeOuterForEndA: Boolean = false,
+    val useAssociativeOuterForEndB: Boolean = false,
 )

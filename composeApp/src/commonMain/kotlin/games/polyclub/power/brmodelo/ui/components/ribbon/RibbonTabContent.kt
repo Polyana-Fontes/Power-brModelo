@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import games.polyclub.power.brmodelo.ui.DropdownEntry
 import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.MenuEntry
 import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.components.AppColors
@@ -74,6 +75,7 @@ private val WIDE_BUTTON_W = 114.dp
 internal fun RibbonEsquemaConceitual(
     entityToolBinding: EntityToolRibbonBinding? = null,
     observationToolBinding: ObservationToolRibbonBinding? = null,
+    linkObjectsToolBinding: LinkObjectsToolRibbonBinding? = null,
 ) {
     Row(
         modifier = Modifier
@@ -87,6 +89,7 @@ internal fun RibbonEsquemaConceitual(
             title = "Ferramentas",
             entityToolBinding = entityToolBinding,
             observationToolBinding = observationToolBinding,
+            linkObjectsToolBinding = linkObjectsToolBinding,
             groups = listOf(
                 listOf(MenuEntry("Seleção", Res.drawable.cursor_l)),
                 listOf(

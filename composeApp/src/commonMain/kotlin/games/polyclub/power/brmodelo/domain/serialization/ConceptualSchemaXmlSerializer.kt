@@ -436,6 +436,8 @@ object ConceptualSchemaXmlSerializer {
             add(buildCardinalidades(cardCode, cardId, conn, showCard))
             valor("Orientacao", conn.orientation.code)
             boolValor("Fraca", conn.isWeak)
+            if (conn.useAssociativeOuterForEndA) valor("AssocOuterA", 1)
+            if (conn.useAssociativeOuterForEndB) valor("AssocOuterB", 1)
         }
     }
 

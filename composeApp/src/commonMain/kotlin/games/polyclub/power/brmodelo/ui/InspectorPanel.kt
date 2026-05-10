@@ -90,6 +90,7 @@ import games.polyclub.power.brmodelo.domain.SchemaElement
 import games.polyclub.power.brmodelo.domain.SpecializationType
 import games.polyclub.power.brmodelo.domain.TextAlignment
 import games.polyclub.power.brmodelo.ui.assocLabel
+import games.polyclub.power.brmodelo.ui.canvas.materializeCardinalityPositionForFixed
 import games.polyclub.power.brmodelo.ui.canvas.withPosition
 import games.polyclub.power.brmodelo.ui.components.CHROMIUM_TAB_ACTIVE_HEIGHT
 import games.polyclub.power.brmodelo.ui.components.CHROMIUM_TAB_INACTIVE_HEIGHT
@@ -1023,9 +1024,24 @@ private fun CardinalityContent(
         focusedKey = focusedKey,
         onFocusChange = onFocusChange,
     ) { v ->
-        onSchemaCommit(schema.copy(connections = schema.connections.map {
-            if (it.id == conn.id) it.copy(cardinalityFixed = v == "Sim") else it
-        }))
+        val wantFixed = v == "Sim"
+        onSchemaCommit(
+            schema.copy(
+                connections = schema.connections.map {
+                    if (it.id != conn.id) return@map it
+                    if (wantFixed && it.cardinalityPosition == null) {
+                        val pos = materializeCardinalityPositionForFixed(schema, it)
+                        if (pos != null) {
+                            it.copy(cardinalityFixed = true, cardinalityPosition = pos)
+                        } else {
+                            it.copy(cardinalityFixed = true)
+                        }
+                    } else {
+                        it.copy(cardinalityFixed = wantFixed)
+                    }
+                },
+            ),
+        )
     }
 
     DropdownRow(

@@ -44,11 +44,12 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import games.polyclub.power.brmodelo.domain.CanvasSelection
-import games.polyclub.power.brmodelo.domain.Connection
+import games.polyclub.power.brmodelo.domain.ConceptualLinkValidationResult
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.domain.ElementPosition
 import games.polyclub.power.brmodelo.domain.SchemaElement
 import games.polyclub.power.brmodelo.domain.placeConceptualItem
+import games.polyclub.power.brmodelo.domain.validateAndBuildConceptualLink
 import games.polyclub.power.brmodelo.ui.ConceptualCanvasTool
 import games.polyclub.power.brmodelo.ui.toPlacementKindOrNull
 import games.polyclub.power.brmodelo.ui.canvas.drawSchema
@@ -83,6 +84,9 @@ private const val GRID_STEP = 20f
  * @param conceptualCanvasTool When set to an entity placement variant, a tap on empty canvas
  *                             inserts an element ([games.polyclub.power.brmodelo.domain.placeConceptualItem])
  *                             with incremental names and default geometry from [games.polyclub.power.brmodelo.domain.ConceptualPlacementDefaults].
+ * @param onConceptualCanvasToolChange Updates the active canvas tool (used by [ConceptualCanvasTool.LinkObjects]).
+ * @param onTransientUserMessage Short user feedback (e.g. invalid link).
+ * @param toolCursorModifier Optional pointer icon (entity / link tools) applied to the drawing surface.
  * @param canvasFocusRequester When set, receives focus on pointer down so parent shortcuts (e.g. Escape) apply after interacting with the canvas.
  * @param modifier            Layout modifier applied to the outer Box.
  */
@@ -94,6 +98,9 @@ internal fun SchemaCanvas(
     onSchemaPreview: (ConceptualSchema) -> Unit = {},
     onSchemaCommit: (ConceptualSchema) -> Unit = {},
     conceptualCanvasTool: ConceptualCanvasTool = ConceptualCanvasTool.None,
+    onConceptualCanvasToolChange: (ConceptualCanvasTool) -> Unit = {},
+    onTransientUserMessage: (String) -> Unit = {},
+    toolCursorModifier: Modifier = Modifier,
     canvasFocusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -110,9 +117,12 @@ internal fun SchemaCanvas(
     val currentPanOffset by rememberUpdatedState(panOffset)
     val currentCanvasFocusRequester by rememberUpdatedState(canvasFocusRequester)
     val currentConceptualTool by rememberUpdatedState(conceptualCanvasTool)
+    val currentOnConceptualCanvasToolChange by rememberUpdatedState(onConceptualCanvasToolChange)
+    val currentOnTransientUserMessage by rememberUpdatedState(onTransientUserMessage)
 
     Box(
         modifier = modifier
+            .then(toolCursorModifier)
             .clipToBounds()
             .background(CANVAS_BG)
             .pointerInput(Unit) {
@@ -124,8 +134,42 @@ internal fun SchemaCanvas(
                     val schemaAtGestureStart = currentSchema
                     val selAtGestureStart = currentSelection
 
-                    // Convert screen coordinates to schema/canvas coordinates.
                     val schemaPoint = down.position - panAtGestureStart
+
+                    val linkTool = currentConceptualTool as? ConceptualCanvasTool.LinkObjects
+                    if (linkTool != null && schemaAtGestureStart != null) {
+                        val startPointer = down.position
+                        val slop = viewConfiguration.touchSlop
+                        var totalDrag = Offset.Zero
+                        var isDragging = false
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) {
+                                if (!isDragging) {
+                                    processLinkObjectsTap(
+                                        schema = schemaAtGestureStart,
+                                        schemaPoint = schemaPoint,
+                                        toolState = linkTool,
+                                        onToolChange = currentOnConceptualCanvasToolChange,
+                                        onMessage = currentOnTransientUserMessage,
+                                        onSchemaCommit = currentOnSchemaCommit,
+                                        onSelectionChange = currentOnSelectionChange,
+                                    )
+                                }
+                                break
+                            }
+                            totalDrag = change.position - startPointer
+                            if (!isDragging && totalDrag.getDistance() > slop) {
+                                isDragging = true
+                            }
+                            if (isDragging) {
+                                change.consume()
+                                panOffset = panAtGestureStart + totalDrag
+                            }
+                        }
+                        return@awaitEachGesture
+                    }
 
                     // Determine what is under the pointer.
                     val hitResult = schemaAtGestureStart?.let {
@@ -162,8 +206,17 @@ internal fun SchemaCanvas(
                         dragElementId?.let { schemaAtGestureStart?.elements?.get(it)?.position }
                     val startCardPos: ElementPosition? =
                         dragConnectionId?.let { id ->
-                            schemaAtGestureStart?.connections?.firstOrNull { it.id == id }
-                                ?.cardinalityPosition
+                            val s = schemaAtGestureStart ?: return@let null
+                            val conn = s.connections.firstOrNull { it.id == id } ?: return@let null
+                            conn.cardinalityPosition
+                                ?: cardinalityLabelInteractionRect(s, conn)?.let { r ->
+                                    ElementPosition(
+                                        x = r.left.toInt(),
+                                        y = r.top.toInt(),
+                                        width = r.width.toInt().coerceAtLeast(1),
+                                        height = r.height.toInt().coerceAtLeast(1),
+                                    )
+                                }
                         }
 
                     val startPointer = down.position
@@ -237,9 +290,40 @@ internal fun SchemaCanvas(
                                             x = startElementPos.x + totalDrag.x.toInt(),
                                             y = startElementPos.y + totalDrag.y.toInt(),
                                         )
+                                        val dx = newPos.x - startElementPos.x
+                                        val dy = newPos.y - startElementPos.y
                                         val elem = s.elements[dragElementId]
                                         if (elem != null) {
-                                            currentOnSchemaPreview(s.withElement(elem.withPosition(newPos)))
+                                            val newConns =
+                                                if (dx == 0 && dy == 0) {
+                                                    s.connections
+                                                } else {
+                                                    s.connections.map { conn ->
+                                                        val touches =
+                                                            conn.elementIdA == dragElementId ||
+                                                                conn.elementIdB == dragElementId
+                                                        if (!touches ||
+                                                            !conn.showCardinality ||
+                                                            conn.cardinality == null ||
+                                                            conn.cardinalityFixed ||
+                                                            conn.cardinalityPosition == null
+                                                        ) {
+                                                            conn
+                                                        } else {
+                                                            val p = conn.cardinalityPosition!!
+                                                            conn.copy(
+                                                                cardinalityPosition = p.copy(
+                                                                    x = p.x + dx,
+                                                                    y = p.y + dy,
+                                                                ),
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            currentOnSchemaPreview(
+                                                s.copy(connections = newConns)
+                                                    .withElement(elem.withPosition(newPos)),
+                                            )
                                         }
                                     }
 
@@ -284,7 +368,7 @@ internal fun SchemaCanvas(
                 }
             },
     ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
+        Canvas(modifier = Modifier.fillMaxSize().then(toolCursorModifier)) {
             // Optional dot grid (subtle background reference grid)
             val cols = (size.width / GRID_STEP).toInt() + 2
             val rows = (size.height / GRID_STEP).toInt() + 2
@@ -302,7 +386,12 @@ internal fun SchemaCanvas(
 
             if (schema != null) {
                 translate(panOffset.x, panOffset.y) {
-                    drawSchema(schema, textMeasurer, selection)
+                    val linkHighlightId =
+                        when (val t = conceptualCanvasTool) {
+                            is ConceptualCanvasTool.LinkObjects.AwaitingSecond -> t.first.elementId
+                            else -> null
+                        }
+                    drawSchema(schema, textMeasurer, selection, linkHighlightId)
                 }
             }
         }
@@ -316,6 +405,46 @@ internal fun SchemaCanvas(
                     .align(Alignment.Center)
                     .padding(16.dp),
             )
+        }
+    }
+}
+
+private fun processLinkObjectsTap(
+    schema: ConceptualSchema,
+    schemaPoint: Offset,
+    toolState: ConceptualCanvasTool.LinkObjects,
+    onToolChange: (ConceptualCanvasTool) -> Unit,
+    onMessage: (String) -> Unit,
+    onSchemaCommit: (ConceptualSchema) -> Unit,
+    onSelectionChange: (CanvasSelection) -> Unit,
+) {
+    val pick = hitTestConceptualLinkPick(schema, schemaPoint)
+    when (toolState) {
+        is ConceptualCanvasTool.LinkObjects.AwaitingFirst -> {
+            if (pick == null) {
+                onMessage("Selecione uma entidade ou um relacionamento.")
+            } else {
+                onSelectionChange(CanvasSelection.None)
+                onToolChange(ConceptualCanvasTool.LinkObjects.AwaitingSecond(pick))
+            }
+        }
+        is ConceptualCanvasTool.LinkObjects.AwaitingSecond -> {
+            if (pick == null) {
+                onToolChange(ConceptualCanvasTool.LinkObjects.AwaitingFirst)
+                return
+            }
+            val (schemaWithId, newConnId) = schema.allocateId()
+            when (val r = validateAndBuildConceptualLink(schema, toolState.first, pick, newConnId)) {
+                is ConceptualLinkValidationResult.Ok -> {
+                    onSchemaCommit(schemaWithId.withConnection(r.connection))
+                    onSelectionChange(CanvasSelection.None)
+                    onToolChange(ConceptualCanvasTool.LinkObjects.AwaitingFirst)
+                }
+                is ConceptualLinkValidationResult.Error -> {
+                    onMessage(r.message)
+                    onToolChange(ConceptualCanvasTool.LinkObjects.AwaitingFirst)
+                }
+            }
         }
     }
 }

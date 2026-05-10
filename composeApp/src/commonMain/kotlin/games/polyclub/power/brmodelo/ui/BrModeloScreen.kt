@@ -25,13 +25,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -40,6 +44,7 @@ import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.ui.canvas.renderSchemaToImageBitmap
 import games.polyclub.power.brmodelo.ui.components.ribbon.HeaderRibbon
+import kotlinx.coroutines.launch
 
 private val MENU_TOP_OFFSET = 30.dp
 
@@ -73,7 +78,9 @@ internal fun BrModeloScreen(
     onSaveAs: () -> Unit = {},
     entityToolBinding: EntityToolRibbonBinding? = null,
     observationToolBinding: ObservationToolRibbonBinding? = null,
+    linkObjectsToolBinding: LinkObjectsToolRibbonBinding? = null,
     conceptualCanvasTool: ConceptualCanvasTool = ConceptualCanvasTool.None,
+    onConceptualCanvasToolChange: (ConceptualCanvasTool) -> Unit = {},
     onClearConceptualCanvasTool: () -> Unit = {},
 ) {
     var exportCounter by remember { mutableIntStateOf(0) }
@@ -81,6 +88,8 @@ internal fun BrModeloScreen(
 
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(exportCounter) {
         if (exportCounter == 0 || schema == null) return@LaunchedEffect
@@ -99,6 +108,7 @@ internal fun BrModeloScreen(
                 selectedTab = selectedTab,
                 entityToolBinding = entityToolBinding,
                 observationToolBinding = observationToolBinding,
+                linkObjectsToolBinding = linkObjectsToolBinding,
                 onMainMenuClick = onMainMenuToggle,
                 onTabSelect = onTabSelect,
             )
@@ -118,9 +128,22 @@ internal fun BrModeloScreen(
                 onSchemaCommit = onSchemaCommit,
                 onRevertSchemaPreview = onRevertSchemaPreview,
                 conceptualCanvasTool = conceptualCanvasTool,
+                onConceptualCanvasToolChange = onConceptualCanvasToolChange,
+                onTransientUserMessage = { msg ->
+                    scope.launch {
+                        snackbarHostState.showSnackbar(msg)
+                    }
+                },
                 onClearConceptualCanvasTool = onClearConceptualCanvasTool,
             )
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 8.dp),
+        )
 
         if (isMainMenuOpen) {
             Box(

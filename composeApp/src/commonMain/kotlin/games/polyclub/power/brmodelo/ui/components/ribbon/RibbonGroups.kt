@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.MenuEntry
 import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.components.AppColors
@@ -74,6 +75,7 @@ internal fun RibbonGroupWithSeparators(
     groups: List<List<MenuEntry>>,
     entityToolBinding: EntityToolRibbonBinding? = null,
     observationToolBinding: ObservationToolRibbonBinding? = null,
+    linkObjectsToolBinding: LinkObjectsToolRibbonBinding? = null,
 ) {
     Column(
         modifier = Modifier
@@ -91,7 +93,14 @@ internal fun RibbonGroupWithSeparators(
         ) {
             groups.forEachIndexed { index, group ->
                 if (index > 0) RibbonGroupSeparator()
-                group.forEach { RibbonMenuEntryButton(it, entityToolBinding, observationToolBinding) }
+                group.forEach {
+                    RibbonMenuEntryButton(
+                        it,
+                        entityToolBinding,
+                        observationToolBinding,
+                        linkObjectsToolBinding,
+                    )
+                }
             }
         }
         RibbonGroupTitle(title)

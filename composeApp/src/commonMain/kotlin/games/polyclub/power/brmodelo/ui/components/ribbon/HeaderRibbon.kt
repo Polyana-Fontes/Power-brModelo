@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.RibbonTab
 import games.polyclub.power.brmodelo.ui.components.AppColors
@@ -36,6 +37,7 @@ internal fun HeaderRibbon(
     selectedTab: RibbonTab,
     entityToolBinding: EntityToolRibbonBinding? = null,
     observationToolBinding: ObservationToolRibbonBinding? = null,
+    linkObjectsToolBinding: LinkObjectsToolRibbonBinding? = null,
     onMainMenuClick: () -> Unit,
     onTabSelect: (RibbonTab) -> Unit,
 ) {
@@ -56,6 +58,7 @@ internal fun HeaderRibbon(
             RibbonTab.EsquemaConceitual -> RibbonEsquemaConceitual(
                 entityToolBinding = entityToolBinding,
                 observationToolBinding = observationToolBinding,
+                linkObjectsToolBinding = linkObjectsToolBinding,
             )
             RibbonTab.Opcoes            -> RibbonOpcoes()
         }

@@ -21,6 +21,7 @@ package games.polyclub.power.brmodelo.ui.canvas
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import games.polyclub.power.brmodelo.domain.CanvasSelection
+import games.polyclub.power.brmodelo.domain.ConceptualLinkPick
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.domain.ElementPosition
 import games.polyclub.power.brmodelo.domain.SchemaElement
@@ -61,26 +62,12 @@ fun hitTest(schema: ConceptualSchema, point: Offset): CanvasSelection {
 /**
  * Tests whether [point] falls inside any cardinality label in [schema].
  *
- * Only tests connections that have a stored [Connection.cardinalityPosition];
- * connections whose label position is computed dynamically at render time are
- * skipped here (the user must move the label once to lock it in place, after
- * which it becomes hit-testable).
+ * Uses [cardinalityLabelInteractionRect], which matches both stored positions and the
+ * same fallback layout as [drawCardinalityLabel] when [Connection.cardinalityPosition] is null.
  */
 fun hitTestCardinality(schema: ConceptualSchema, point: Offset): CanvasSelection {
     for (conn in schema.connections.asReversed()) {
-        if (!conn.showCardinality || conn.cardinality == null) continue
-        val lp = conn.cardinalityPosition ?: continue
-
-        val labelText = buildCardinalityText(conn)
-        val estimatedWidth = estimateTextWidth(labelText)
-        // Small X correction mirrors the render-time xAdjustment = cardOnlyWidth / 4
-        val xAdjust = estimateTextWidth(conn.cardinality.label) / 4f
-        val rect = Rect(
-            left   = lp.x + xAdjust,
-            top    = lp.y.toFloat(),
-            right  = lp.x + xAdjust + estimatedWidth,
-            bottom = lp.y + CARDINALITY_LABEL_HEIGHT,
-        )
+        val rect = cardinalityLabelInteractionRect(schema, conn) ?: continue
         if (rect.contains(point)) return CanvasSelection.Cardinality(conn.id)
     }
     return CanvasSelection.None
@@ -158,15 +145,59 @@ fun SchemaElement.withPosition(position: ElementPosition): SchemaElement = when 
 
 // ── Private helpers ───────────────────────────────────────────────────────────
 
-private const val CARDINALITY_LABEL_HEIGHT = 20f
-
-/** Approximate text width in pixels at 11sp (7 px/char is a conservative estimate). */
-private fun estimateTextWidth(text: String): Float = (text.length * 7f + 10f).coerceAtLeast(30f)
-
-private fun buildCardinalityText(conn: games.polyclub.power.brmodelo.domain.Connection): String {
-    val base = conn.cardinality?.label ?: return ""
-    return if (conn.cardinalityRole.isNotEmpty()) "${conn.cardinalityRole} $base" else base
-}
-
 private fun ElementPosition.toRect(): Rect =
     Rect(x.toFloat(), y.toFloat(), (x + width).toFloat(), (y + height).toFloat())
+
+// ── Conceptual link tool hit-test ─────────────────────────────────────────────
+
+/** Inset of the inner relationship diamond inside an associative entity (matches [SchemaRenderer]). */
+private const val ASSOCIATIVE_INNER_INSET_PX = 15
+
+/**
+ * True if [point] lies inside the axis-aligned rhombus inscribed in [innerBounds]
+ * (relationship diamond geometry).
+ */
+fun relationshipDiamondContains(innerBounds: ElementPosition, point: Offset): Boolean {
+    val cx = innerBounds.x + innerBounds.width / 2f
+    val cy = innerBounds.y + innerBounds.height / 2f
+    val dx = kotlin.math.abs(point.x - cx)
+    val dy = kotlin.math.abs(point.y - cy)
+    val hx = innerBounds.width / 2f
+    val hy = innerBounds.height / 2f
+    if (hx <= 0f || hy <= 0f) return false
+    return dx / hx + dy / hy <= 1f
+}
+
+/**
+ * Hit-test for the "Ligar objetos" tool: returns a [ConceptualLinkPick] for entity / relationship /
+ * self-relationship / associative (inner vs outer), or `null` if nothing linkable was hit.
+ *
+ * Uses the same z-order as [hitTestElement] (last-drawn element wins).
+ */
+fun hitTestConceptualLinkPick(schema: ConceptualSchema, point: Offset): ConceptualLinkPick? {
+    for (element in schema.elements.values.toList().asReversed()) {
+        if (!element.position.toRect().contains(point)) continue
+        return when (element) {
+            is SchemaElement.AssociativeEntity -> {
+                val outer = element.position
+                val inner = ElementPosition(
+                    x = outer.x + ASSOCIATIVE_INNER_INSET_PX,
+                    y = outer.y + ASSOCIATIVE_INNER_INSET_PX,
+                    width = (outer.width - 2 * ASSOCIATIVE_INNER_INSET_PX).coerceAtLeast(10),
+                    height = (outer.height - 2 * ASSOCIATIVE_INNER_INSET_PX).coerceAtLeast(10),
+                )
+                if (relationshipDiamondContains(inner, point)) {
+                    ConceptualLinkPick(element.id, isAssociativeOuterEntitySide = false)
+                } else {
+                    ConceptualLinkPick(element.id, isAssociativeOuterEntitySide = true)
+                }
+            }
+            is SchemaElement.Entity,
+            is SchemaElement.Relationship,
+            is SchemaElement.SelfRelationship,
+            -> ConceptualLinkPick(element.id, isAssociativeOuterEntitySide = false)
+            else -> null
+        } ?: continue
+    }
+    return null
+}

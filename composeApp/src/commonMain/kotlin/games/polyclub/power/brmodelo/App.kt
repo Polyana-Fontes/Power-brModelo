@@ -44,6 +44,7 @@ import games.polyclub.power.brmodelo.ui.CloseTabUnsavedDialog
 import games.polyclub.power.brmodelo.ui.ConceptualCanvasTool
 import games.polyclub.power.brmodelo.ui.EditorTabSession
 import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.EntityToolVariant
 import games.polyclub.power.brmodelo.ui.MainMenuType
@@ -302,6 +303,18 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         },
     )
 
+    val linkObjectsToolBinding = LinkObjectsToolRibbonBinding(
+        isArmed = conceptualCanvasTool is ConceptualCanvasTool.LinkObjects,
+        onClick = {
+            conceptualCanvasTool =
+                if (conceptualCanvasTool is ConceptualCanvasTool.LinkObjects) {
+                    ConceptualCanvasTool.None
+                } else {
+                    ConceptualCanvasTool.LinkObjects.AwaitingFirst
+                }
+        },
+    )
+
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFE3E3E3)) {
             Box(modifier = Modifier.fillMaxSize()) {
@@ -342,7 +355,9 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                     onSaveAs = { enqueueSave(saveAs = true) },
                     entityToolBinding = entityToolBinding,
                     observationToolBinding = observationToolBinding,
+                    linkObjectsToolBinding = linkObjectsToolBinding,
                     conceptualCanvasTool = conceptualCanvasTool,
+                    onConceptualCanvasToolChange = { conceptualCanvasTool = it },
                     onClearConceptualCanvasTool = { conceptualCanvasTool = ConceptualCanvasTool.None },
                 )
 

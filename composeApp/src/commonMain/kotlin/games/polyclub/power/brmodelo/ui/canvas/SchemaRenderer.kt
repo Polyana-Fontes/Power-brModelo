@@ -93,16 +93,19 @@ private val MULTIVALUE_CARD_STYLE = TextStyle(fontSize = 11.sp, color = Color.Bl
  * 4. Inner diamonds of AssociativeEntity — redrawn on top of those connection lines.
  * 4b. Self-relationship diamonds — redrawn on top (same idea as the inner rhombus).
  * 5. Cardinality labels — floating on top of everything.
- * 6. Selection handles (blue border + corner squares) on top of all diagram content.
+ * 6. Optional link-tool highlight (orange border, no resize handles) for the first picked element.
+ * 7. Selection handles (blue border + corner squares) on top of all diagram content.
  *
  * @param selection When not [games.polyclub.power.brmodelo.domain.CanvasSelection.None], draws selection handles for the
  *   selected element or cardinality label. Defaults to [games.polyclub.power.brmodelo.domain.CanvasSelection.None] so that
  *   off-screen exporters that call this function without a selection continue to work.
+ * @param linkToolHighlightElementId When set, draws a highlight border around that element (used by "Ligar objetos").
  */
 fun DrawScope.drawSchema(
     schema: ConceptualSchema,
     textMeasurer: TextMeasurer,
     selection: CanvasSelection = CanvasSelection.None,
+    linkToolHighlightElementId: Int? = null,
 ) {
     val dividedPoints = computeDividedPoints(schema)
 
@@ -146,15 +149,23 @@ fun DrawScope.drawSchema(
     schema.connections.forEach { conn ->
         drawCardinalityLabel(conn, schema, dividedPoints, textMeasurer)
     }
-    // 6. Selection handles — drawn last so they are always on top of diagram content
+    // 6. Link-tool first-target highlight (no corner handles)
+    linkToolHighlightElementId?.let { hid ->
+        schema.elements[hid]?.let { el ->
+            drawLinkToolFirstTargetHighlight(el.position)
+        }
+    }
+    // 7. Selection handles — drawn last so they are always on top of diagram content
     when (selection) {
         is CanvasSelection.Element -> {
             schema.elements[selection.id]?.let { drawElementSelectionHandles(it.position) }
         }
         is CanvasSelection.Cardinality -> {
             val conn = schema.connections.firstOrNull { it.id == selection.connectionId }
-            if (conn?.cardinalityPosition != null) {
-                drawCardinalitySelectionHighlight(conn.cardinalityPosition)
+            if (conn != null && conn.showCardinality && conn.cardinality != null) {
+                cardinalityLabelHighlightElementPosition(schema, conn)?.let {
+                    drawCardinalitySelectionHighlight(it)
+                }
             }
         }
         CanvasSelection.None -> Unit
@@ -205,6 +216,25 @@ private fun DrawScope.drawElementSelectionHandles(position: ElementPosition) {
             ),
         )
     }
+}
+
+/** Highlight colour for the first endpoint while using "Ligar objetos" (distinct from selection blue). */
+private val LINK_TOOL_FIRST_TARGET_COLOR = Color(0xFFFF6600)
+
+/**
+ * Draws a thick border around [position] without resize handles — used during the link tool's second click phase.
+ */
+private fun DrawScope.drawLinkToolFirstTargetHighlight(position: ElementPosition) {
+    val x = position.x.toFloat()
+    val y = position.y.toFloat()
+    val w = position.width.toFloat()
+    val h = position.height.toFloat()
+    drawRect(
+        color = LINK_TOOL_FIRST_TARGET_COLOR,
+        topLeft = Offset(x - 2f, y - 2f),
+        size = Size(w + 4f, h + 4f),
+        style = Stroke(2.5f),
+    )
 }
 
 /**
@@ -782,20 +812,22 @@ private fun DrawScope.drawConnectionLine(
     val elemB = schema.elements[conn.elementIdB] ?: return
 
     val ptA = dividedPoints[conn.elementIdA]?.get(conn.id) ?: run {
-        val enc = connectionEncaixes(elemA, elemB, schema)
+        val enc = connectionEncaixes(elemA, elemB, schema, conn)
         enc[connectionPonto(elemA, elemB, schema, conn)]
     }
     val ptB = dividedPoints[conn.elementIdB]?.get(conn.id) ?: run {
-        val enc = connectionEncaixes(elemB, elemA, schema)
+        val enc = connectionEncaixes(elemB, elemA, schema, conn)
         enc[connectionPonto(elemB, elemA, schema, conn)]
     }
 
-    // Use inner-diamond position for AssociativeEntity routing so lines go to/from
-    // TChildRelacao's actual visual boundary, not the outer rect.
-    val posA = if (elemA is SchemaElement.AssociativeEntity && elemB !is SchemaElement.Attribute)
-        assocInnerDiamondPos(elemA.position) else elemA.position
-    val posB = if (elemB is SchemaElement.AssociativeEntity && elemA !is SchemaElement.Attribute)
-        assocInnerDiamondPos(elemB.position) else elemB.position
+    val posA = if (elemA is SchemaElement.AssociativeEntity && elemB !is SchemaElement.Attribute) {
+        if (associativeConnectionUsesInnerDiamond(elemA, elemB, conn)) assocInnerDiamondPos(elemA.position)
+        else elemA.position
+    } else elemA.position
+    val posB = if (elemB is SchemaElement.AssociativeEntity && elemA !is SchemaElement.Attribute) {
+        if (associativeConnectionUsesInnerDiamond(elemB, elemA, conn)) assocInnerDiamondPos(elemB.position)
+        else elemB.position
+    } else elemB.position
 
     val waypoints = computeConnectionPath(
         ptA,
@@ -881,12 +913,14 @@ private fun DrawScope.drawCardinalityLabel(
         val enc = connectionEncaixes(
             entityElem,
             otherForEntity,
-            schema
+            schema,
+            conn,
         )
         enc[connectionPonto(
             entityElem,
             otherForEntity,
-            schema
+            schema,
+            conn,
         )]
     }
     val p = pointToEdgeIndex(anchor, entityElem.position)
@@ -899,6 +933,131 @@ private fun DrawScope.drawCardinalityLabel(
         4 -> aTop  = aTop + CARD_H - 4f
     }
     drawText(layout, topLeft = Offset(aLeft, aTop))
+}
+
+/** Height of the cardinality label hit box in px — matches [CanvasHitTest] / draw fallback. */
+internal const val CARDINALITY_LABEL_HIT_HEIGHT_PX = 20f
+
+private fun estimateCardinalityLabelTextWidthForHit(text: String): Float =
+    (text.length * 8.5f + 16f).coerceAtLeast(40f)
+
+/** Extra margin so hit area covers anti-aliased edges and font wider than the estimate. */
+private const val CARDINALITY_LABEL_HIT_INSET_PX = 6f
+
+private fun expandCardinalityHitRect(r: Rect): Rect = Rect(
+    left = r.left - CARDINALITY_LABEL_HIT_INSET_PX,
+    top = r.top - CARDINALITY_LABEL_HIT_INSET_PX,
+    right = r.right + CARDINALITY_LABEL_HIT_INSET_PX,
+    bottom = r.bottom + CARDINALITY_LABEL_HIT_INSET_PX,
+)
+
+/**
+ * Tight axis-aligned bounds of the cardinality label (same geometry as [drawCardinalityLabel] /
+ * hit-test core), **without** the extra padding used for pointer hit-testing.
+ */
+private fun cardinalityLabelBoundsRectUnpadded(schema: ConceptualSchema, conn: Connection): Rect? {
+    if (!conn.showCardinality || conn.cardinality == null) return null
+    val baseLabel = conn.cardinality.label
+    if (baseLabel.isBlank()) return null
+
+    val cardStr = if (conn.cardinalityRole.isNotEmpty()) {
+        val pontaLeft = schema.elements[conn.elementIdB]?.position?.x ?: 0
+        val labelLeft = conn.cardinalityPosition?.x ?: 0
+        if (pontaLeft < labelLeft) "$baseLabel ${conn.cardinalityRole}"
+        else "${conn.cardinalityRole} $baseLabel"
+    } else {
+        baseLabel
+    }
+
+    val labelWidth = estimateCardinalityLabelTextWidthForHit(cardStr)
+    val xAdjust = estimateCardinalityLabelTextWidthForHit(conn.cardinality.label) / 4f
+
+    conn.cardinalityPosition?.let { lp ->
+        return Rect(
+            left = lp.x + xAdjust,
+            top = lp.y.toFloat(),
+            right = lp.x + xAdjust + labelWidth,
+            bottom = lp.y + CARDINALITY_LABEL_HIT_HEIGHT_PX,
+        )
+    }
+
+    val elemA = schema.elements[conn.elementIdA] ?: return null
+    val elemB = schema.elements[conn.elementIdB] ?: return null
+    val entityElem = when {
+        elemB is SchemaElement.Entity || elemB is SchemaElement.AssociativeEntity -> elemB
+        elemA is SchemaElement.Entity || elemA is SchemaElement.AssociativeEntity -> elemA
+        else -> elemB
+    }
+    val otherForEntity = if (entityElem == elemA) elemB else elemA
+    val dividedPoints = computeDividedPoints(schema)
+    val anchor = dividedPoints[entityElem.id]?.get(conn.id) ?: run {
+        val enc = connectionEncaixes(entityElem, otherForEntity, schema, conn)
+        enc[connectionPonto(entityElem, otherForEntity, schema, conn)]
+    }
+    val p = pointToEdgeIndex(anchor, entityElem.position)
+    val cardH = CARDINALITY_LABEL_HIT_HEIGHT_PX
+    var aLeft = anchor.x
+    var aTop = anchor.y - cardH + 5f
+    when (p) {
+        1 -> aLeft = aLeft - labelWidth + 2f
+        4 -> aTop = aTop + cardH - 4f
+    }
+    return Rect(
+        left = aLeft,
+        top = aTop,
+        right = aLeft + labelWidth,
+        bottom = aTop + cardH,
+    )
+}
+
+/**
+ * [ElementPosition] for drawing the selection outline around a cardinality label.
+ * Prefer stored non-degenerate bounds from the file; otherwise the same computed box as drawing.
+ */
+internal fun cardinalityLabelHighlightElementPosition(schema: ConceptualSchema, conn: Connection): ElementPosition? {
+    val stored = conn.cardinalityPosition
+    if (stored != null && stored.width > 0 && stored.height > 0) {
+        return stored
+    }
+    val r = cardinalityLabelBoundsRectUnpadded(schema, conn) ?: return null
+    val w = (r.right - r.left).toInt().coerceAtLeast(1)
+    val h = (r.bottom - r.top).toInt().coerceAtLeast(1)
+    return ElementPosition(
+        x = r.left.toInt(),
+        y = r.top.toInt(),
+        width = w,
+        height = h,
+    )
+}
+
+/**
+ * Persists the current on-canvas cardinality box when the user locks the label ("Fixa").
+ * [Connection.cardinalityPosition] stores the label **box** origin (Pascal `Left`/`Top`); drawing
+ * applies [xAdjust] for font metrics, so we convert from the computed text-space rect.
+ */
+internal fun materializeCardinalityPositionForFixed(schema: ConceptualSchema, conn: Connection): ElementPosition? {
+    val r = cardinalityLabelBoundsRectUnpadded(schema, conn) ?: return null
+    val baseLabel = conn.cardinality?.label ?: return null
+    val xAdjust = estimateCardinalityLabelTextWidthForHit(baseLabel) / 4f
+    val w = (r.right - r.left).toInt().coerceAtLeast(1)
+    val h = (r.bottom - r.top).toInt().coerceAtLeast(1)
+    return ElementPosition(
+        x = (r.left - xAdjust).toInt(),
+        y = r.top.toInt(),
+        width = w,
+        height = h,
+    )
+}
+
+/**
+ * Axis-aligned bounds for hit-testing a connection's cardinality label.
+ * When [Connection.cardinalityPosition] is null, uses the same fallback placement as
+ * [drawCardinalityLabel] so labels from new links (or legacy data without stored coords)
+ * remain clickable.
+ */
+internal fun cardinalityLabelInteractionRect(schema: ConceptualSchema, conn: Connection): Rect? {
+    val core = cardinalityLabelBoundsRectUnpadded(schema, conn) ?: return null
+    return expandCardinalityHitRect(core)
 }
 
 // ── Helper: assoc entity inner diamond ───────────────────────────────────────
@@ -915,6 +1074,25 @@ private fun assocInnerDiamondPos(p: ElementPosition) =
         height = (p.height - 30).coerceAtLeast(10),
     )
 
+/**
+ * When [elem] is an [SchemaElement.AssociativeEntity] connected to a non-attribute [otherElem],
+ * returns whether line routing uses the inner relationship diamond (`true`) or the outer entity
+ * rectangle (`false`). Non-associative elements are not affected by this helper.
+ */
+private fun associativeConnectionUsesInnerDiamond(
+    elem: SchemaElement,
+    otherElem: SchemaElement,
+    conn: Connection?,
+): Boolean {
+    if (elem !is SchemaElement.AssociativeEntity || otherElem is SchemaElement.Attribute) return true
+    if (conn == null) return true
+    return when (elem.id) {
+        conn.elementIdA -> !conn.useAssociativeOuterForEndA
+        conn.elementIdB -> !conn.useAssociativeOuterForEndB
+        else -> true
+    }
+}
+
 // ── Helper: per-connection encaixe points ─────────────────────────────────────
 
 /**
@@ -928,8 +1106,8 @@ private fun assocInnerDiamondPos(p: ElementPosition) =
  * - **Composite attribute (bar side)**: when [otherElem] is a child attribute of
  *   [elem], the four slots collapse to the opposite (bar) side instead.
  *   Mirrors [TBarraDeAtributos.PrepareToAtive] behaviour.
- * - **AssociativeEntity → non-Attribute**: uses the inner diamond's edge midpoints,
- *   matching [TChildRelacao]'s actual connection points in mer.pas.
+ * - **AssociativeEntity → non-Attribute**: uses the inner diamond's edge midpoints by default;
+ *   when the connection stores an outer-body attach flag for this end, uses the outer rectangle edges.
  * - **All other elements**: standard four edge midpoints [1..4].
  *
  * Index mapping: [1]=left, [2]=top, [3]=right, [4]=bottom (1-based, Pascal compatible).
@@ -938,6 +1116,7 @@ private fun connectionEncaixes(
     elem: SchemaElement,
     otherElem: SchemaElement,
     schema: ConceptualSchema,
+    conn: Connection? = null,
 ): Array<Offset> {
     val p = elem.position
     val left   = p.x.toFloat()
@@ -968,7 +1147,7 @@ private fun connectionEncaixes(
 
     // Specialization (TEspecializacao) doesn't use the centred bounding-box edges. Pascal
     // computes `FalsasBases` (Redesenhe, mer.pas ~8643) and PrepareToAtive (~8700) selects
-    // ONE of those four points based on the connected entity's relative left and whether
+    // ONE of those four points based on the connected element's relative left and whether
     // it's the EntidadeBase. The 4 false-bases live at the triangle's *corners* (not edge
     // centres), and a different point is chosen depending on:
     //   - Posi: POSI_ABAIXO (Esp.Top > base.Top) ⇒ apex on top, base on bottom (default).
@@ -985,14 +1164,22 @@ private fun connectionEncaixes(
         )
     }
 
-    // AssociativeEntity connecting to a non-Attribute uses the inner diamond's edge
-    // midpoints (TChildRelacao handles those connections in the original).
+    // AssociativeEntity → non-Attribute: inner diamond encaixes unless this connection uses the outer body.
     if (elem is SchemaElement.AssociativeEntity && otherElem !is SchemaElement.Attribute) {
-        val ip = assocInnerDiamondPos(p)
-        val il = ip.x.toFloat(); val it_ = ip.y.toFloat()
-        val ir = (ip.x + ip.width).toFloat(); val ib_ = (ip.y + ip.height).toFloat()
-        val icx = (il + ir) / 2f; val icy = (it_ + ib_) / 2f
-        return arrayOf(Offset.Zero, Offset(il, icy), Offset(icx, it_), Offset(ir, icy), Offset(icx, ib_))
+        if (associativeConnectionUsesInnerDiamond(elem, otherElem, conn)) {
+            val ip = assocInnerDiamondPos(p)
+            val il = ip.x.toFloat(); val it_ = ip.y.toFloat()
+            val ir = (ip.x + ip.width).toFloat(); val ib_ = (ip.y + ip.height).toFloat()
+            val icx = (il + ir) / 2f; val icy = (it_ + ib_) / 2f
+            return arrayOf(Offset.Zero, Offset(il, icy), Offset(icx, it_), Offset(ir, icy), Offset(icx, ib_))
+        }
+        return arrayOf(
+            Offset.Zero,
+            Offset(left,  cy),
+            Offset(cx,    top),
+            Offset(right, cy),
+            Offset(cx,    bottom),
+        )
     }
 
     return arrayOf(
@@ -1291,13 +1478,18 @@ private fun connectionPonto(
     }
     // For non-attribute elements, use the routing-aware ponto that matches Ative's
     // case conditions. isE1 = whether this element is elementIdA (the "source" in the XML).
-    // AssociativeEntity uses the inner diamond position for ponto computation.
+    // AssociativeEntity uses the inner diamond position for ponto computation when routing
+    // through the inner relationship; otherwise the full outer bounds are used.
     if (conn != null) {
         val isE1 = conn.elementIdA == elem.id
-        val effectivePos = if (elem is SchemaElement.AssociativeEntity && otherElem !is SchemaElement.Attribute)
-            assocInnerDiamondPos(elem.position) else elem.position
-        val effectiveOtherPos = if (otherElem is SchemaElement.AssociativeEntity && elem !is SchemaElement.Attribute)
-            assocInnerDiamondPos(otherElem.position) else otherElem.position
+        val effectivePos = if (elem is SchemaElement.AssociativeEntity && otherElem !is SchemaElement.Attribute) {
+            if (associativeConnectionUsesInnerDiamond(elem, otherElem, conn)) assocInnerDiamondPos(elem.position)
+            else elem.position
+        } else elem.position
+        val effectiveOtherPos = if (otherElem is SchemaElement.AssociativeEntity && elem !is SchemaElement.Attribute) {
+            if (associativeConnectionUsesInnerDiamond(otherElem, elem, conn)) assocInnerDiamondPos(otherElem.position)
+            else otherElem.position
+        } else otherElem.position
         return computeNonAttrPonto(
             effectivePos,
             effectiveOtherPos,
@@ -1309,7 +1501,8 @@ private fun connectionPonto(
         connectionEncaixes(
             elem,
             otherElem,
-            schema
+            schema,
+            null,
         ), otherElem.position
     )
 }
@@ -1642,11 +1835,19 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
         // before each [Ative] call when QuantosNestePonto > 1.
         for ((ponto, slots) in byPonto) {
             val firstOther = slots.first().otherElem
+            val sampleConnId = slots.first().connId
+            val sampleConn = schema.connections.firstOrNull { it.id == sampleConnId }
             val enc =
-                connectionEncaixes(elem, firstOther, schema)
-            // Use inner diamond dimensions for Divida distribution in AssociativeEntity.
-            val pos = if (elem is SchemaElement.AssociativeEntity && firstOther !is SchemaElement.Attribute)
-                assocInnerDiamondPos(elem.position) else elem.position
+                connectionEncaixes(elem, firstOther, schema, sampleConn)
+            val pos = if (elem is SchemaElement.AssociativeEntity && firstOther !is SchemaElement.Attribute) {
+                if (associativeConnectionUsesInnerDiamond(elem, firstOther, sampleConn)) {
+                    assocInnerDiamondPos(elem.position)
+                } else {
+                    elem.position
+                }
+            } else {
+                elem.position
+            }
             val (anchorStart, edgeLen) = if (ponto == 1 || ponto == 3) {
                 pos.y.toFloat() to pos.height.toFloat()
             } else {
