@@ -50,7 +50,7 @@ internal actual fun rememberConceptualCanvasToolCursorModifier(tool: ConceptualC
         is ConceptualCanvasTool.Entity.Associative ->
             "files/brmodelo_cursors/png/cursor_entassoss.png"
         is ConceptualCanvasTool.Observation ->
-            "files/brmodelo_cursors/png/cursor_textoii.png"
+            "files/brmodelo_cursors/png/cursor_texto.png"
         is ConceptualCanvasTool.AutoSelfRelationship ->
             "files/brmodelo_cursors/png/cursor_autorel.png"
         is ConceptualCanvasTool.Specialization ->

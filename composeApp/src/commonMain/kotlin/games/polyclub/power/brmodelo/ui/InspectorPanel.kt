@@ -159,7 +159,7 @@ private val HINTS: Map<String, String> = mapOf(
     "ALINHAMENTOWH_W" to "Reposiciona o controle quanto à largura.",
     "ALINHAMENTOWH_H" to "Reposiciona o controle quanto à altura.",
     "AUTO_REL"       to "A entidade está auto relacionada.",
-    "ESPECIALIZADA"  to "A entidade está especializada.",
+    "ESPECIALIZADA"  to "Indica se a entidade é generalização com pelo menos um triângulo de especialização (Pascal Especializacoes / XML ehEsp).",
     "EA_NOME"        to "Nome do relacionamento contido na entidade associativa.",
     "EA_DIC"         to "Dicionário de dados do relacionamento contido na entidade associativa.",
     "EA_OBS"         to "Algo importante a ser anotado sobre o relacionamento contido na entidade associativa.",
@@ -616,6 +616,8 @@ private fun EntityFields(
 ) {
     SectionTitle("Esquema")
     val autoRel = schema.selfRelationships.any { it.ownerEntityId == element.id }
+    val isSpecializationGeneralizationBase =
+        schema.specializations.any { it.baseEntityId == element.id }
     ReadOnlyRow(
         "Auto relacionado",
         if (autoRel) "Sim" else "Não",
@@ -625,7 +627,7 @@ private fun EntityFields(
     )
     ReadOnlyRow(
         "Especializada",
-        if (element.parentSpecializationIds.isNotEmpty()) "Sim" else "Não",
+        if (isSpecializationGeneralizationBase) "Sim" else "Não",
         "ESPECIALIZADA", focusedKey, onFocusChange
     )
 }

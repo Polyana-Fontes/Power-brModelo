@@ -171,7 +171,7 @@ fun relationshipDiamondContains(innerBounds: ElementPosition, point: Offset): Bo
 
 /**
  * Hit-test for the "Ligar objetos" tool: returns a [ConceptualLinkPick] for entity / relationship /
- * self-relationship / associative (inner vs outer), or `null` if nothing linkable was hit.
+ * self-relationship / specialization / associative (inner vs outer), or `null` if nothing linkable was hit.
  *
  * Uses the same z-order as [hitTestElement] (last-drawn element wins).
  */
@@ -196,6 +196,7 @@ fun hitTestConceptualLinkPick(schema: ConceptualSchema, point: Offset): Conceptu
             is SchemaElement.Entity,
             is SchemaElement.Relationship,
             is SchemaElement.SelfRelationship,
+            is SchemaElement.Specialization,
             -> ConceptualLinkPick(element.id, isAssociativeOuterEntitySide = false)
             else -> null
         } ?: continue

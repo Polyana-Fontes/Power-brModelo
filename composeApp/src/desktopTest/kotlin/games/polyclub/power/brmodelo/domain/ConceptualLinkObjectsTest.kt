@@ -320,4 +320,188 @@ class ConceptualLinkObjectsTest {
         // Assert
         assertIs<ConceptualLinkValidationResult.Error>(rDup)
     }
+
+    @Test
+    fun `specialization to plain entity adds connection without making child a generalization base`() {
+        // Arrange
+        val base = SchemaElement.Entity(id = 1, name = "Pessoa", position = ElementPosition(0, 0, 100, 60))
+        val child = SchemaElement.Entity(id = 2, name = "Cliente", position = ElementPosition(200, 0, 100, 60))
+        val spec = SchemaElement.Specialization(
+            id = 10,
+            name = "Esp1",
+            position = ElementPosition(40, 100, 25, 31),
+            baseEntityId = 1,
+            type = SpecializationType.OPTIONAL,
+        )
+        val cBase = Connection(
+            id = 20,
+            elementIdA = 10,
+            elementIdB = 1,
+            cardinality = Cardinality.ZERO_TO_MANY,
+            showCardinality = false,
+            orientation = LineOrientation.HORIZONTAL,
+        )
+        val schema = ConceptualSchema(
+            elements = mapOf(1 to base, 2 to child, 10 to spec),
+            connections = listOf(cBase),
+            nextId = 100,
+        )
+
+        // Act
+        val r = validateAndBuildConceptualLink(schema, ConceptualLinkPick(10), ConceptualLinkPick(2))
+
+        // Assert
+        val ok = assertIs<ConceptualLinkValidationResult.Ok>(r)
+        val s = ok.schema
+        assertTrue(s.connections.any { it.elementIdA == 10 && it.elementIdB == 2 })
+        assertTrue(s.specializations.none { it.baseEntityId == 2 })
+    }
+
+    @Test
+    fun `duplicate specialization entity link is rejected`() {
+        // Arrange
+        val base = SchemaElement.Entity(id = 1, name = "A", position = pos)
+        val child = SchemaElement.Entity(id = 2, name = "B", position = pos)
+        val spec = SchemaElement.Specialization(
+            id = 10,
+            name = "Esp1",
+            position = pos,
+            baseEntityId = 1,
+        )
+        val c1 = Connection(
+            id = 20,
+            elementIdA = 10,
+            elementIdB = 2,
+            cardinality = Cardinality.ZERO_TO_MANY,
+            showCardinality = false,
+            orientation = LineOrientation.HORIZONTAL,
+        )
+        val c0 = Connection(
+            id = 21,
+            elementIdA = 10,
+            elementIdB = 1,
+            cardinality = Cardinality.ZERO_TO_MANY,
+            showCardinality = false,
+            orientation = LineOrientation.HORIZONTAL,
+        )
+        val schema = ConceptualSchema(
+            elements = mapOf(1 to base, 2 to child, 10 to spec),
+            connections = listOf(c0, c1),
+            nextId = 50,
+        )
+
+        // Act
+        val r = validateAndBuildConceptualLink(schema, ConceptualLinkPick(10), ConceptualLinkPick(2))
+
+        // Assert
+        val err = assertIs<ConceptualLinkValidationResult.Error>(r)
+        assertTrue(err.message.contains("Já existe", ignoreCase = true))
+    }
+
+    @Test
+    fun `associative outer cannot link to specialization`() {
+        // Arrange
+        val assoc = SchemaElement.AssociativeEntity(id = 1, name = "EA", position = pos)
+        val spec = SchemaElement.Specialization(
+            id = 10,
+            name = "Esp1",
+            position = ElementPosition(200, 0, 25, 31),
+            baseEntityId = 99,
+        )
+        val schema = ConceptualSchema(
+            elements = mapOf(1 to assoc, 10 to spec),
+            nextId = 50,
+        )
+        val outer = ConceptualLinkPick(1, isAssociativeOuterEntitySide = true)
+
+        // Act
+        val r = validateAndBuildConceptualLink(schema, ConceptualLinkPick(10), outer)
+
+        // Assert
+        val err = assertIs<ConceptualLinkValidationResult.Error>(r)
+        assertTrue(err.message.contains("simples", ignoreCase = true))
+    }
+
+    @Test
+    fun `optional specialization becomes restricted when a third entity is linked`() {
+        // Arrange
+        val e1 = SchemaElement.Entity(id = 1, name = "A", position = ElementPosition(0, 0, 60, 50))
+        val e2 = SchemaElement.Entity(id = 2, name = "B", position = ElementPosition(100, 0, 60, 50))
+        val e3 = SchemaElement.Entity(id = 3, name = "C", position = ElementPosition(200, 0, 60, 50))
+        val spec = SchemaElement.Specialization(
+            id = 10,
+            name = "Esp1",
+            position = ElementPosition(80, 80, 25, 31),
+            baseEntityId = 1,
+            type = SpecializationType.OPTIONAL,
+        )
+        val schema0 = ConceptualSchema(
+            elements = mapOf(1 to e1, 2 to e2, 3 to e3, 10 to spec),
+            connections = listOf(
+                Connection(
+                    id = 20,
+                    elementIdA = 10,
+                    elementIdB = 1,
+                    cardinality = Cardinality.ZERO_TO_MANY,
+                    showCardinality = false,
+                    orientation = LineOrientation.HORIZONTAL,
+                ),
+            ),
+            nextId = 100,
+        )
+
+        // Act
+        val s1 = assertIs<ConceptualLinkValidationResult.Ok>(
+            validateAndBuildConceptualLink(schema0, ConceptualLinkPick(10), ConceptualLinkPick(2)),
+        )
+        val specAfterSecond = s1.schema.elements[10] as SchemaElement.Specialization
+        assertEquals(SpecializationType.OPTIONAL, specAfterSecond.type)
+
+        val s2 = assertIs<ConceptualLinkValidationResult.Ok>(
+            validateAndBuildConceptualLink(s1.schema, ConceptualLinkPick(10), ConceptualLinkPick(3)),
+        )
+
+        // Assert
+        val specAfterThird = s2.schema.elements[10] as SchemaElement.Specialization
+        assertEquals(SpecializationType.RESTRICTED, specAfterThird.type)
+    }
+
+    @Test
+    fun `specialization link detects circular generalization`() {
+        // Arrange: e1 base, s1 on e1, e2 child of s1; s2 on e2 — linking e1 to s2 is circular (Pascal CanLiga)
+        val e1 = SchemaElement.Entity(id = 1, name = "Root", position = ElementPosition(0, 0, 80, 50))
+        val e2 = SchemaElement.Entity(
+            id = 2,
+            name = "Mid",
+            position = ElementPosition(0, 120, 80, 50),
+        )
+        val s1 = SchemaElement.Specialization(
+            id = 10,
+            name = "Esp1",
+            position = ElementPosition(20, 60, 25, 31),
+            baseEntityId = 1,
+        )
+        val s2 = SchemaElement.Specialization(
+            id = 11,
+            name = "Esp2",
+            position = ElementPosition(20, 200, 25, 31),
+            baseEntityId = 2,
+        )
+        val schema = ConceptualSchema(
+            elements = mapOf(1 to e1, 2 to e2, 10 to s1, 11 to s2),
+            connections = listOf(
+                Connection(20, 10, 1, Cardinality.ZERO_TO_MANY, false, orientation = LineOrientation.HORIZONTAL),
+                Connection(21, 10, 2, Cardinality.ZERO_TO_MANY, false, orientation = LineOrientation.HORIZONTAL),
+                Connection(22, 11, 2, Cardinality.ZERO_TO_MANY, false, orientation = LineOrientation.HORIZONTAL),
+            ),
+            nextId = 200,
+        )
+
+        // Act
+        val r = validateAndBuildConceptualLink(schema, ConceptualLinkPick(11), ConceptualLinkPick(1))
+
+        // Assert
+        val err = assertIs<ConceptualLinkValidationResult.Error>(r)
+        assertTrue(err.message.contains("circular", ignoreCase = true))
+    }
 }

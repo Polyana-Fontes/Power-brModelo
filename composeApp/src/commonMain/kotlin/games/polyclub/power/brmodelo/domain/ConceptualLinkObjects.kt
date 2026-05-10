@@ -37,11 +37,14 @@ enum class ConceptualLinkEndpointKind {
 
     /** Relationship, self-relationship, or inner diamond of an associative entity. */
     RELATIONSHIP_SIDE,
+
+    /** Specialization triangle ([SchemaElement.Specialization]). Pascal [TEspecializacao] in `Tool_Ligacao`. */
+    SPECIALIZATION_SIDE,
 }
 
 /**
  * Returns the [ConceptualLinkEndpointKind] for [pick], or `null` if the element cannot participate
- * in conceptual entity–relationship links.
+ * in the conceptual "Ligar objetos" tool.
  */
 fun conceptualLinkEndpointKind(
     element: SchemaElement,
@@ -56,6 +59,8 @@ fun conceptualLinkEndpointKind(
         is SchemaElement.AssociativeEntity ->
             if (pick.isAssociativeOuterEntitySide) ConceptualLinkEndpointKind.ENTITY_SIDE
             else ConceptualLinkEndpointKind.RELATIONSHIP_SIDE
+        is SchemaElement.Specialization ->
+            ConceptualLinkEndpointKind.SPECIALIZATION_SIDE
         else -> null
     }
 }
@@ -182,6 +187,114 @@ private fun buildEntityAutoSelfRelationship(
     return ConceptualLinkValidationResult.Ok(work)
 }
 
+/**
+ * Pascal [TModelo.Add] / [TEspecializacao.Adicione] + [TEspecializacao.CanLiga] (`mer.pas` ~2364–2390, ~8535–8597).
+ * Keeps the base entity’s specialization list in sync like [applyConceptualSpecializationTool].
+ */
+private fun ConceptualSchema.withBaseEntitySpecializationIdsSynced(baseEntityId: Int): ConceptualSchema {
+    val ent = elements[baseEntityId] as? SchemaElement.Entity ?: return this
+    val ids = specializations.filter { it.baseEntityId == baseEntityId }.map { it.id }
+    return copy(
+        elements = elements + (baseEntityId to ent.copy(
+            specializationId = ids.firstOrNull(),
+            parentSpecializationIds = ids,
+        )),
+    )
+}
+
+/**
+ * Specializations that link [entityId] as a **subtype** (Pascal [TEntidade.Origem]), excluding the
+ * link from a specialization to its own [SchemaElement.Specialization.baseEntityId].
+ */
+private fun incomingIsaSpecializations(schema: ConceptualSchema, entityId: Int): List<SchemaElement.Specialization> =
+    schema.specializations.filter { sp ->
+        sp.baseEntityId != entityId && hasSpecializationEntityConnection(schema, sp.id, entityId)
+    }
+
+/**
+ * Walks from [SchemaElement.Specialization.baseEntityId] following Pascal [TEntidade.Origem] chains
+ * (only true subtype links — not the base-entity sync list on [SchemaElement.Entity.parentSpecializationIds]).
+ */
+private fun specializationLinkWouldBeCircular(
+    schema: ConceptualSchema,
+    spec: SchemaElement.Specialization,
+    candidateChild: SchemaElement.Entity,
+): Boolean {
+    var currentEntityId = spec.baseEntityId
+    val visited = mutableSetOf<Int>()
+    while (true) {
+        val parents = incomingIsaSpecializations(schema, currentEntityId)
+        val parentSpec = parents.firstOrNull() ?: return false
+        currentEntityId = parentSpec.baseEntityId
+        if (currentEntityId == candidateChild.id) return true
+        if (!visited.add(currentEntityId)) return true
+    }
+}
+
+/**
+ * Pascal: `Assigned(EntidadeBase) and (EntidadeBase.Especializacoes.Count > 1) and (FLigacoes.Count > 1)`.
+ */
+private fun blocksAdicioneBecauseMultipleSpecsOnBase(
+    schema: ConceptualSchema,
+    spec: SchemaElement.Specialization,
+): Boolean {
+    val specsOnBase = schema.specializations.count { it.baseEntityId == spec.baseEntityId }
+    val linksOnSpec = schema.connectionsOf(spec.id).size
+    return specsOnBase > 1 && linksOnSpec > 1
+}
+
+private fun hasSpecializationEntityConnection(schema: ConceptualSchema, specId: Int, entityId: Int): Boolean =
+    schema.connections.any {
+        (it.elementIdA == specId && it.elementIdB == entityId) ||
+            (it.elementIdB == specId && it.elementIdA == entityId)
+    }
+
+private fun buildSpecializationToPlainEntityLink(
+    schema: ConceptualSchema,
+    spec: SchemaElement.Specialization,
+    entitySideElement: SchemaElement,
+): ConceptualLinkValidationResult {
+    if (entitySideElement !is SchemaElement.Entity) {
+        return ConceptualLinkValidationResult.Error(
+            "Somente entidades simples podem ser ligadas a uma especialização.",
+        )
+    }
+    if (hasSpecializationEntityConnection(schema, spec.id, entitySideElement.id)) {
+        return ConceptualLinkValidationResult.Error("Já existe uma ligação entre estes objetos.")
+    }
+    if (blocksAdicioneBecauseMultipleSpecsOnBase(schema, spec)) {
+        return ConceptualLinkValidationResult.Error("Operação não realizável.")
+    }
+    if (specializationLinkWouldBeCircular(schema, spec, entitySideElement)) {
+        return ConceptualLinkValidationResult.Error(
+            "Referência circular na construção da especialização/generalização.",
+        )
+    }
+
+    var work = schema
+    val (w1, newConnId) = work.allocateId()
+    work = w1
+    work = work.withConnection(
+        Connection(
+            id = newConnId,
+            elementIdA = spec.id,
+            elementIdB = entitySideElement.id,
+            cardinality = Cardinality.ZERO_TO_MANY,
+            showCardinality = false,
+            orientation = LineOrientation.HORIZONTAL,
+        ),
+    )
+
+    val linksOnSpec = work.connectionsOf(spec.id).size
+    val specNow = work.elements[spec.id] as? SchemaElement.Specialization ?: spec
+    if (linksOnSpec > 2 && specNow.type == SpecializationType.OPTIONAL) {
+        work = work.withElement(specNow.copy(type = SpecializationType.RESTRICTED))
+    }
+
+    work = work.withBaseEntitySpecializationIdsSynced(spec.baseEntityId)
+    return ConceptualLinkValidationResult.Ok(work)
+}
+
 sealed class ConceptualLinkValidationResult {
     /**
      * Schema after applying the link tool: new [Connection]s (and optionally a new [SchemaElement.Relationship])
@@ -207,8 +320,9 @@ sealed class ConceptualLinkValidationResult {
  *   both ends are [TBaseEntidade]: temporarily switches to `Tool_Relacionamento`, places a new [TRelacao]
  *   at the midpoint of the two bases' `Left`/`Top`, then calls `Relacione` for each entity (`mer.pas` ~2961–2967,
  *   `Tool_Relacionamento` block ~2297–2317).
- * - **Same entity twice** (identical [ConceptualLinkPick] on the entity side): [TBaseEntidade.AutoRelacionar] /
- *   `Tool_AutoRel` — one [SchemaElement.SelfRelationship] and two connections to that entity.
+ * - **Specialization + plain entity** (either order): Pascal [Tool_Ligacao] branch in [TModelo.Add] —
+ *   [TEspecializacao.Adicione] (`mer.pas` ~2378–2387). Only [SchemaElement.Entity] (Pascal [TEntidade]), not
+ *   associative outers.
  */
 fun validateAndBuildConceptualLink(
     schema: ConceptualSchema,
@@ -225,7 +339,7 @@ fun validateAndBuildConceptualLink(
     val kindB = conceptualLinkEndpointKind(elB, second)
     if (kindA == null || kindB == null) {
         return ConceptualLinkValidationResult.Error(
-            "Só é possível ligar entidades e relacionamentos.",
+            "Só é possível ligar entidades, relacionamentos e especializações.",
         )
     }
 
@@ -249,6 +363,25 @@ fun validateAndBuildConceptualLink(
         return ConceptualLinkValidationResult.Error("Não é possível ligar um objeto a si mesmo.")
     }
 
+    if (kindA == ConceptualLinkEndpointKind.SPECIALIZATION_SIDE &&
+        kindB == ConceptualLinkEndpointKind.ENTITY_SIDE
+    ) {
+        return buildSpecializationToPlainEntityLink(
+            schema,
+            elA as SchemaElement.Specialization,
+            elB,
+        )
+    }
+    if (kindB == ConceptualLinkEndpointKind.SPECIALIZATION_SIDE &&
+        kindA == ConceptualLinkEndpointKind.ENTITY_SIDE
+    ) {
+        return buildSpecializationToPlainEntityLink(
+            schema,
+            elB as SchemaElement.Specialization,
+            elA,
+        )
+    }
+
     if (kindA == ConceptualLinkEndpointKind.ENTITY_SIDE &&
         kindB == ConceptualLinkEndpointKind.ENTITY_SIDE
     ) {
@@ -257,7 +390,7 @@ fun validateAndBuildConceptualLink(
 
     if (kindA == kindB) {
         return ConceptualLinkValidationResult.Error(
-            "Uma ligação conceitual deve ser entre uma entidade e um relacionamento.",
+            "Seleções incorretas para esta ligação.",
         )
     }
 

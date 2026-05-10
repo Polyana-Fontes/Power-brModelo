@@ -560,7 +560,7 @@ private fun processLinkObjectsTap(
     when (toolState) {
         is ConceptualCanvasTool.LinkObjects.AwaitingFirst -> {
             if (pick == null) {
-                onMessage("Selecione uma entidade ou um relacionamento.")
+                onMessage("Selecione uma entidade, um relacionamento ou uma especialização.")
             } else {
                 onSelectionChange(CanvasSelection.None)
                 onToolChange(ConceptualCanvasTool.LinkObjects.AwaitingSecond(pick))

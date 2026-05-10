@@ -153,8 +153,9 @@ sealed class SchemaElement {
      *                             Derived from whether any of its connections has [games.polyclub.power.brmodelo.domain.Connection.isWeak] == true.
      * @param specializationId     ID of the [Specialization] node this entity is the *base* of,
      *                             if any. Corresponds to `_AutoRelacao` / `Especializacoes`.
-     * @param parentSpecializationIds IDs of [Specialization] nodes where this entity is a *child*
-     *                             (multiple inheritance). Corresponds to `TEntidade._Origens`.
+     * @param parentSpecializationIds IDs of [Specialization] nodes owned by this entity as **generalization base**
+     *                             (`baseEntityId` == this entity), matching XML `<Especializacoes>`. May also list
+     *                             originating specs for subtype entities created by the specialization tool.
      */
     data class Entity(
         override val id: Int,
