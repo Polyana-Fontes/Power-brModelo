@@ -269,6 +269,8 @@ object ConceptualSchemaXmlParser {
             }
         }
 
+        val compostoFromXml = node.boolValor("Composto")
+
         // Connection from this attribute to its owner
         node.child("Ligacoes")?.children("Ligacao")?.forEach { ligNode ->
             // For composite child attributes, Destino_ID points to BarraDeAtributos
@@ -298,6 +300,7 @@ object ConceptualSchemaXmlParser {
             autoSize = autoSize,
             deviationAngle = deviationAngle,
             childAttributeIds = childIds,
+            compostoPersisted = compostoFromXml && childIds.isEmpty(),
         )
     }
 

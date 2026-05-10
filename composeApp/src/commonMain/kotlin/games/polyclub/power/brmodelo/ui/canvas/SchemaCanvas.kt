@@ -31,6 +31,8 @@ import games.polyclub.power.brmodelo.domain.bulkDeleteResolvedIds
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -58,11 +60,16 @@ import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.isTertiaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import games.polyclub.power.brmodelo.domain.applyConceptualAttributeTool
 import games.polyclub.power.brmodelo.domain.applyConceptualSpecializationTool
 import games.polyclub.power.brmodelo.domain.CanvasSelection
@@ -77,6 +84,7 @@ import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolResult
 import games.polyclub.power.brmodelo.domain.SchemaElement
 import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolVariant
+import games.polyclub.power.brmodelo.domain.hiddenAttributesTooltipText
 import games.polyclub.power.brmodelo.domain.ElementPosition
 import games.polyclub.power.brmodelo.domain.organizeAttributesOnOwnerSide
 import games.polyclub.power.brmodelo.domain.relayoutCompositeSubtree
@@ -92,6 +100,7 @@ import games.polyclub.power.brmodelo.ui.toPlacementKindOrNull
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 // Background colour of the canvas (light grey, matching the original brModelo canvas background)
 private val CANVAS_BG = Color(0xFFE8E8E8)
@@ -114,7 +123,9 @@ private val SELECTION_BAND_STROKE = Color(0xFF0060C0)
  *   events omit modifiers). **Middle-button drag** always pans (same as dragging empty canvas with the left button).
  *   With **Excluir objetos** armed, **right-button drag** also pans.
  *   **Wasm** applies [games.polyclub.power.brmodelo.ui.invertCanvasPointerScrollPan] so pan matches finger direction.
- * - **Select**: tap on an element or cardinality label selects it.
+ * - **Hover**: when the pointer is over a diagram element that has [games.polyclub.power.brmodelo.domain.SchemaElement.hiddenAttributes],
+ *   a balloon lists **Atributos Ocultos:** and a monospace tree of oculto names (hit uses element bounds under the pointer,
+ *   same order as the inspector: composite [HiddenAttribute.children] then [HiddenAttribute.nestedHiddenAttributes]).
  * - **Move**: drag a selected element (or any element) to reposition it.
  * - **Move cardinality label**: drag a selected cardinality label.
  * - **Resize**: drag a corner handle of the selected element to resize it.
@@ -168,6 +179,9 @@ internal fun SchemaCanvas(
     var panOffset by remember { mutableStateOf(Offset(8f, 8f)) }
     val textMeasurer = rememberTextMeasurer()
     val layoutDirection = LocalLayoutDirection.current
+    var hiddenAttributesTooltipAnchor by remember { mutableStateOf<Pair<Offset, String>?>(null) }
+    val hoverSchemaForTooltip by rememberUpdatedState(schema)
+    val hoverPanForTooltip by rememberUpdatedState(panOffset)
 
     // rememberUpdatedState lets the gesture handler always see the latest values
     // without restarting the gesture on every recomposition.
@@ -855,6 +869,42 @@ internal fun SchemaCanvas(
                         }
                     }
                 }
+            }
+            .pointerInput(hoverSchemaForTooltip, hoverPanForTooltip) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        when (event.type) {
+                            PointerEventType.Move,
+                            PointerEventType.Enter,
+                            -> {
+                                val pos = event.changes.firstOrNull()?.position ?: continue
+                                val sch = hoverSchemaForTooltip
+                                if (sch == null) {
+                                    hiddenAttributesTooltipAnchor = null
+                                    continue
+                                }
+                                val schemaPoint = pos - hoverPanForTooltip
+                                val hit = hitTestElement(sch, schemaPoint)
+                                val id = (hit as? CanvasSelection.Element)?.id
+                                if (id == null) {
+                                    hiddenAttributesTooltipAnchor = null
+                                    continue
+                                }
+                                val el = sch.elements[id]
+                                if (el == null) {
+                                    hiddenAttributesTooltipAnchor = null
+                                    continue
+                                }
+                                val text = hiddenAttributesTooltipText(el.hiddenAttributes)
+                                hiddenAttributesTooltipAnchor =
+                                    if (text != null) pos to text else null
+                            }
+                            PointerEventType.Exit -> hiddenAttributesTooltipAnchor = null
+                            else -> {}
+                        }
+                    }
+                }
             },
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -921,6 +971,32 @@ internal fun SchemaCanvas(
                     size = Size(vr.width, vr.height),
                     style = Stroke(width = 2f),
                 )
+            }
+        }
+
+        hiddenAttributesTooltipAnchor?.let { (anchor, tipText) ->
+            Popup(
+                alignment = Alignment.TopStart,
+                offset = IntOffset(
+                    anchor.x.roundToInt() + 14,
+                    anchor.y.roundToInt() + 14,
+                ),
+                properties = PopupProperties(focusable = false),
+            ) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF9C4)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                ) {
+                    Text(
+                        text = tipText,
+                        style = TextStyle(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            color = Color(0xFF1A1A1A),
+                        ),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                    )
+                }
             }
         }
 

@@ -256,10 +256,18 @@ fun applyHideCanvasAttribute(schema: ConceptualSchema, selection: CanvasSelectio
     val attr = schema.elements[id] as? SchemaElement.Attribute ?: return null
     val storageId = hiddenAttributeStorageOwnerId(schema, attr)
     val (hidden, removeIds) = canvasAttributeSubtreeToHidden(schema, id)
-    var work = schema.withoutElements(removeIds)
+    var work = schema.withoutElements(removeIds, clearCompostoPersistedWhenEmptyCompositeParents = false)
     val holder = work.elements[storageId] ?: return null
     val nextHidden = holder.hiddenAttributeList() + hidden
     work = work.withElementHiddenList(storageId, nextHidden) ?: return null
+    val hidAttr = schema.elements[id] as SchemaElement.Attribute
+    val compositeParentId = hidAttr.ownerId.takeIf { ow -> schema.elements[ow] is SchemaElement.Attribute }
+    if (compositeParentId != null) {
+        val p = work.elements[compositeParentId] as? SchemaElement.Attribute
+        if (p != null) {
+            work = work.withElement(p.copy(compostoPersisted = true))
+        }
+    }
     work = organizeAttributesForConceptualOwner(work, ultimateNonAttributeOwner(work, storageId))
     return work.withNormalizedAttributeMultiValuedCounts()
 }

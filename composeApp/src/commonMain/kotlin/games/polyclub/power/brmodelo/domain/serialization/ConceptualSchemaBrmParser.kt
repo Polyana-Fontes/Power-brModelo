@@ -181,6 +181,17 @@ object ConceptualSchemaBrmParser {
             }
         }
 
+        // Pass 3b: Delphi Composto with no canvas children (only ocultos / empty bar in file).
+        for ((oid, el) in elements.toList()) {
+            if (el !is SchemaElement.Attribute) continue
+            if (el.childAttributeIds.isNotEmpty()) continue
+            val node = byOid[oid] ?: continue
+            if (node.className != "TAtributo") continue
+            if (node.boolProp("Composto")) {
+                elements[oid] = el.copy(compostoPersisted = true)
+            }
+        }
+
         val maxId = maxOf(
             elements.keys.maxOrNull() ?: 0,
             connections.maxOfOrNull { it.id } ?: 0,

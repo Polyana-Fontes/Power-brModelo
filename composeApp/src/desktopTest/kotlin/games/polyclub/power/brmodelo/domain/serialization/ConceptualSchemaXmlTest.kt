@@ -361,6 +361,9 @@ class ConceptualSchemaXmlTest {
         // Assert
         assertEquals("dados no dicionario", ent.dictionary)
         assertEquals("dados aqui", attr.dictionary)
+        assertTrue(attr.isComposite, "Composto=-1 with empty Barra must stay composite (ocultos only)")
+        assertTrue(attr.compostoPersisted)
+        assertEquals(1, schema.canonicalQtdeMultivalorado(attr))
         val cardConn = schema.connections.first { it.id == 6 }
         assertEquals("dicionario na cardinalidade", cardConn.cardinalityDictionary)
     }

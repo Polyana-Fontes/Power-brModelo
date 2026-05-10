@@ -190,6 +190,58 @@ class ConceptualHideRevealAndCompositeRepairTest {
     }
 
     @Test
+    fun `hiding each composite child separately keeps parent composite until all are ocultos`() {
+        // Arrange
+        val ent = SchemaElement.Entity(1, "E", ElementPosition(0, 0, 102, 66))
+        val child1 = SchemaElement.Attribute(
+            id = 3,
+            name = "Rua",
+            position = ElementPosition(200, 10, 73, 16),
+            ownerId = 2,
+        )
+        val child2 = SchemaElement.Attribute(
+            id = 4,
+            name = "Num",
+            position = ElementPosition(200, 30, 73, 16),
+            ownerId = 2,
+        )
+        val comp = SchemaElement.Attribute(
+            id = 2,
+            name = "Endereco",
+            position = ElementPosition(120, 10, 73, 16),
+            ownerId = 1,
+            childAttributeIds = listOf(3, 4),
+        )
+        val schema = ConceptualSchema(
+            elements = mapOf(1 to ent, 2 to comp, 3 to child1, 4 to child2),
+            connections = listOf(
+                Connection(10, 2, 1, showCardinality = false, orientation = LineOrientation.VERTICAL),
+                Connection(11, 3, 2, showCardinality = false, orientation = LineOrientation.VERTICAL),
+                Connection(12, 4, 2, showCardinality = false, orientation = LineOrientation.VERTICAL),
+            ),
+            nextId = 50,
+        )
+
+        // Act — hide first bar child
+        val afterFirst = applyHideCanvasAttribute(schema, CanvasSelection.Element(3))
+        assertNotNull(afterFirst)
+        val parentAfterFirst = afterFirst.elements[2] as SchemaElement.Attribute
+        assertTrue(parentAfterFirst.isComposite)
+        assertEquals(listOf(4), parentAfterFirst.childAttributeIds)
+
+        // Act — hide second bar child
+        val afterSecond = applyHideCanvasAttribute(afterFirst, CanvasSelection.Element(4))
+        assertNotNull(afterSecond)
+        val parentAfterSecond = afterSecond.elements[2] as SchemaElement.Attribute
+
+        // Assert — still composite (only ocultos under parent)
+        assertTrue(parentAfterSecond.isComposite)
+        assertTrue(parentAfterSecond.compostoPersisted)
+        assertTrue(parentAfterSecond.childAttributeIds.isEmpty())
+        assertEquals(2, parentAfterSecond.hiddenAttributes.size)
+    }
+
+    @Test
     fun `reveal materializes canvas children and keeps nested ocultos on the attribute`() {
         // Arrange
         val nested = HiddenAttribute(

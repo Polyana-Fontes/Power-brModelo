@@ -128,17 +128,22 @@ data class ConceptualSchema(
     )
 
     /** Removes an element and all connections that reference it. */
-    fun withoutElement(elementId: Int): ConceptualSchema = copy(
-        elements = elements - elementId,
-        connections = connections.filter {
-            it.elementIdA != elementId && it.elementIdB != elementId
-        },
-    ).withAttributeCompositeChildListsSyncedToOwners()
-        .withNormalizedAttributeMultiValuedCounts()
+    fun withoutElement(elementId: Int): ConceptualSchema {
+        val affectedCompositeParents = compositeCanvasParentsOfAttributes(setOf(elementId))
+        return copy(
+            elements = elements - elementId,
+            connections = connections.filter {
+                it.elementIdA != elementId && it.elementIdB != elementId
+            },
+        ).withAttributeCompositeChildListsSyncedToOwners()
+            .withCompostoPersistedClearedForCompositeParentsThatLostCanvasChildren(affectedCompositeParents)
+            .withNormalizedAttributeMultiValuedCounts()
+    }
 
     /**
      * After removing attributes, drop stale ids from every composite parent's [SchemaElement.Attribute.childAttributeIds]
-     * so an empty bar is no longer treated as composite (Pascal `TAtributo.Composto` ↔ non-empty child list).
+     * so the list matches canvas children. [SchemaElement.Attribute.compostoPersisted] is **not** changed here
+     * (see **hide** vs **delete** handling in `applyHideCanvasAttribute` and [withoutElements]).
      */
     fun withAttributeCompositeChildListsSyncedToOwners(): ConceptualSchema {
         val ownedByParent = attributes.groupBy { it.ownerId }
@@ -160,16 +165,26 @@ data class ConceptualSchema(
     /**
      * Removes every id in [elementIds] and any [games.polyclub.power.brmodelo.domain.Connection]
      * incident to at least one of them — a single logical delete (one undo step when committed once).
+     *
+     * @param clearCompostoPersistedWhenEmptyCompositeParents When false (e.g. **hide** attribute),
+     *        composite parents that temporarily lose all canvas children keep [SchemaElement.Attribute.compostoPersisted].
      */
-    fun withoutElements(elementIds: Set<Int>): ConceptualSchema {
+    fun withoutElements(
+        elementIds: Set<Int>,
+        clearCompostoPersistedWhenEmptyCompositeParents: Boolean = true,
+    ): ConceptualSchema {
         if (elementIds.isEmpty()) return this
+        val affectedCompositeParents = compositeCanvasParentsOfAttributes(elementIds)
         val newElements = elements.filterKeys { it !in elementIds }
         val newConnections = connections.filter { c ->
             c.elementIdA !in elementIds && c.elementIdB !in elementIds
         }
-        return copy(elements = newElements, connections = newConnections)
+        var out = copy(elements = newElements, connections = newConnections)
             .withAttributeCompositeChildListsSyncedToOwners()
-            .withNormalizedAttributeMultiValuedCounts()
+        if (clearCompostoPersistedWhenEmptyCompositeParents) {
+            out = out.withCompostoPersistedClearedForCompositeParentsThatLostCanvasChildren(affectedCompositeParents)
+        }
+        return out.withNormalizedAttributeMultiValuedCounts()
     }
 
     /** Adds a connection to the schema. */
@@ -224,6 +239,37 @@ data class ConceptualSchema(
                 }
             },
         )
+
+    /**
+     * Composite attributes ([SchemaElement.Attribute]) whose canvas child is in [removedAttributeIds].
+     */
+    private fun compositeCanvasParentsOfAttributes(removedAttributeIds: Set<Int>): Set<Int> =
+        removedAttributeIds.mapNotNull { id ->
+            (elements[id] as? SchemaElement.Attribute)?.ownerId?.takeIf { ow ->
+                elements[ow] is SchemaElement.Attribute
+            }
+        }.toSet()
+
+    /**
+     * After **permanent** removal of canvas children, drop [SchemaElement.Attribute.compostoPersisted]
+     * when the parent has no visible children and no [SchemaElement.Attribute.hiddenAttributes] carrying
+     * the composite (otherwise composite-with-all-ocultos would incorrectly lose Composto).
+     */
+    private fun withCompostoPersistedClearedForCompositeParentsThatLostCanvasChildren(
+        affectedCompositeParentIds: Set<Int>,
+    ): ConceptualSchema {
+        if (affectedCompositeParentIds.isEmpty()) return this
+        var newElements = elements
+        for (pid in affectedCompositeParentIds) {
+            val el = newElements[pid] as? SchemaElement.Attribute ?: continue
+            if (childAttributesOf(pid).isNotEmpty()) continue
+            if (el.childAttributeIds.isNotEmpty()) continue
+            if (!el.compostoPersisted) continue
+            if (el.hiddenAttributes.isNotEmpty()) continue
+            newElements = newElements + (pid to el.copy(compostoPersisted = false))
+        }
+        return copy(elements = newElements)
+    }
 
     /** Returns the next available ID and increments the counter. */
     fun allocateId(): Pair<ConceptualSchema, Int> =

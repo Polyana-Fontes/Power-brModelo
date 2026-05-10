@@ -254,8 +254,13 @@ sealed class SchemaElement {
      * @param deviationAngle   Layout hint: deviation angle from the owner for line routing.
      *                         Corresponds to `TAtributo.Desvio`.
      * @param childAttributeIds IDs of child [Attribute] elements for composite attributes.
-     *                          Composite is derived when this list is non-empty, matching
-     *                          `TAtributo.Composto` (which reads `Atributos.Count > 0`).
+     *                          Non-empty means composite on the canvas (bar children).
+     * @param compostoPersisted When true, the attribute stays composite in the model even with no
+     *                          visible bar children: either loaded from XML/brM with `Composto` and
+     *                          no `<BarraDeAtributos>`, or after **hiding** all composite children
+     *                          (they move to [hiddenAttributes]). Cleared when the last canvas child
+     *                          is **deleted** and there are no ocultos left. Mirrors Delphi `TAtributo.Composto`
+     *                          beyond the simple `Atributos.Count > 0` check.
      */
     data class Attribute(
         override val id: Int,
@@ -279,9 +284,10 @@ sealed class SchemaElement {
         val autoSize: Boolean = true,
         val deviationAngle: Int = 0,
         val childAttributeIds: List<Int> = emptyList(),
+        val compostoPersisted: Boolean = false,
     ) : SchemaElement() {
-        /** True when [childAttributeIds] is not empty, same logic as `TAtributo.Composto`. */
-        val isComposite: Boolean get() = childAttributeIds.isNotEmpty()
+        /** True when there are canvas children or composite semantics are kept via [compostoPersisted]. */
+        val isComposite: Boolean get() = childAttributeIds.isNotEmpty() || compostoPersisted
     }
 
     // ── Specialization ───────────────────────────────────────────────────────
