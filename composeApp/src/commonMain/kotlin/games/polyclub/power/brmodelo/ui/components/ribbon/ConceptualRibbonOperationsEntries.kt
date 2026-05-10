@@ -40,12 +40,21 @@ internal fun conceptualOperationsDropdownEntries(
     mergeEntityAndRelationshipToAssociativeEnabled: Boolean,
     convertOptionalSpecializationsToRestrictedEnabled: Boolean,
     convertRestrictedSpecializationToOptionalsEnabled: Boolean,
+    hideCanvasAttributeEnabled: Boolean,
+    revealHiddenAttributeEnabled: Boolean,
 ): List<DropdownEntry> =
     listOf(
         DropdownEntry(
             label = "Ocultar Atributo",
             icon = Res.drawable.atributo_s,
-            enabled = false,
+            enabled = hideCanvasAttributeEnabled,
+            conceptualOperation = ConceptualRibbonOperation.HideCanvasAttribute,
+        ),
+        DropdownEntry(
+            label = "Exibir no modelo",
+            icon = Res.drawable.atributo_s,
+            enabled = revealHiddenAttributeEnabled,
+            conceptualOperation = ConceptualRibbonOperation.RevealHiddenAttribute,
         ),
         DropdownEntry(
             label = "Organizar Atributos",

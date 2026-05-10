@@ -25,8 +25,8 @@ package games.polyclub.power.brmodelo.domain
  * diagram because they were explicitly detached from the canvas, but they still carry
  * semantic information about the element (e.g. for logical/physical model generation).
  *
- * Composite hidden attributes are represented via the [children] list (mirroring the
- * `Filhos: TObjectList` on `TAtributoOculto`).
+ * Composite hidden attributes use [children] for the canvas subtree (revealed as linked attributes)
+ * and [nestedHiddenAttributes] for ocultos that remained on the attribute without being drawn as children.
  *
  * @param name         Attribute name. Corresponds to [TAtributoOculto.Nome].
  * @param type         Data type string (e.g. "VARCHAR"). Corresponds to [TAtributoOculto.Tipo].
@@ -37,8 +37,11 @@ package games.polyclub.power.brmodelo.domain
  *                     A cardinality with maxCardinality == 0 means the attribute is NOT multi-valued.
  * @param position     Canvas position stored for when the attribute is made visible again.
  *                     Corresponds to [TAtributoOculto.LeftTop].
- * @param children     Sub-attributes of a composite attribute, in order.
- *                     Corresponds to [TAtributoOculto.Filhos].
+ * @param children     Canvas subtree only: when revealed, these become [SchemaElement.Attribute.childAttributeIds].
+ *                     Corresponds to composite [TAtributoOculto.Filhos] that were on the diagram.
+ * @param nestedHiddenAttributes Attributes that stayed in [SchemaElement.Attribute.hiddenAttributes] on the canvas
+ *                     node (not drawn as composite children). Serialized separately in XML as `<AtributosOcultosAninhados>`.
+ * @param isOptional   Optional flag on the canvas attribute (Kotlin model); preserved across hide/reveal.
  */
 data class HiddenAttribute(
     val name: String,
@@ -47,17 +50,58 @@ data class HiddenAttribute(
     val cardinality: AttributeCardinality,
     val position: ElementPosition,
     val children: List<HiddenAttribute> = emptyList(),
+    val nestedHiddenAttributes: List<HiddenAttribute> = emptyList(),
+    val isOptional: Boolean = false,
 ) {
     /** True when [cardinality.maxCardinality] > 0, same logic as [TAtributoOculto.Multivalorado]. */
     val isMultiValued: Boolean get() = cardinality.maxCardinality > 0
 
-    /** True when [children] is not empty, same logic as [TAtributoOculto.Composto]. */
-    val isComposite: Boolean get() = children.isNotEmpty()
+    /** True when this node has canvas children or nested ocultos (inspector tree). */
+    val isComposite: Boolean get() = children.isNotEmpty() || nestedHiddenAttributes.isNotEmpty()
+
+    /** Branches in inspector / path order: [children] first, then [nestedHiddenAttributes]. */
+    fun mergedBranchCount(): Int = children.size + nestedHiddenAttributes.size
+
+    fun branchAt(mergedIndex: Int): HiddenAttribute? = when {
+        mergedIndex < 0 -> null
+        mergedIndex < children.size -> children[mergedIndex]
+        mergedIndex < mergedBranchCount() -> nestedHiddenAttributes[mergedIndex - children.size]
+        else -> null
+    }
+
+    /** Returns removed subtree and this node with that branch removed. */
+    fun withBranchRemoved(mergedIndex: Int): Pair<HiddenAttribute, HiddenAttribute>? {
+        if (mergedIndex < children.size) {
+            val removed = children[mergedIndex]
+            val rest = children.filterIndexed { i, _ -> i != mergedIndex }
+            return removed to copy(children = rest)
+        }
+        val j = mergedIndex - children.size
+        if (j !in nestedHiddenAttributes.indices) return null
+        val removed = nestedHiddenAttributes[j]
+        val rest = nestedHiddenAttributes.filterIndexed { i, _ -> i != j }
+        return removed to copy(nestedHiddenAttributes = rest)
+    }
+
+    fun withBranchReplaced(mergedIndex: Int, newSubtree: HiddenAttribute): HiddenAttribute =
+        if (mergedIndex < children.size) {
+            copy(children = children.mapIndexed { i, c -> if (i == mergedIndex) newSubtree else c })
+        } else {
+            val j = mergedIndex - children.size
+            copy(
+                nestedHiddenAttributes = nestedHiddenAttributes.mapIndexed { i, c ->
+                    if (i == j) newSubtree else c
+                },
+            )
+        }
 
     /**
      * Number of leaf fields represented by this hidden subtree (used when totaling composite QtdeMultivalorado).
      * Simple oculto counts as one column; composite ocultos sum their children recursively.
      */
-    fun physicalFieldLeafCount(): Int =
-        if (children.isEmpty()) 1 else children.sumOf { it.physicalFieldLeafCount() }
+    fun physicalFieldLeafCount(): Int {
+        if (children.isEmpty() && nestedHiddenAttributes.isEmpty()) return 1
+        return children.sumOf { it.physicalFieldLeafCount() } +
+            nestedHiddenAttributes.sumOf { it.physicalFieldLeafCount() }
+    }
 }

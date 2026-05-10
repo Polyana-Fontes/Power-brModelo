@@ -23,18 +23,34 @@ import kotlin.math.max
 
 private val ATRIBUTO_PATTERN = Regex("^Atributo(\\d+)$")
 
-private fun usedAtributoIndices(schema: ConceptualSchema): Set<Int> =
-    schema.attributes.mapNotNull { a ->
+private fun HiddenAttribute.collectNamesDeep(): Sequence<String> = sequence {
+    yield(name)
+    children.forEach { yieldAll(it.collectNamesDeep()) }
+    nestedHiddenAttributes.forEach { yieldAll(it.collectNamesDeep()) }
+}
+
+private fun ConceptualSchema.allHiddenAttributeNames(): Set<String> =
+    elements.values.asSequence()
+        .flatMap { el -> el.hiddenAttributes.asSequence().flatMap { it.collectNamesDeep() } }
+        .toSet()
+
+private fun usedAtributoIndices(schema: ConceptualSchema): Set<Int> = buildSet {
+    schema.attributes.mapNotNullTo(this) { a ->
         ATRIBUTO_PATTERN.matchEntire(a.name)?.groupValues?.get(1)?.toIntOrNull()
-    }.toSet()
+    }
+    schema.allHiddenAttributeNames().mapNotNullTo(this) { n ->
+        ATRIBUTO_PATTERN.matchEntire(n)?.groupValues?.get(1)?.toIntOrNull()
+    }
+}
 
 private fun ConceptualSchema.nextUnusedAttributeName(): String {
     var n = 1
     val usedIdx = usedAtributoIndices(this)
+    val hiddenNames = allHiddenAttributeNames()
     while (n in usedIdx) n++
     while (true) {
         val cand = "Atributo$n"
-        if (attributes.none { it.name == cand }) return cand
+        if (attributes.none { it.name == cand } && cand !in hiddenNames) return cand
         n++
     }
 }
@@ -44,7 +60,7 @@ private fun ConceptualSchema.nextUnusedAttributeName(): String {
  */
 private fun ConceptualSchema.allocateConsecutiveAttributeNames(count: Int): List<String> {
     require(count > 0)
-    val used = attributes.map { it.name }.toMutableSet()
+    val used = (attributes.map { it.name } + allHiddenAttributeNames()).toMutableSet()
     val out = ArrayList<String>(count)
     repeat(count) {
         var k = 1

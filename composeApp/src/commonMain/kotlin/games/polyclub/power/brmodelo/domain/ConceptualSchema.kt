@@ -133,7 +133,29 @@ data class ConceptualSchema(
         connections = connections.filter {
             it.elementIdA != elementId && it.elementIdB != elementId
         },
-    )
+    ).withAttributeCompositeChildListsSyncedToOwners()
+        .withNormalizedAttributeMultiValuedCounts()
+
+    /**
+     * After removing attributes, drop stale ids from every composite parent's [SchemaElement.Attribute.childAttributeIds]
+     * so an empty bar is no longer treated as composite (Pascal `TAtributo.Composto` ↔ non-empty child list).
+     */
+    fun withAttributeCompositeChildListsSyncedToOwners(): ConceptualSchema {
+        val ownedByParent = attributes.groupBy { it.ownerId }
+        var newElements = elements
+        for ((id, el) in elements) {
+            if (el !is SchemaElement.Attribute) continue
+            val ownedIds = ownedByParent[id].orEmpty().map { it.id }.toSet()
+            val ordered = el.childAttributeIds.filter { it in ownedIds }.toMutableList()
+            for (oid in ownedIds) {
+                if (oid !in ordered) ordered.add(oid)
+            }
+            if (ordered != el.childAttributeIds) {
+                newElements = newElements + (id to el.copy(childAttributeIds = ordered))
+            }
+        }
+        return copy(elements = newElements)
+    }
 
     /**
      * Removes every id in [elementIds] and any [games.polyclub.power.brmodelo.domain.Connection]
@@ -146,6 +168,8 @@ data class ConceptualSchema(
             c.elementIdA !in elementIds && c.elementIdB !in elementIds
         }
         return copy(elements = newElements, connections = newConnections)
+            .withAttributeCompositeChildListsSyncedToOwners()
+            .withNormalizedAttributeMultiValuedCounts()
     }
 
     /** Adds a connection to the schema. */

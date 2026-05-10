@@ -37,6 +37,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolVariant
+import games.polyclub.power.brmodelo.domain.applyHideCanvasAttribute
+import games.polyclub.power.brmodelo.domain.applyRevealHiddenAttribute
+import games.polyclub.power.brmodelo.domain.canHideCanvasAttributeMenu
+import games.polyclub.power.brmodelo.domain.canRevealHiddenAttributeMenu
+import games.polyclub.power.brmodelo.domain.hiddenAttributeStorageOwnerId
+import games.polyclub.power.brmodelo.domain.ultimateNonAttributeOwner
 import games.polyclub.power.brmodelo.domain.applyConvertOptionalSpecializationsToRestricted
 import games.polyclub.power.brmodelo.domain.applyConvertRestrictedSpecializationToOptionals
 import games.polyclub.power.brmodelo.domain.applyMergeEntityAndRelationshipToAssociative
@@ -57,6 +63,7 @@ import games.polyclub.power.brmodelo.domain.canPromoteToAssociativeEntityMenu
 import games.polyclub.power.brmodelo.domain.canSelectAttributeTreeMenu
 import games.polyclub.power.brmodelo.domain.expandCanvasSelectionWithAttributeTrees
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
+import games.polyclub.power.brmodelo.domain.SchemaElement
 import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolVariant
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaBrmParser
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaXmlParser
@@ -502,6 +509,37 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         val updated = applyConvertRestrictedSpecializationToOptionals(tab.schema, tab.selection) ?: return@convO
         pushCommitOnSelected(updated.withNormalizedAttributeMultiValuedCounts())
     }
+    val hideAttrEnabled = canHideCanvasAttributeMenu(sel.schema, sel.selection)
+    val onHideCanvasAttribute: () -> Unit = hide@{
+        val tab = tabSessions.getOrNull(selectedTabIndex) ?: return@hide
+        val attrId = (tab.selection as? CanvasSelection.Element)?.id ?: return@hide
+        val attr = tab.schema.elements[attrId] as? SchemaElement.Attribute ?: return@hide
+        val storageId = hiddenAttributeStorageOwnerId(tab.schema, attr)
+        val updated = applyHideCanvasAttribute(tab.schema, tab.selection) ?: return@hide
+        val selectOwnerId = ultimateNonAttributeOwner(updated, storageId)
+        pushCommitOnSelected(updated.withNormalizedAttributeMultiValuedCounts())
+        mutateSelectedTab {
+            it.copy(
+                selection = CanvasSelection.Element(selectOwnerId),
+                hiddenAttributeRevealPath = null,
+            )
+        }
+    }
+    val revealHiddenEnabled =
+        canRevealHiddenAttributeMenu(sel.schema, sel.selection, sel.hiddenAttributeRevealPath)
+    val onRevealHiddenAttribute: () -> Unit = rev@{
+        val tab = tabSessions.getOrNull(selectedTabIndex) ?: return@rev
+        val path = tab.hiddenAttributeRevealPath ?: return@rev
+        val ownerId = (tab.selection as? CanvasSelection.Element)?.id ?: return@rev
+        val (updated, newAttrId) = applyRevealHiddenAttribute(tab.schema, ownerId, path) ?: return@rev
+        pushCommitOnSelected(updated.withNormalizedAttributeMultiValuedCounts())
+        mutateSelectedTab {
+            it.copy(
+                selection = CanvasSelection.Element(newAttrId),
+                hiddenAttributeRevealPath = null,
+            )
+        }
+    }
     val operationsMenuBinding = OperationsMenuRibbonBinding(
         organizeAttributesEnabled = organizeAttrsEnabled,
         onOrganizeAttributes = onOrganizeAttributes,
@@ -521,6 +559,10 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         onConvertOptionalSpecializationsToRestricted = onConvertOptionalSpecializationsToRestricted,
         convertRestrictedSpecializationToOptionalsEnabled = convertToOptionalsEnabled,
         onConvertRestrictedSpecializationToOptionals = onConvertRestrictedSpecializationToOptionals,
+        hideCanvasAttributeEnabled = hideAttrEnabled,
+        onHideCanvasAttribute = onHideCanvasAttribute,
+        revealHiddenAttributeEnabled = revealHiddenEnabled,
+        onRevealHiddenAttribute = onRevealHiddenAttribute,
     )
 
     MaterialTheme {
@@ -553,7 +595,7 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                     onDragStateChange = { isDragOverFromCallback = it },
                     onFileDrop = loadPickedFile,
                     onSelectionChange = { selNew ->
-                        mutateSelectedTab { it.copy(selection = selNew) }
+                        mutateSelectedTab { it.copy(selection = selNew, hiddenAttributeRevealPath = null) }
                     },
                     onSchemaPreview = onSchemaPreview,
                     onSchemaCommit = onSchemaCommit,
@@ -579,6 +621,11 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                     selectionBandUiState = selectionBandUi,
                     onSelectionBandUiChange = { selectionBandUi = it },
                     onOrganizeAttributes = onOrganizeAttributes,
+                    hiddenAttributeRevealPath = sel.hiddenAttributeRevealPath,
+                    onHiddenAttributeRevealPathChange = { p ->
+                        mutateSelectedTab { it.copy(hiddenAttributeRevealPath = p) }
+                    },
+                    onRevealHiddenAttributeInModel = onRevealHiddenAttribute,
                 )
 
                 pendingCloseTabIndex?.let { closeIdx ->

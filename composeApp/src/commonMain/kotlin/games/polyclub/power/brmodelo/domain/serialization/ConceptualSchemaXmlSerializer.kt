@@ -584,12 +584,18 @@ object ConceptualSchemaXmlSerializer {
             )
             valor("MaxCard", attr.cardinality.maxCardinality)
             valor("MinCard", attr.cardinality.minCardinality)
-            boolValor("Composto", attr.isComposite)
+            boolValor("Composto", attr.children.isNotEmpty())
             boolValor("Identificador", attr.isIdentifier)
+            boolValor("Opcional", attr.isOptional)
             valor("Tipo", attr.type)
-            if (attr.isComposite) {
+            if (attr.children.isNotEmpty()) {
                 add(xmlNode("Atributos") {
                     attr.children.forEach { add(buildAtributoOculto(it)) }
+                })
+            }
+            if (attr.nestedHiddenAttributes.isNotEmpty()) {
+                add(xmlNode("AtributosOcultosAninhados") {
+                    attr.nestedHiddenAttributes.forEach { add(buildAtributoOculto(it)) }
                 })
             }
         }

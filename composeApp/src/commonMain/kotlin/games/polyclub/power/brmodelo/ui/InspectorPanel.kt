@@ -89,6 +89,7 @@ import games.polyclub.power.brmodelo.domain.ArrowDirection
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.Cardinality
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
+import games.polyclub.power.brmodelo.domain.canRevealHiddenAttributeMenu
 import games.polyclub.power.brmodelo.domain.ElementPosition
 import games.polyclub.power.brmodelo.domain.HiddenAttribute
 import games.polyclub.power.brmodelo.domain.LineOrientation
@@ -218,6 +219,9 @@ internal fun InspectorPanel(
     onSchemaPreview: (ConceptualSchema) -> Unit = {},
     onSchemaCommit: (ConceptualSchema) -> Unit = {},
     onRevertSchemaPreview: () -> Unit = {},
+    hiddenAttributeRevealPath: List<Int>? = null,
+    onHiddenAttributeRevealPathChange: (List<Int>?) -> Unit = {},
+    onRevealHiddenAttributeInModel: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var activeTab by remember { mutableStateOf(InspectorTab.Selecao) }
@@ -255,6 +259,9 @@ internal fun InspectorPanel(
             InspectorTab.AtrOcultos -> HiddenAttributesTab(
                 schema = schema,
                 selection = selection,
+                hiddenAttributeRevealPath = hiddenAttributeRevealPath,
+                onHiddenAttributeRevealPathChange = onHiddenAttributeRevealPathChange,
+                onRevealHiddenAttributeInModel = onRevealHiddenAttributeInModel,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -1957,13 +1964,29 @@ private fun PropertyRow(
 private fun HiddenAttributesTab(
     schema: ConceptualSchema?,
     selection: CanvasSelection,
+    hiddenAttributeRevealPath: List<Int>?,
+    onHiddenAttributeRevealPathChange: (List<Int>?) -> Unit,
+    onRevealHiddenAttributeInModel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val hiddenAttrs: List<HiddenAttribute> = when (selection) {
-        is CanvasSelection.Element -> schema?.elements?.get(selection.id)?.hiddenAttributes ?: emptyList()
+        is CanvasSelection.Element -> schema?.elements?.get(selection.id)?.let { el ->
+            when (el) {
+                is SchemaElement.Entity -> el.hiddenAttributes
+                is SchemaElement.Relationship -> el.hiddenAttributes
+                is SchemaElement.AssociativeEntity -> el.hiddenAttributes
+                is SchemaElement.Attribute -> el.hiddenAttributes
+                is SchemaElement.SelfRelationship -> el.hiddenAttributes
+                is SchemaElement.Specialization -> el.hiddenAttributes
+                is SchemaElement.Annotation -> el.hiddenAttributes
+            }
+        }.orEmpty()
         is CanvasSelection.Multiple -> emptyList()
         else -> emptyList()
     }
+
+    val revealEnabled = schema != null &&
+        canRevealHiddenAttributeMenu(schema, selection, hiddenAttributeRevealPath)
 
     Column(modifier = modifier.fillMaxWidth()) {
         // Action buttons row
@@ -1985,8 +2008,12 @@ private fun HiddenAttributesTab(
                 .padding(horizontal = 4.dp, vertical = 3.dp),
         ) {
             ActionButton(
-                "Exibir no modelo",
-                onClick = { /* TODO */ })
+                label = "Exibir no modelo",
+                enabled = revealEnabled,
+                onClick = {
+                    if (revealEnabled) onRevealHiddenAttributeInModel()
+                },
+            )
         }
         HorizontalDivider(color = CELL_BORDER, thickness = 1.dp)
 
@@ -2010,8 +2037,13 @@ private fun HiddenAttributesTab(
                     depth = 0,
                     bold = true
                 )
-                hiddenAttrs.forEach { attr ->
-                    HiddenAttributeNode(attr, depth = 1)
+                hiddenAttrs.forEachIndexed { index, attr ->
+                    SelectableHiddenAttributeBranch(
+                        attr = attr,
+                        pathPrefix = listOf(index),
+                        selectedPath = hiddenAttributeRevealPath,
+                        onSelectPath = onHiddenAttributeRevealPathChange,
+                    )
                 }
             }
         }
@@ -2019,26 +2051,82 @@ private fun HiddenAttributesTab(
 }
 
 @Composable
-private fun HiddenAttributeNode(attr: HiddenAttribute, depth: Int) {
-    TreeNode(text = attr.name, depth = depth)
-    TreeNode(text = "Propriedades", depth = depth + 1)
+private fun SelectableHiddenAttributeBranch(
+    attr: HiddenAttribute,
+    pathPrefix: List<Int>,
+    selectedPath: List<Int>?,
+    onSelectPath: (List<Int>?) -> Unit,
+) {
+    val nameSelected = selectedPath == pathPrefix
+    ClickableTreeNode(
+        text = attr.name,
+        depth = pathPrefix.size,
+        selected = nameSelected,
+        onClick = { onSelectPath(if (nameSelected) null else pathPrefix) },
+    )
+    TreeNode(text = "Propriedades", depth = pathPrefix.size + 1)
     if (attr.isMultiValued) {
         TreeNode(
             text = "Cardinalidade: ${attr.cardinality.toLabel()}",
-            depth = depth + 2
+            depth = pathPrefix.size + 2
         )
     }
     TreeNode(
         text = "Identificador: ${if (attr.isIdentifier) "Sim" else "Não"}",
-        depth = depth + 2,
+        depth = pathPrefix.size + 2,
+    )
+    TreeNode(
+        text = "Opcional: ${if (attr.isOptional) "Sim" else "Não"}",
+        depth = pathPrefix.size + 2,
     )
     TreeNode(
         text = "Tipo: ${attr.type.ifBlank { "-" }}",
-        depth = depth + 2
+        depth = pathPrefix.size + 2,
     )
     if (attr.isComposite) {
-        TreeNode(text = "Atributos", depth = depth + 1)
-        attr.children.forEach { child -> HiddenAttributeNode(child, depth + 2) }
+        TreeNode(text = "Atributos", depth = pathPrefix.size + 1)
+        attr.children.forEachIndexed { i, child ->
+            SelectableHiddenAttributeBranch(
+                attr = child,
+                pathPrefix = pathPrefix + i,
+                selectedPath = selectedPath,
+                onSelectPath = onSelectPath,
+            )
+        }
+        attr.nestedHiddenAttributes.forEachIndexed { j, nested ->
+            SelectableHiddenAttributeBranch(
+                attr = nested,
+                pathPrefix = pathPrefix + attr.children.size + j,
+                selectedPath = selectedPath,
+                onSelectPath = onSelectPath,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ClickableTreeNode(
+    text: String,
+    depth: Int,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val bg = if (selected) Color(0xFFC8DCFA) else Color.Transparent
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(bg)
+            .clickable(onClick = onClick)
+            .padding(start = (depth * 12).dp, top = 1.dp, bottom = 1.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("◆ ", fontSize = 8.sp, color = Color(0xFF5080B0))
+        Text(
+            text = text,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Normal,
+            color = Color(0xFF1A2535),
+        )
     }
 }
 
@@ -2061,15 +2149,20 @@ private fun TreeNode(text: String, depth: Int, bold: Boolean = false) {
 }
 
 @Composable
-private fun ActionButton(label: String, onClick: () -> Unit) {
+private fun ActionButton(
+    label: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    val alpha = if (enabled) 1f else 0.45f
     Box(
         modifier = Modifier
-            .background(Color(0xFFDCE6F0))
-            .border(1.dp, Color(0xFF8090A8))
-            .clickable(onClick = onClick)
+            .background(Color(0xFFDCE6F0).copy(alpha = alpha))
+            .border(1.dp, Color(0xFF8090A8).copy(alpha = alpha))
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 6.dp, vertical = 2.dp),
     ) {
-        Text(label, fontSize = 10.sp, color = Color(0xFF1A2535))
+        Text(label, fontSize = 10.sp, color = Color(0xFF1A2535).copy(alpha = alpha))
     }
 }
 

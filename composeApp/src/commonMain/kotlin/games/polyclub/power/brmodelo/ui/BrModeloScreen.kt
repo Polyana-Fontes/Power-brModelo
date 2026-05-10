@@ -98,6 +98,9 @@ internal fun BrModeloScreen(
     selectionBandUiState: SelectionBandUiState? = null,
     onSelectionBandUiChange: (SelectionBandUiState?) -> Unit = {},
     onOrganizeAttributes: () -> Unit = {},
+    hiddenAttributeRevealPath: List<Int>? = null,
+    onHiddenAttributeRevealPathChange: (List<Int>?) -> Unit = {},
+    onRevealHiddenAttributeInModel: () -> Unit = {},
 ) {
     var exportCounter by remember { mutableIntStateOf(0) }
     var exportIsJpeg by remember { mutableStateOf(true) }
@@ -162,6 +165,9 @@ internal fun BrModeloScreen(
                 selectionBandUiState = selectionBandUiState,
                 onSelectionBandUiChange = onSelectionBandUiChange,
                 onOrganizeAttributes = onOrganizeAttributes,
+                hiddenAttributeRevealPath = hiddenAttributeRevealPath,
+                onHiddenAttributeRevealPathChange = onHiddenAttributeRevealPathChange,
+                onRevealHiddenAttributeInModel = onRevealHiddenAttributeInModel,
             )
         }
 

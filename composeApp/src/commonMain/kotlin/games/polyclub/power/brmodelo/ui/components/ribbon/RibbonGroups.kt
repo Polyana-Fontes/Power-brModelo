@@ -86,6 +86,8 @@ internal fun RibbonGroup(
                         binding?.mergeEntityAndRelationshipToAssociativeEnabled ?: false,
                         binding?.convertOptionalSpecializationsToRestrictedEnabled ?: false,
                         binding?.convertRestrictedSpecializationToOptionalsEnabled ?: false,
+                        binding?.hideCanvasAttributeEnabled ?: false,
+                        binding?.revealHiddenAttributeEnabled ?: false,
                     )
                     RibbonButton(
                         entry = item.copy(dropdown = entries),
@@ -109,6 +111,10 @@ internal fun RibbonGroup(
                                     binding?.onConvertOptionalSpecializationsToRestricted?.invoke()
                                 ConceptualRibbonOperation.ConvertRestrictedSpecializationToOptionals ->
                                     binding?.onConvertRestrictedSpecializationToOptionals?.invoke()
+                                ConceptualRibbonOperation.HideCanvasAttribute ->
+                                    binding?.onHideCanvasAttribute?.invoke()
+                                ConceptualRibbonOperation.RevealHiddenAttribute ->
+                                    binding?.onRevealHiddenAttribute?.invoke()
                                 null -> Unit
                             }
                         },

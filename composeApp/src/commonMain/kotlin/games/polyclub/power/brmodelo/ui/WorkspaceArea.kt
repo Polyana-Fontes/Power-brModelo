@@ -54,6 +54,9 @@ internal fun WorkspaceArea(
     selectionBandUiState: SelectionBandUiState? = null,
     onSelectionBandUiChange: (SelectionBandUiState?) -> Unit = {},
     onOrganizeAttributes: () -> Unit = {},
+    hiddenAttributeRevealPath: List<Int>? = null,
+    onHiddenAttributeRevealPathChange: (List<Int>?) -> Unit = {},
+    onRevealHiddenAttributeInModel: () -> Unit = {},
 ) {
     Row(modifier = Modifier.fillMaxSize().padding(8.dp)) {
         MainCanvasPanel(
@@ -91,6 +94,9 @@ internal fun WorkspaceArea(
             onSchemaPreview = onSchemaPreview,
             onSchemaCommit = onSchemaCommit,
             onRevertSchemaPreview = onRevertSchemaPreview,
+            hiddenAttributeRevealPath = hiddenAttributeRevealPath,
+            onHiddenAttributeRevealPathChange = onHiddenAttributeRevealPathChange,
+            onRevealHiddenAttributeInModel = onRevealHiddenAttributeInModel,
         )
     }
 }

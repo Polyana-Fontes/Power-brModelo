@@ -45,6 +45,8 @@ internal enum class ConceptualRibbonOperation {
     MergeEntityAndRelationshipToAssociative,
     ConvertOptionalSpecializationsToRestricted,
     ConvertRestrictedSpecializationToOptionals,
+    HideCanvasAttribute,
+    RevealHiddenAttribute,
 }
 
 internal data class DropdownEntry(
@@ -158,6 +160,10 @@ internal data class OperationsMenuRibbonBinding(
     val onConvertOptionalSpecializationsToRestricted: () -> Unit,
     val convertRestrictedSpecializationToOptionalsEnabled: Boolean,
     val onConvertRestrictedSpecializationToOptionals: () -> Unit,
+    val hideCanvasAttributeEnabled: Boolean,
+    val onHideCanvasAttribute: () -> Unit,
+    val revealHiddenAttributeEnabled: Boolean,
+    val onRevealHiddenAttribute: () -> Unit,
 )
 
 internal data class MenuEntry(

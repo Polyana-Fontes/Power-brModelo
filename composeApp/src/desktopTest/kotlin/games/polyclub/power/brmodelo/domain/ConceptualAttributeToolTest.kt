@@ -82,6 +82,35 @@ class ConceptualAttributeToolTest {
     }
 
     @Test
+    fun `new attribute name avoids names used in hidden attribute trees`() {
+        // Arrange
+        val ent = SchemaElement.Entity(
+            id = 1,
+            name = "Entidade1",
+            position = ElementPosition(100, 100, 102, 66),
+            hiddenAttributes = listOf(
+                HiddenAttribute(
+                    name = "Atributo1",
+                    type = "",
+                    isIdentifier = false,
+                    cardinality = AttributeCardinality(0, 0),
+                    position = ElementPosition(-1, -1, 0, 0),
+                ),
+            ),
+        )
+        val schema = ConceptualSchema(elements = mapOf(1 to ent), nextId = 2)
+        val click = Offset(205f, 133f)
+
+        // Act
+        val r = applyConceptualAttributeTool(schema, 1, click, ConceptualAttributeToolVariant.Basic)
+
+        // Assert
+        val ok = assertIs<ConceptualAttributeToolResult.Ok>(r)
+        val attr = ok.schema.elements[ok.newPrimaryAttributeId] as SchemaElement.Attribute
+        assertEquals("Atributo2", attr.name)
+    }
+
+    @Test
     fun `multivalued variant sets cardinality 1 n`() {
         // Arrange
         val ent = SchemaElement.Entity(

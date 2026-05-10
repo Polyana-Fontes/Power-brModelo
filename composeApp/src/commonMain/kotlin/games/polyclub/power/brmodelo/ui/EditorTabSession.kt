@@ -32,6 +32,8 @@ internal data class EditorTabSession(
     val inspectorCommittedSchema: ConceptualSchema?,
     val savedDiskBaseline: ConceptualSchema?,
     val selection: CanvasSelection,
+    /** Indices path into [SchemaElement.hiddenAttributes] for **Atr. ocultos** → **Exibir no modelo**. */
+    val hiddenAttributeRevealPath: List<Int>? = null,
 ) {
     fun hasUnsavedChanges(): Boolean =
         savedDiskBaseline == null || schema != savedDiskBaseline
@@ -65,6 +67,7 @@ internal data class EditorTabSession(
                 inspectorCommittedSchema = empty,
                 savedDiskBaseline = null,
                 selection = CanvasSelection.None,
+                hiddenAttributeRevealPath = null,
             )
         }
 
@@ -77,6 +80,7 @@ internal data class EditorTabSession(
                 inspectorCommittedSchema = schema,
                 savedDiskBaseline = schema,
                 selection = CanvasSelection.None,
+                hiddenAttributeRevealPath = null,
             )
         }
     }
