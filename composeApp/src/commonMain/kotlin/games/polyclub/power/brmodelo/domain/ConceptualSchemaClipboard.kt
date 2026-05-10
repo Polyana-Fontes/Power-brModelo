@@ -285,7 +285,7 @@ internal fun mergeTranslatedFragment(target: ConceptualSchema, fragment: Concept
     }
 
     work = work.withNormalizedAttributeMultiValuedCounts()
-    work = work.withDedupedConceptualSchemaElementNames()
+    work = work.withDedupedConceptualSchemaElementNames(pastedIds)
     return work to pastedIds
 }
 
@@ -326,12 +326,16 @@ private fun disambiguateName(base: String, isTaken: (String) -> Boolean): String
     }
 }
 
-/** Ensures unique names across the entire schema (canvas elements and hidden attribute trees). */
-private fun ConceptualSchema.withDedupedConceptualSchemaElementNames(): ConceptualSchema {
-    val allIds = elements.keys.sorted()
-    if (allIds.isEmpty()) return this
+/**
+ * Renames labels only for elements in [renameOnlyIds] when they collide with any name already used
+ * in the schema (including non-renamed elements). Original canvas content stays unchanged; pasted
+ * fragments receive disambiguated names.
+ */
+private fun ConceptualSchema.withDedupedConceptualSchemaElementNames(renameOnlyIds: Set<Int>): ConceptualSchema {
+    if (renameOnlyIds.isEmpty()) return this
+    val ordered = renameOnlyIds.toList().sorted()
     var s = this
-    for (id in allIds) {
+    for (id in ordered) {
         val el = s.elements[id] ?: continue
         val next = when (el) {
             is SchemaElement.Entity -> {
@@ -382,9 +386,7 @@ private fun ConceptualSchema.withDedupedConceptualSchemaElementNames(): Conceptu
             }
             is SchemaElement.Attribute -> {
                 val nn = disambiguateName(el.name) { cand ->
-                    s.attributes.any {
-                        it.ownerId == el.ownerId && it.name == cand && it.id != id
-                    }
+                    s.attributes.any { it.name == cand && it.id != id }
                 }
                 el.copy(
                     name = nn,
@@ -396,8 +398,8 @@ private fun ConceptualSchema.withDedupedConceptualSchemaElementNames(): Conceptu
             s = s.copy(elements = s.elements + (id to next))
         }
     }
-    // Second pass: entity-likes may have been updated; fix hidden trees on non-attributes too.
-    for (id in allIds) {
+    // Second pass: entity-likes among pasted ids may have been updated; fix hidden trees on non-attributes too.
+    for (id in ordered) {
         val el = s.elements[id] ?: continue
         if (el is SchemaElement.Attribute) continue
         val hid = dedupeHiddenAttributeTreeNames(el.hiddenAttributes)

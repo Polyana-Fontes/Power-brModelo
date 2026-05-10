@@ -76,6 +76,8 @@ import org.jetbrains.compose.resources.painterResource
 private val SPLIT_ARROW_STRIP_H = 14.dp
 private val SPLIT_INNER_SEGMENT_SHAPE = RoundedCornerShape(2.dp)
 
+private val ribbonDisabledGrayscale = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
+
 /** Conceptual-schema ribbon entries that use a split control (main = default tool, arrow = category menu). */
 private val RIBBON_SPLIT_DROPDOWN_TITLES = setOf(
     "Entidade",
@@ -457,38 +459,43 @@ internal fun RibbonButton(
 internal fun LargeRibbonButton(entry: MenuEntry, buttonWidth: Dp) {
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
+    val enabled = entry.enabled
+    val canClick = enabled && entry.onClick != null
+    val isActive = enabled && isHovered
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Top,
         modifier = Modifier
             .width(buttonWidth)
             .fillMaxHeight()
-            .hoverable(interactionSource)
+            .then(if (enabled) Modifier.hoverable(interactionSource) else Modifier)
             .then(
-                if (entry.onClick != null) {
+                if (canClick) {
                     Modifier.clickable(
                         interactionSource = interactionSource,
                         indication = null,
-                        onClick = entry.onClick,
+                        onClick = entry.onClick!!,
                     )
                 } else {
                     Modifier
                 },
             )
-            .background(if (isHovered) AppColors.hoverBg else Color.Transparent, AppColors.hoverShape)
-            .border(1.dp, if (isHovered) AppColors.hoverBorder else Color.Transparent, AppColors.hoverShape)
+            .background(if (isActive) AppColors.hoverBg else Color.Transparent, AppColors.hoverShape)
+            .border(1.dp, if (isActive) AppColors.hoverBorder else Color.Transparent, AppColors.hoverShape)
             .padding(horizontal = 3.dp, vertical = 3.dp)
     ) {
         Image(
             painter = painterResource(entry.icon),
             contentDescription = entry.title,
             modifier = Modifier.size(42.dp),
-            contentScale = ContentScale.Fit
+            contentScale = ContentScale.Fit,
+            alpha = if (enabled) 1f else 0.55f,
+            colorFilter = if (enabled) null else ribbonDisabledGrayscale,
         )
         Text(
             text = entry.title,
             fontSize = 9.sp,
-            color = Color(0xFF2C3E50),
+            color = if (enabled) Color(0xFF2C3E50) else Color(0xFF8A8A8A),
             textAlign = TextAlign.Center,
             lineHeight = 10.sp,
             modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
@@ -501,33 +508,38 @@ internal fun LargeRibbonButton(entry: MenuEntry, buttonWidth: Dp) {
 internal fun SmallRibbonButton(entry: MenuEntry) {
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
+    val enabled = entry.enabled
+    val canClick = enabled && entry.onClick != null
+    val isActive = enabled && isHovered
     // Fixed height ensures the Row never grows taller than necessary and
     // CenterVertically reliably centers both icon and text on the same axis.
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .height(20.dp)
-            .hoverable(interactionSource)
+            .then(if (enabled) Modifier.hoverable(interactionSource) else Modifier)
             .then(
-                if (entry.onClick != null) {
+                if (canClick) {
                     Modifier.clickable(
                         interactionSource = interactionSource,
                         indication = null,
-                        onClick = entry.onClick,
+                        onClick = entry.onClick!!,
                     )
                 } else {
                     Modifier
                 },
             )
-            .background(if (isHovered) AppColors.hoverBg else Color.Transparent, AppColors.hoverShape)
-            .border(1.dp, if (isHovered) AppColors.hoverBorder else Color.Transparent, AppColors.hoverShape)
+            .background(if (isActive) AppColors.hoverBg else Color.Transparent, AppColors.hoverShape)
+            .border(1.dp, if (isActive) AppColors.hoverBorder else Color.Transparent, AppColors.hoverShape)
             .padding(horizontal = 2.dp)
     ) {
         Image(
             painter = painterResource(entry.icon),
             contentDescription = entry.title,
             modifier = Modifier.size(16.dp),
-            contentScale = ContentScale.Fit
+            contentScale = ContentScale.Fit,
+            alpha = if (enabled) 1f else 0.55f,
+            colorFilter = if (enabled) null else ribbonDisabledGrayscale,
         )
         Spacer(modifier = Modifier.width(3.dp))
         Text(
@@ -536,18 +548,13 @@ internal fun SmallRibbonButton(entry: MenuEntry) {
             // lineHeight = fontSize removes the default font descender padding that
             // causes the text baseline to appear lower than the icon center.
             lineHeight = 9.sp,
-            color = Color(0xFF2C3E50),
+            color = if (enabled) Color(0xFF2C3E50) else Color(0xFF8A8A8A),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
     }
 }
 
-private val disabledHistoryGrayscale = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
-
-/**
- * Large ribbon glyph (same icon size as tool buttons) for undo/redo: enabled only when [enabled].
- */
 @Composable
 internal fun RibbonLargeGlyphHistoryButton(
     icon: DrawableResource,
@@ -590,7 +597,7 @@ internal fun RibbonLargeGlyphHistoryButton(
             modifier = Modifier.size(32.dp),
             contentScale = ContentScale.Fit,
             alpha = if (enabled) 1f else 0.55f,
-            colorFilter = if (enabled) null else disabledHistoryGrayscale,
+            colorFilter = if (enabled) null else ribbonDisabledGrayscale,
         )
         Text(
             text = label,

@@ -170,13 +170,24 @@ internal fun RibbonOpcoes(
             title = "Área de Transferência",
             largeButtonWidth = 56.dp,
             largeEntry = MenuEntry(
-                "Colar",
-                Res.drawable.colar_l,
+                title = "Colar",
+                icon = Res.drawable.colar_l,
                 onClick = clipboardRibbonBinding?.onPaste,
+                enabled = clipboardRibbonBinding?.pasteEnabled == true,
             ),
             smallEntries = listOf(
-                MenuEntry("Recortar", Res.drawable.recortar_s, onClick = clipboardRibbonBinding?.onCut),
-                MenuEntry("Copiar", Res.drawable.copiar_s, onClick = clipboardRibbonBinding?.onCopy),
+                MenuEntry(
+                    title = "Recortar",
+                    icon = Res.drawable.recortar_s,
+                    onClick = clipboardRibbonBinding?.onCut,
+                    enabled = clipboardRibbonBinding?.cutEnabled == true,
+                ),
+                MenuEntry(
+                    title = "Copiar",
+                    icon = Res.drawable.copiar_s,
+                    onClick = clipboardRibbonBinding?.onCopy,
+                    enabled = clipboardRibbonBinding?.copyEnabled == true,
+                ),
             ),
         )
         Spacer(modifier = Modifier.width(5.dp))

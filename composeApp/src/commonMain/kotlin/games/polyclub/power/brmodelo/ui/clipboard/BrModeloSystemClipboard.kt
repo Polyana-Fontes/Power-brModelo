@@ -18,6 +18,8 @@
 
 package games.polyclub.power.brmodelo.ui.clipboard
 
+import games.polyclub.power.brmodelo.domain.decodeClipboardPayload
+
 /** Platform text clipboard; returns false / null when unavailable or denied. */
 internal expect fun brModeloClipboardSetPlainText(text: String): Boolean
 
@@ -39,6 +41,33 @@ internal expect suspend fun brModeloClipboardTryReadPlainTextAsync(): String?
 internal object BrModeloConceptualClipboardStore {
 
     private var memoryFallback: String? = null
+
+    /**
+     * Puts [text] into the in-memory fallback immediately so Paste can be enabled in the same frame
+     * (before [writePreferred] finishes async clipboard I/O).
+     */
+    internal fun mirrorLocalClipboardText(text: String) {
+        memoryFallback = text
+    }
+
+    /** True when [text] is a decodable conceptual clipboard payload (MER/XML body). */
+    internal fun isDecodableConceptualPayload(text: String): Boolean =
+        decodeClipboardPayload(text.trim()) != null
+
+    /**
+     * Whether Paste can run: in-memory mirror or sync OS clipboard contains a decodable conceptual payload.
+     */
+    internal fun hasPasteableConceptualPayload(): Boolean {
+        memoryFallback?.trim()?.takeIf { it.isNotEmpty() }?.let { raw ->
+            if (isDecodableConceptualPayload(raw)) return true
+        }
+        return try {
+            val t = brModeloClipboardGetPlainText()?.trim().orEmpty()
+            t.isNotEmpty() && isDecodableConceptualPayload(t)
+        } catch (_: Throwable) {
+            false
+        }
+    }
 
     /**
      * Writes [text] using [brModeloClipboardTryWritePlainTextAsync] first, then updates

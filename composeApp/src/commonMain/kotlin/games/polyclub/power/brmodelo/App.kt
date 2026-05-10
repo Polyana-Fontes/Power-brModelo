@@ -114,6 +114,13 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
     var isMainMenuOpen by remember { mutableStateOf(false) }
     var activeMenu by remember { mutableStateOf<MainMenuType?>(null) }
     var selectedRibbonTab by remember { mutableStateOf(RibbonTab.EsquemaConceitual) }
+    var clipboardUiTick by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(selectedRibbonTab) {
+        if (selectedRibbonTab == RibbonTab.Opcoes) {
+            clipboardUiTick++
+        }
+    }
 
     var conceptualCanvasTool by remember { mutableStateOf<ConceptualCanvasTool>(ConceptualCanvasTool.None) }
     var bulkDeleteUi by remember { mutableStateOf<BulkDeleteUiState?>(null) }
@@ -350,6 +357,8 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
     val onCopyConceptualClipboard: () -> Unit = copy@{
         val tab = tabSessions.getOrNull(selectedTabIndex) ?: return@copy
         val payload = buildConceptualClipboardPayload(tab.schema, tab.selection, tab.id) ?: return@copy
+        BrModeloConceptualClipboardStore.mirrorLocalClipboardText(payload)
+        clipboardUiTick++
         scope.launch {
             BrModeloConceptualClipboardStore.writePreferred(payload)
         }
@@ -359,6 +368,8 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         val idx = selectedTabIndex
         val tab = tabSessions.getOrNull(idx) ?: return@cut
         val payload = buildConceptualClipboardPayload(tab.schema, tab.selection, tab.id) ?: return@cut
+        BrModeloConceptualClipboardStore.mirrorLocalClipboardText(payload)
+        clipboardUiTick++
         scope.launch {
             BrModeloConceptualClipboardStore.writePreferred(payload)
             val current = tabsState.value.getOrNull(idx) ?: return@launch
@@ -378,6 +389,7 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
     }
 
     val onPasteConceptualClipboard: () -> Unit = paste@{
+        if (!BrModeloConceptualClipboardStore.hasPasteableConceptualPayload()) return@paste
         // Snapshot anchor **before** suspending on clipboard I/O (async read would advance frames and stale pointers).
         val viewSnapshot = schemaCanvasViewStateRef.value
         val idx = selectedTabIdxState.value
@@ -411,7 +423,16 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         }
     }
 
+    val conceptualCopyCutEnabled = buildConceptualClipboardPayload(sel.schema, sel.selection, sel.id) != null
+    val conceptualPasteEnabled = run {
+        clipboardUiTick
+        BrModeloConceptualClipboardStore.hasPasteableConceptualPayload()
+    }
+
     val clipboardRibbonBinding = ClipboardRibbonBinding(
+        copyEnabled = conceptualCopyCutEnabled,
+        cutEnabled = conceptualCopyCutEnabled,
+        pasteEnabled = conceptualPasteEnabled,
         onCopy = onCopyConceptualClipboard,
         onCut = onCutConceptualClipboard,
         onPaste = onPasteConceptualClipboard,

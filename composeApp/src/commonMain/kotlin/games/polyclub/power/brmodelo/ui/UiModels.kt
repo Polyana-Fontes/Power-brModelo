@@ -171,6 +171,9 @@ internal data class OperationsMenuRibbonBinding(
 )
 
 internal data class ClipboardRibbonBinding(
+    val copyEnabled: Boolean,
+    val cutEnabled: Boolean,
+    val pasteEnabled: Boolean,
     val onCopy: () -> Unit,
     val onCut: () -> Unit,
     val onPaste: () -> Unit,
@@ -181,4 +184,5 @@ internal data class MenuEntry(
     val icon: DrawableResource,
     val dropdown: List<DropdownEntry>? = null,
     val onClick: (() -> Unit)? = null,
+    val enabled: Boolean = true,
 )
