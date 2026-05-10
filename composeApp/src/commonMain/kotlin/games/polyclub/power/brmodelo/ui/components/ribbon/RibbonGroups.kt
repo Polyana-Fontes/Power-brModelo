@@ -84,6 +84,8 @@ internal fun RibbonGroup(
                         binding?.demoteAssociativeToRelationshipEnabled ?: false,
                         binding?.demoteAssociativeToEntityEnabled ?: false,
                         binding?.mergeEntityAndRelationshipToAssociativeEnabled ?: false,
+                        binding?.convertOptionalSpecializationsToRestrictedEnabled ?: false,
+                        binding?.convertRestrictedSpecializationToOptionalsEnabled ?: false,
                     )
                     RibbonButton(
                         entry = item.copy(dropdown = entries),
@@ -103,6 +105,10 @@ internal fun RibbonGroup(
                                     binding?.onDemoteAssociativeToEntity?.invoke()
                                 ConceptualRibbonOperation.MergeEntityAndRelationshipToAssociative ->
                                     binding?.onMergeEntityAndRelationshipToAssociative?.invoke()
+                                ConceptualRibbonOperation.ConvertOptionalSpecializationsToRestricted ->
+                                    binding?.onConvertOptionalSpecializationsToRestricted?.invoke()
+                                ConceptualRibbonOperation.ConvertRestrictedSpecializationToOptionals ->
+                                    binding?.onConvertRestrictedSpecializationToOptionals?.invoke()
                                 null -> Unit
                             }
                         },

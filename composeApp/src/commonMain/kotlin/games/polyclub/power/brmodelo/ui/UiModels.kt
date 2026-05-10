@@ -43,6 +43,8 @@ internal enum class ConceptualRibbonOperation {
     DemoteAssociativeToRelationship,
     DemoteAssociativeToEntity,
     MergeEntityAndRelationshipToAssociative,
+    ConvertOptionalSpecializationsToRestricted,
+    ConvertRestrictedSpecializationToOptionals,
 }
 
 internal data class DropdownEntry(
@@ -152,6 +154,10 @@ internal data class OperationsMenuRibbonBinding(
     val onDemoteAssociativeToEntity: () -> Unit,
     val mergeEntityAndRelationshipToAssociativeEnabled: Boolean,
     val onMergeEntityAndRelationshipToAssociative: () -> Unit,
+    val convertOptionalSpecializationsToRestrictedEnabled: Boolean,
+    val onConvertOptionalSpecializationsToRestricted: () -> Unit,
+    val convertRestrictedSpecializationToOptionalsEnabled: Boolean,
+    val onConvertRestrictedSpecializationToOptionals: () -> Unit,
 )
 
 internal data class MenuEntry(

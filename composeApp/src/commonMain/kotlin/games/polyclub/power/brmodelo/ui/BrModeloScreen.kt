@@ -78,6 +78,7 @@ internal fun BrModeloScreen(
     onSchemaCommit: (ConceptualSchema) -> Unit = {},
     onRevertSchemaPreview: () -> Unit = {},
     onCloseCurrentModel: () -> Unit = {},
+    onQuitApplication: () -> Unit = {},
     onSave: () -> Unit = {},
     onSaveAs: () -> Unit = {},
     entityToolBinding: EntityToolRibbonBinding? = null,
@@ -197,6 +198,10 @@ internal fun BrModeloScreen(
                 onCloseCurrentModel = {
                     onDismissMenu()
                     onCloseCurrentModel()
+                },
+                onQuitApplication = {
+                    onDismissMenu()
+                    onQuitApplication()
                 },
                 onExportJpeg = {
                     onDismissMenu()

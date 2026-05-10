@@ -38,6 +38,8 @@ internal fun conceptualOperationsDropdownEntries(
     demoteAssociativeToRelationshipEnabled: Boolean,
     demoteAssociativeToEntityEnabled: Boolean,
     mergeEntityAndRelationshipToAssociativeEnabled: Boolean,
+    convertOptionalSpecializationsToRestrictedEnabled: Boolean,
+    convertRestrictedSpecializationToOptionalsEnabled: Boolean,
 ): List<DropdownEntry> =
     listOf(
         DropdownEntry(
@@ -93,10 +95,14 @@ internal fun conceptualOperationsDropdownEntries(
             label = "Converter Esp. para Restrita",
             icon = Res.drawable.especializacao_exclusiva_s,
             isSeparatorAbove = true,
+            enabled = convertOptionalSpecializationsToRestrictedEnabled,
+            conceptualOperation = ConceptualRibbonOperation.ConvertOptionalSpecializationsToRestricted,
         ),
         DropdownEntry(
             label = "Converter Esp. para Opcional",
             icon = Res.drawable.especializacao_nao_exclusiva_s,
+            enabled = convertRestrictedSpecializationToOptionalsEnabled,
+            conceptualOperation = ConceptualRibbonOperation.ConvertRestrictedSpecializationToOptionals,
         ),
         DropdownEntry(
             label = "Dicionário de Dados do Objeto",

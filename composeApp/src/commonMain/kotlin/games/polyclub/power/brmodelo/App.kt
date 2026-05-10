@@ -37,7 +37,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolVariant
+import games.polyclub.power.brmodelo.domain.applyConvertOptionalSpecializationsToRestricted
+import games.polyclub.power.brmodelo.domain.applyConvertRestrictedSpecializationToOptionals
 import games.polyclub.power.brmodelo.domain.applyMergeEntityAndRelationshipToAssociative
+import games.polyclub.power.brmodelo.domain.canConvertOptionalSpecializationsToRestrictedMenu
+import games.polyclub.power.brmodelo.domain.canConvertRestrictedSpecializationToOptionalsMenu
 import games.polyclub.power.brmodelo.domain.entityAndRelationshipIdsForMerge
 import games.polyclub.power.brmodelo.domain.applyDemoteAssociativeToEntity
 import games.polyclub.power.brmodelo.domain.applyDemoteAssociativeToRelationship
@@ -304,16 +308,17 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
     }
 
     val tabsState = rememberUpdatedState(tabSessions)
-    DisposableEffect(scope) {
-        registerDesktopMainWindowCloseHandler {
-            scope.launch {
-                if (tabsState.value.any { it.needsCloseConfirmation() }) {
-                    pendingApplicationQuit = true
-                } else {
-                    quitApplicationCompletely()
-                }
+    val requestApplicationQuit: () -> Unit = {
+        scope.launch {
+            if (tabsState.value.any { it.needsCloseConfirmation() }) {
+                pendingApplicationQuit = true
+            } else {
+                quitApplicationCompletely()
             }
         }
+    }
+    DisposableEffect(scope) {
+        registerDesktopMainWindowCloseHandler { requestApplicationQuit() }
         onDispose { registerDesktopMainWindowCloseHandler(null) }
     }
 
@@ -485,6 +490,18 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         pushCommitOnSelected(updated.withNormalizedAttributeMultiValuedCounts())
         mutateSelectedTab { it.copy(selection = CanvasSelection.Element(entityId)) }
     }
+    val convertToRestrictedEnabled = canConvertOptionalSpecializationsToRestrictedMenu(sel.schema, sel.selection)
+    val onConvertOptionalSpecializationsToRestricted: () -> Unit = convR@{
+        val tab = tabSessions.getOrNull(selectedTabIndex) ?: return@convR
+        val updated = applyConvertOptionalSpecializationsToRestricted(tab.schema, tab.selection) ?: return@convR
+        pushCommitOnSelected(updated.withNormalizedAttributeMultiValuedCounts())
+    }
+    val convertToOptionalsEnabled = canConvertRestrictedSpecializationToOptionalsMenu(sel.schema, sel.selection)
+    val onConvertRestrictedSpecializationToOptionals: () -> Unit = convO@{
+        val tab = tabSessions.getOrNull(selectedTabIndex) ?: return@convO
+        val updated = applyConvertRestrictedSpecializationToOptionals(tab.schema, tab.selection) ?: return@convO
+        pushCommitOnSelected(updated.withNormalizedAttributeMultiValuedCounts())
+    }
     val operationsMenuBinding = OperationsMenuRibbonBinding(
         organizeAttributesEnabled = organizeAttrsEnabled,
         onOrganizeAttributes = onOrganizeAttributes,
@@ -500,6 +517,10 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         onDemoteAssociativeToEntity = onDemoteAssociativeToEntity,
         mergeEntityAndRelationshipToAssociativeEnabled = mergeToAssocEnabled,
         onMergeEntityAndRelationshipToAssociative = onMergeEntityAndRelationshipToAssociative,
+        convertOptionalSpecializationsToRestrictedEnabled = convertToRestrictedEnabled,
+        onConvertOptionalSpecializationsToRestricted = onConvertOptionalSpecializationsToRestricted,
+        convertRestrictedSpecializationToOptionalsEnabled = convertToOptionalsEnabled,
+        onConvertRestrictedSpecializationToOptionals = onConvertRestrictedSpecializationToOptionals,
     )
 
     MaterialTheme {
@@ -538,6 +559,7 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                     onSchemaCommit = onSchemaCommit,
                     onRevertSchemaPreview = onRevertSchemaPreview,
                     onCloseCurrentModel = { requestCloseTab(selectedTabIndex) },
+                    onQuitApplication = requestApplicationQuit,
                     onSave = { enqueueSave(saveAs = false) },
                     onSaveAs = { enqueueSave(saveAs = true) },
                     entityToolBinding = entityToolBinding,

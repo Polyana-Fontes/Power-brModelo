@@ -81,6 +81,7 @@ internal fun FunctionalMainMenu(
     onOpenFile: () -> Unit = {},
     onNewConceptualModel: () -> Unit = {},
     onCloseCurrentModel: () -> Unit = {},
+    onQuitApplication: () -> Unit = {},
     onExportJpeg: () -> Unit = {},
     onExportPng: () -> Unit = {},
     onSave: () -> Unit = {},
@@ -94,6 +95,7 @@ internal fun FunctionalMainMenu(
             onMenuHover = onMenuHover,
             onOpenFile = onOpenFile,
             onCloseCurrentModel = onCloseCurrentModel,
+            onQuitApplication = onQuitApplication,
             onSave = onSave,
             onSaveAs = onSaveAs,
         )
@@ -115,6 +117,7 @@ private fun MainMenuItems(
     onMenuHover: (MainMenuType) -> Unit,
     onOpenFile: () -> Unit,
     onCloseCurrentModel: () -> Unit = {},
+    onQuitApplication: () -> Unit = {},
     onSave: () -> Unit,
     onSaveAs: () -> Unit,
 ) {
@@ -168,7 +171,11 @@ private fun MainMenuItems(
 
         if (isDesktopTarget) {
             HorizontalDivider(color = SEPARATOR, thickness = 1.dp, modifier = Modifier.padding(horizontal = 4.dp))
-            MainMenuItem("Sair", Res.drawable.sair_s_096)
+            MainMenuItem(
+                title = "Sair",
+                icon = Res.drawable.sair_s_096,
+                onClick = onQuitApplication,
+            )
         }
     }
 }
