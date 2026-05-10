@@ -62,6 +62,12 @@ internal data class LinkObjectsToolRibbonBinding(
     val onClick: () -> Unit,
 )
 
+/** Toggle for the conceptual-schema "Auto relacionar" tool. */
+internal data class AutoSelfRelationshipToolRibbonBinding(
+    val isArmed: Boolean,
+    val onClick: () -> Unit,
+)
+
 internal data class MenuEntry(
     val title: String,
     val icon: DrawableResource,

@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import games.polyclub.power.brmodelo.ui.DropdownEntry
+import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.MenuEntry
@@ -262,9 +263,10 @@ internal fun RibbonArmedToolButton(
                 onClick = onClick,
             ),
     ) {
+        val labelLines = if ('\n' in entry.title) 2 else 1
         Image(
             painter = painterResource(entry.icon),
-            contentDescription = entry.title,
+            contentDescription = entry.title.replace('\n', ' '),
             modifier = Modifier.size(32.dp),
             contentScale = ContentScale.Fit,
         )
@@ -274,9 +276,9 @@ internal fun RibbonArmedToolButton(
             color = Color(0xFF2C3E50),
             textAlign = TextAlign.Center,
             lineHeight = 10.sp,
-            maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Ellipsis,
+            maxLines = labelLines,
+            softWrap = labelLines > 1,
+            overflow = if (labelLines > 1) TextOverflow.Clip else TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 3.dp),
         )
     }
@@ -292,12 +294,19 @@ internal fun RibbonMenuEntryButton(
     entityToolBinding: EntityToolRibbonBinding? = null,
     observationToolBinding: ObservationToolRibbonBinding? = null,
     linkObjectsToolBinding: LinkObjectsToolRibbonBinding? = null,
+    autoSelfRelationshipToolBinding: AutoSelfRelationshipToolRibbonBinding? = null,
 ) {
     if (entry.title == "Observação" && observationToolBinding != null) {
         RibbonArmedToolButton(
             entry = entry,
             isArmed = observationToolBinding.isArmed,
             onClick = observationToolBinding.onClick,
+        )
+    } else if (entry.title == "Auto\nRelacionar" && autoSelfRelationshipToolBinding != null) {
+        RibbonArmedToolButton(
+            entry = entry,
+            isArmed = autoSelfRelationshipToolBinding.isArmed,
+            onClick = autoSelfRelationshipToolBinding.onClick,
         )
     } else if (entry.title == "Ligar\nObjetos" && linkObjectsToolBinding != null) {
         RibbonArmedToolButton(

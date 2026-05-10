@@ -39,6 +39,7 @@ import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaBrmParser
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaXmlParser
+import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.BrModeloScreen
 import games.polyclub.power.brmodelo.ui.CloseTabUnsavedDialog
 import games.polyclub.power.brmodelo.ui.ConceptualCanvasTool
@@ -315,6 +316,18 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         },
     )
 
+    val autoSelfRelationshipToolBinding = AutoSelfRelationshipToolRibbonBinding(
+        isArmed = conceptualCanvasTool is ConceptualCanvasTool.AutoSelfRelationship,
+        onClick = {
+            conceptualCanvasTool =
+                if (conceptualCanvasTool is ConceptualCanvasTool.AutoSelfRelationship) {
+                    ConceptualCanvasTool.None
+                } else {
+                    ConceptualCanvasTool.AutoSelfRelationship
+                }
+        },
+    )
+
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFE3E3E3)) {
             Box(modifier = Modifier.fillMaxSize()) {
@@ -356,6 +369,7 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                     entityToolBinding = entityToolBinding,
                     observationToolBinding = observationToolBinding,
                     linkObjectsToolBinding = linkObjectsToolBinding,
+                    autoSelfRelationshipToolBinding = autoSelfRelationshipToolBinding,
                     conceptualCanvasTool = conceptualCanvasTool,
                     onConceptualCanvasToolChange = { conceptualCanvasTool = it },
                     onClearConceptualCanvasTool = { conceptualCanvasTool = ConceptualCanvasTool.None },

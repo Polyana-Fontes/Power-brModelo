@@ -21,6 +21,7 @@ package games.polyclub.power.brmodelo.domain
 private val ENTIDADE_PATTERN = Regex("^Entidade(\\d+)$")
 private val RELACAO_PATTERN = Regex("^Relacao(\\d+)$")
 private val ENTASSOC_PATTERN = Regex("^EntAssoc(\\d+)$")
+private val AUTO_SELF_REL_PATTERN = Regex("^Auto(\\d+)$")
 
 private fun nextFreeIndex(used: Set<Int>): Int {
     var n = 1
@@ -48,6 +49,11 @@ private fun usedEntAssocIndices(schema: ConceptualSchema): Set<Int> =
         ENTASSOC_PATTERN.matchEntire(a.name)?.groupValues?.get(1)?.toIntOrNull()
     }.toSet()
 
+private fun usedAutoSelfRelIndices(schema: ConceptualSchema): Set<Int> =
+    schema.selfRelationships.mapNotNull { sr ->
+        AUTO_SELF_REL_PATTERN.matchEntire(sr.name)?.groupValues?.get(1)?.toIntOrNull()
+    }.toSet()
+
 private fun nextEntidadeName(schema: ConceptualSchema): String =
     "Entidade${nextFreeIndex(usedEntidadeIndices(schema))}"
 
@@ -67,6 +73,19 @@ private fun nextRelacaoName(schema: ConceptualSchema): String {
  * Next unused conceptual relationship name (`RelacaoN`), for tools that mirror Pascal [GeraBaseNome]('Relacao').
  */
 internal fun ConceptualSchema.nextUnusedRelationshipName(): String = nextRelacaoName(this)
+
+/**
+ * Next unused self-relationship name (`AutoN`), matching Pascal [GeraBaseNome]('Auto') for [TAutoRelacao].
+ */
+internal fun ConceptualSchema.nextUnusedSelfRelationshipName(): String {
+    val patternUsed = usedAutoSelfRelIndices(this)
+    var n = nextFreeIndex(patternUsed)
+    while (true) {
+        val candidate = "Auto$n"
+        if (selfRelationships.none { it.name == candidate }) return candidate
+        n++
+    }
+}
 
 private fun nextEntAssocName(schema: ConceptualSchema): String =
     "EntAssoc${nextFreeIndex(usedEntAssocIndices(schema))}"

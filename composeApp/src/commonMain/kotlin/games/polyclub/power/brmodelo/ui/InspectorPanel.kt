@@ -615,9 +615,7 @@ private fun EntityFields(
     onSchemaCommit: (ConceptualSchema) -> Unit,
 ) {
     SectionTitle("Esquema")
-    val autoRel = schema.connections.any {
-        it.elementIdA == element.id && it.elementIdB == element.id
-    }
+    val autoRel = schema.selfRelationships.any { it.ownerEntityId == element.id }
     ReadOnlyRow(
         "Auto relacionado",
         if (autoRel) "Sim" else "Não",
@@ -671,9 +669,7 @@ private fun AssocEntityFields(
     onSchemaCommit: (ConceptualSchema) -> Unit,
 ) {
     SectionTitle("Esquema")
-    val autoRel = schema.connections.any {
-        it.elementIdA == element.id && it.elementIdB == element.id
-    }
+    val autoRel = schema.selfRelationships.any { it.ownerEntityId == element.id }
     ReadOnlyRow(
         "Auto relacionado",
         if (autoRel) "Sim" else "Não",

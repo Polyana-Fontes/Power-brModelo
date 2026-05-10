@@ -184,6 +184,8 @@ private suspend fun loadAwtPointerIconAndCursor(tool: ConceptualCanvasTool): Pai
             "files/brmodelo_cursors/png/cursor_entassoss.png"
         is ConceptualCanvasTool.Observation ->
             "files/brmodelo_cursors/png/cursor_textoii.png"
+        is ConceptualCanvasTool.AutoSelfRelationship ->
+            "files/brmodelo_cursors/png/cursor_autorel.png"
         is ConceptualCanvasTool.LinkObjects.AwaitingFirst ->
             "files/brmodelo_cursors/png/cursor_ligacao.png"
         is ConceptualCanvasTool.LinkObjects.AwaitingSecond ->

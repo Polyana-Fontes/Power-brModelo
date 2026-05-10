@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import games.polyclub.power.brmodelo.ui.DropdownEntry
+import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.MenuEntry
@@ -76,6 +77,7 @@ internal fun RibbonEsquemaConceitual(
     entityToolBinding: EntityToolRibbonBinding? = null,
     observationToolBinding: ObservationToolRibbonBinding? = null,
     linkObjectsToolBinding: LinkObjectsToolRibbonBinding? = null,
+    autoSelfRelationshipToolBinding: AutoSelfRelationshipToolRibbonBinding? = null,
 ) {
     Row(
         modifier = Modifier
@@ -90,6 +92,7 @@ internal fun RibbonEsquemaConceitual(
             entityToolBinding = entityToolBinding,
             observationToolBinding = observationToolBinding,
             linkObjectsToolBinding = linkObjectsToolBinding,
+            autoSelfRelationshipToolBinding = autoSelfRelationshipToolBinding,
             groups = listOf(
                 listOf(MenuEntry("Seleção", Res.drawable.cursor_l)),
                 listOf(

@@ -85,7 +85,8 @@ private const val GRID_STEP = 20f
  * @param conceptualCanvasTool When set to an entity placement variant, a tap on empty canvas
  *                             inserts an element ([games.polyclub.power.brmodelo.domain.placeConceptualItem])
  *                             with incremental names and default geometry from [games.polyclub.power.brmodelo.domain.ConceptualPlacementDefaults].
- * @param onConceptualCanvasToolChange Updates the active canvas tool (used by [ConceptualCanvasTool.LinkObjects]).
+ * @param onConceptualCanvasToolChange Updates the active canvas tool ([ConceptualCanvasTool.LinkObjects],
+ *                             [ConceptualCanvasTool.AutoSelfRelationship]).
  * @param onTransientUserMessage Short user feedback (e.g. invalid link).
  * @param toolCursorModifier Optional pointer icon (entity / link tools) applied to the drawing surface.
  * @param canvasFocusRequester When set, receives focus on pointer down so parent shortcuts (e.g. Escape) apply after interacting with the canvas.
@@ -137,6 +138,40 @@ internal fun SchemaCanvas(
                     val selAtGestureStart = currentSelection
 
                     val schemaPoint = down.position - panAtGestureStart
+
+                    val autoRelTool = currentConceptualTool as? ConceptualCanvasTool.AutoSelfRelationship
+                    if (autoRelTool != null && schemaAtGestureStart != null) {
+                        val startPointer = down.position
+                        val slop = viewConfiguration.touchSlop
+                        var totalDrag = Offset.Zero
+                        var isDragging = false
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) {
+                                if (!isDragging) {
+                                    processAutoSelfRelationshipTap(
+                                        schema = schemaAtGestureStart,
+                                        schemaPoint = schemaPoint,
+                                        textMeasurer = currentTextMeasurer,
+                                        onMessage = currentOnTransientUserMessage,
+                                        onSchemaCommit = currentOnSchemaCommit,
+                                        onSelectionChange = currentOnSelectionChange,
+                                    )
+                                }
+                                break
+                            }
+                            totalDrag = change.position - startPointer
+                            if (!isDragging && totalDrag.getDistance() > slop) {
+                                isDragging = true
+                            }
+                            if (isDragging) {
+                                change.consume()
+                                panOffset = panAtGestureStart + totalDrag
+                            }
+                        }
+                        return@awaitEachGesture
+                    }
 
                     val linkTool = currentConceptualTool as? ConceptualCanvasTool.LinkObjects
                     if (linkTool != null && schemaAtGestureStart != null) {
@@ -501,6 +536,42 @@ private fun processLinkObjectsTap(
                 }
             }
         }
+    }
+}
+
+private fun processAutoSelfRelationshipTap(
+    schema: ConceptualSchema,
+    schemaPoint: Offset,
+    textMeasurer: TextMeasurer,
+    onMessage: (String) -> Unit,
+    onSchemaCommit: (ConceptualSchema) -> Unit,
+    onSelectionChange: (CanvasSelection) -> Unit,
+) {
+    val pick = hitTestConceptualLinkPick(schema, schemaPoint)
+    if (pick == null) {
+        onMessage("Selecione uma entidade.")
+        return
+    }
+    when (val r = validateAndBuildConceptualLink(schema, pick, pick)) {
+        is ConceptualLinkValidationResult.Ok -> {
+            val beforeConnIds = schema.connections.map { it.id }.toSet()
+            var committed = r.schema
+            for (conn in committed.connections.filter { it.id !in beforeConnIds }) {
+                val enriched =
+                    enrichConnectionWithInitialCardinalityPosition(committed, conn, textMeasurer)
+                committed = committed.copy(
+                    connections = committed.connections.map {
+                        if (it.id == conn.id) enriched else it
+                    },
+                )
+            }
+            onSchemaCommit(committed)
+            val newSelfRel = committed.selfRelationships.singleOrNull { it.id !in schema.elements }
+            if (newSelfRel != null) {
+                onSelectionChange(CanvasSelection.Element(newSelfRel.id))
+            }
+        }
+        is ConceptualLinkValidationResult.Error -> onMessage(r.message)
     }
 }
 

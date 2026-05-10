@@ -79,6 +79,7 @@ internal fun BrModeloScreen(
     entityToolBinding: EntityToolRibbonBinding? = null,
     observationToolBinding: ObservationToolRibbonBinding? = null,
     linkObjectsToolBinding: LinkObjectsToolRibbonBinding? = null,
+    autoSelfRelationshipToolBinding: AutoSelfRelationshipToolRibbonBinding? = null,
     conceptualCanvasTool: ConceptualCanvasTool = ConceptualCanvasTool.None,
     onConceptualCanvasToolChange: (ConceptualCanvasTool) -> Unit = {},
     onClearConceptualCanvasTool: () -> Unit = {},
@@ -109,6 +110,7 @@ internal fun BrModeloScreen(
                 entityToolBinding = entityToolBinding,
                 observationToolBinding = observationToolBinding,
                 linkObjectsToolBinding = linkObjectsToolBinding,
+                autoSelfRelationshipToolBinding = autoSelfRelationshipToolBinding,
                 onMainMenuClick = onMainMenuToggle,
                 onTabSelect = onTabSelect,
             )

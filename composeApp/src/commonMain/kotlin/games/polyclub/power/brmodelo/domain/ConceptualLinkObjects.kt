@@ -60,6 +60,128 @@ fun conceptualLinkEndpointKind(
     }
 }
 
+private fun conceptualRelToEntityLegCount(schema: ConceptualSchema, relId: Int, entityId: Int): Int =
+    schema.connections.count { it.elementIdA == relId && it.elementIdB == entityId }
+
+/**
+ * Whether another [Connection] with `elementIdA == relId` and `elementIdB == entityId` would be invalid.
+ * - [SchemaElement.SelfRelationship]: up to two legs to the same entity (Pascal `Relacione(Self)` × 2).
+ * - [SchemaElement.Relationship]: normally one leg per entity; a **second** leg to the **same** entity is allowed
+ *   only when that diamond still links exclusively to that entity (manual auto-rel: E–R then R–E).
+ */
+private fun isDuplicateConceptualRelEntityConnection(schema: ConceptualSchema, relId: Int, entityId: Int): Boolean {
+    val n = conceptualRelToEntityLegCount(schema, relId, entityId)
+    if (n == 0) return false
+    val rel = schema.elements[relId] ?: return true
+    when (rel) {
+        is SchemaElement.SelfRelationship -> return n >= 2
+        is SchemaElement.Relationship -> {
+            if (n >= 2) return true
+            // n == 1: allow second (rel, entityId) only if this rel still has a single distinct entity end
+            if (schema.selfRelationships.any { it.ownerEntityId == entityId }) return true
+            val distinctEntityEnds =
+                schema.connections
+                    .filter { it.elementIdA == relId }
+                    .map { it.elementIdB }
+                    .distinct()
+            return distinctEntityEnds.size != 1 || distinctEntityEnds.single() != entityId
+        }
+        else -> return true
+    }
+}
+
+/**
+ * When a loose [SchemaElement.Relationship] has exactly two legs to the same entity, promote it to
+ * [SchemaElement.SelfRelationship] so the model matches Pascal `TAutoRelacao` / XML auto-rel metadata.
+ */
+private fun upgradeRelationshipToSelfIfBinaryAutoPattern(schema: ConceptualSchema, relId: Int): ConceptualSchema {
+    val rel = schema.elements[relId] as? SchemaElement.Relationship ?: return schema
+    val legs = schema.connections.filter { it.elementIdA == relId }
+    if (legs.size != 2) return schema
+    val distinctEnds = legs.map { it.elementIdB }.distinct()
+    if (distinctEnds.size != 1) return schema
+    val ownerEntityId = distinctEnds.single()
+    val selfRel =
+        SchemaElement.SelfRelationship(
+            id = rel.id,
+            name = rel.name,
+            position = rel.position,
+            observations = rel.observations,
+            dictionary = rel.dictionary,
+            labelStyle = rel.labelStyle,
+            hiddenAttributes = rel.hiddenAttributes,
+            ownerEntityId = ownerEntityId,
+            arrowDirection = rel.arrowDirection,
+        )
+    return schema.copy(elements = schema.elements + (relId to selfRel))
+}
+
+/**
+ * Pascal [TBaseEntidade.AutoRelacionar]: `SetBounds(Left + Width + 30, Top + Height div 6,
+ * 2 * (Height - Height div 3), Height - Height div 3)`.
+ */
+private fun selfRelationshipPositionFromOwningEntity(entityPosition: ElementPosition): ElementPosition {
+    val h = entityPosition.height
+    val third = h / 3
+    val diamondW = 2 * (h - third)
+    val diamondH = h - third
+    return ElementPosition(
+        x = entityPosition.x + entityPosition.width + 30,
+        y = entityPosition.y + h / 6,
+        width = diamondW,
+        height = diamondH,
+    )
+}
+
+/**
+ * Pascal: [TBaseEntidade.AutoRelacionar] — [TAutoRelacao], `Relacione(Self)` twice, name from [GeraBaseNome]('Auto').
+ */
+private fun buildEntityAutoSelfRelationship(
+    schema: ConceptualSchema,
+    ownerElement: SchemaElement,
+    entityPick: ConceptualLinkPick,
+): ConceptualLinkValidationResult {
+    require(entityPick.elementId == ownerElement.id)
+    if (schema.selfRelationships.any { it.ownerEntityId == ownerElement.id }) {
+        return ConceptualLinkValidationResult.Error(
+            "Esta entidade já possui um auto-relacionamento.",
+        )
+    }
+    val name = schema.nextUnusedSelfRelationshipName()
+    val pos = selfRelationshipPositionFromOwningEntity(ownerElement.position)
+    val style = ConceptualPlacementDefaults.labelStyle
+
+    var work = schema
+    val (w1, selfRelId) = work.allocateId()
+    work = w1
+    val selfRel = SchemaElement.SelfRelationship(
+        id = selfRelId,
+        name = name,
+        position = pos,
+        observations = "",
+        dictionary = "",
+        labelStyle = style,
+        hiddenAttributes = emptyList(),
+        ownerEntityId = ownerElement.id,
+        arrowDirection = ArrowDirection.NONE,
+    )
+    work = work.withElement(selfRel)
+
+    val (w2, connId1) = work.allocateId()
+    work = w2
+    work = work.withConnection(
+        connectionFromRelationshipToEntity(selfRelId, connId1, entityPick, ownerElement),
+    )
+
+    val (w3, connId2) = work.allocateId()
+    work = w3
+    work = work.withConnection(
+        connectionFromRelationshipToEntity(selfRelId, connId2, entityPick, ownerElement),
+    )
+
+    return ConceptualLinkValidationResult.Ok(work)
+}
+
 sealed class ConceptualLinkValidationResult {
     /**
      * Schema after applying the link tool: new [Connection]s (and optionally a new [SchemaElement.Relationship])
@@ -79,10 +201,14 @@ sealed class ConceptualLinkValidationResult {
  *
  * - **Entity + relationship** (in any order): one new [Connection] with [Connection.elementIdA] on the
  *   relationship side and [Connection.elementIdB] on the entity side (Ponta), as in XML / brM.
+ *   A second leg between the **same** [SchemaElement.Relationship] and **same** entity (E–R then R–E) completes
+ *   a manual auto-relationship: the diamond is replaced by [SchemaElement.SelfRelationship].
  * - **Entity + entity** (including two outers of associative entities): mirrors Pascal `Tool_Ligacao` when
  *   both ends are [TBaseEntidade]: temporarily switches to `Tool_Relacionamento`, places a new [TRelacao]
  *   at the midpoint of the two bases' `Left`/`Top`, then calls `Relacione` for each entity (`mer.pas` ~2961–2967,
  *   `Tool_Relacionamento` block ~2297–2317).
+ * - **Same entity twice** (identical [ConceptualLinkPick] on the entity side): [TBaseEntidade.AutoRelacionar] /
+ *   `Tool_AutoRel` — one [SchemaElement.SelfRelationship] and two connections to that entity.
  */
 fun validateAndBuildConceptualLink(
     schema: ConceptualSchema,
@@ -111,6 +237,15 @@ fun validateAndBuildConceptualLink(
                 "O relacionamento interno de uma entidade associativa não pode se ligar à própria entidade associativa.",
             )
         }
+        // Pascal: linking the same entity twice (Tool_Ligacao) or Tool_AutoRel — TAutoRelacao + two Relacione(Self).
+        if (first == second && kindA == ConceptualLinkEndpointKind.ENTITY_SIDE) {
+            return when (elA) {
+                is SchemaElement.Entity,
+                is SchemaElement.AssociativeEntity,
+                -> buildEntityAutoSelfRelationship(schema, elA, first)
+                else -> ConceptualLinkValidationResult.Error("Não é possível ligar um objeto a si mesmo.")
+            }
+        }
         return ConceptualLinkValidationResult.Error("Não é possível ligar um objeto a si mesmo.")
     }
 
@@ -126,14 +261,6 @@ fun validateAndBuildConceptualLink(
         )
     }
 
-    val duplicate = schema.connections.any { conn ->
-        (conn.elementIdA == first.elementId && conn.elementIdB == second.elementId) ||
-            (conn.elementIdA == second.elementId && conn.elementIdB == first.elementId)
-    }
-    if (duplicate) {
-        return ConceptualLinkValidationResult.Error("Já existe uma ligação entre estes objetos.")
-    }
-
     val relPick: ConceptualLinkPick
     val entPick: ConceptualLinkPick
     if (kindA == ConceptualLinkEndpointKind.RELATIONSHIP_SIDE) {
@@ -142,6 +269,10 @@ fun validateAndBuildConceptualLink(
     } else {
         relPick = second
         entPick = first
+    }
+
+    if (isDuplicateConceptualRelEntityConnection(schema, relPick.elementId, entPick.elementId)) {
+        return ConceptualLinkValidationResult.Error("Já existe uma ligação entre estes objetos.")
     }
 
     val entElem = schema.elements[entPick.elementId]!!
@@ -161,7 +292,9 @@ fun validateAndBuildConceptualLink(
         useAssociativeOuterForEndA = false,
         useAssociativeOuterForEndB = useOuterB,
     )
-    return ConceptualLinkValidationResult.Ok(work.withConnection(conn))
+    work = work.withConnection(conn)
+    work = upgradeRelationshipToSelfIfBinaryAutoPattern(work, relPick.elementId)
+    return ConceptualLinkValidationResult.Ok(work)
 }
 
 /**

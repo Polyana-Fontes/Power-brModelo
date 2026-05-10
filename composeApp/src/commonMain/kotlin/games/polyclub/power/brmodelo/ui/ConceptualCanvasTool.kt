@@ -40,6 +40,12 @@ internal sealed class ConceptualCanvasTool {
         internal data class AwaitingSecond(val first: ConceptualLinkPick) : LinkObjects()
     }
 
+    /**
+     * "Auto relacionar" — single click on an entity (or associative outer) creates a self-relationship
+     * with two legs (Pascal `Tool_AutoRel` / `TBaseEntidade.AutoRelacionar`). Cursor: `cursor_autorel`.
+     */
+    internal data object AutoSelfRelationship : ConceptualCanvasTool()
+
     internal sealed class Entity : ConceptualCanvasTool() {
         internal data object Plain : Entity()
         internal data object Relation : Entity()

@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.MenuEntry
@@ -76,6 +77,7 @@ internal fun RibbonGroupWithSeparators(
     entityToolBinding: EntityToolRibbonBinding? = null,
     observationToolBinding: ObservationToolRibbonBinding? = null,
     linkObjectsToolBinding: LinkObjectsToolRibbonBinding? = null,
+    autoSelfRelationshipToolBinding: AutoSelfRelationshipToolRibbonBinding? = null,
 ) {
     Column(
         modifier = Modifier
@@ -99,6 +101,7 @@ internal fun RibbonGroupWithSeparators(
                         entityToolBinding,
                         observationToolBinding,
                         linkObjectsToolBinding,
+                        autoSelfRelationshipToolBinding,
                     )
                 }
             }
