@@ -31,6 +31,7 @@ import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.RibbonTab
+import games.polyclub.power.brmodelo.ui.SpecializationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.components.AppColors
 
 @Composable
@@ -40,6 +41,7 @@ internal fun HeaderRibbon(
     observationToolBinding: ObservationToolRibbonBinding? = null,
     linkObjectsToolBinding: LinkObjectsToolRibbonBinding? = null,
     autoSelfRelationshipToolBinding: AutoSelfRelationshipToolRibbonBinding? = null,
+    specializationToolBinding: SpecializationToolRibbonBinding? = null,
     onMainMenuClick: () -> Unit,
     onTabSelect: (RibbonTab) -> Unit,
 ) {
@@ -62,6 +64,7 @@ internal fun HeaderRibbon(
                 observationToolBinding = observationToolBinding,
                 linkObjectsToolBinding = linkObjectsToolBinding,
                 autoSelfRelationshipToolBinding = autoSelfRelationshipToolBinding,
+                specializationToolBinding = specializationToolBinding,
             )
             RibbonTab.Opcoes            -> RibbonOpcoes()
         }

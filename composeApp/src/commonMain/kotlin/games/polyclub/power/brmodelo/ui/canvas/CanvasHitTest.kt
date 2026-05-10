@@ -202,3 +202,15 @@ fun hitTestConceptualLinkPick(schema: ConceptualSchema, point: Offset): Conceptu
     }
     return null
 }
+
+/**
+ * Hit-test for specialization tools: topmost [SchemaElement.Entity] under [point], or `null`.
+ * Associative entities are excluded (Pascal `UsrSelA is TEntidade` only).
+ */
+fun hitTestPlainEntityId(schema: ConceptualSchema, point: Offset): Int? {
+    for (element in schema.elements.values.toList().asReversed()) {
+        if (element !is SchemaElement.Entity) continue
+        if (element.position.toRect().contains(point)) return element.id
+    }
+    return null
+}

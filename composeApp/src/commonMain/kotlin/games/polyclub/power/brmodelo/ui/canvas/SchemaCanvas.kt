@@ -44,16 +44,18 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import games.polyclub.power.brmodelo.domain.applyConceptualSpecializationTool
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualLinkValidationResult
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
+import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolResult
+import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolVariant
 import games.polyclub.power.brmodelo.domain.ElementPosition
 import games.polyclub.power.brmodelo.domain.SchemaElement
 import games.polyclub.power.brmodelo.domain.placeConceptualItem
 import games.polyclub.power.brmodelo.domain.validateAndBuildConceptualLink
 import games.polyclub.power.brmodelo.ui.ConceptualCanvasTool
 import games.polyclub.power.brmodelo.ui.toPlacementKindOrNull
-import games.polyclub.power.brmodelo.ui.canvas.drawSchema
 import games.polyclub.power.brmodelo.ui.canvas.withPosition
 import kotlin.math.abs
 
@@ -154,6 +156,40 @@ internal fun SchemaCanvas(
                                         schema = schemaAtGestureStart,
                                         schemaPoint = schemaPoint,
                                         textMeasurer = currentTextMeasurer,
+                                        onMessage = currentOnTransientUserMessage,
+                                        onSchemaCommit = currentOnSchemaCommit,
+                                        onSelectionChange = currentOnSelectionChange,
+                                    )
+                                }
+                                break
+                            }
+                            totalDrag = change.position - startPointer
+                            if (!isDragging && totalDrag.getDistance() > slop) {
+                                isDragging = true
+                            }
+                            if (isDragging) {
+                                change.consume()
+                                panOffset = panAtGestureStart + totalDrag
+                            }
+                        }
+                        return@awaitEachGesture
+                    }
+
+                    val specializationTool = currentConceptualTool as? ConceptualCanvasTool.Specialization
+                    if (specializationTool != null && schemaAtGestureStart != null) {
+                        val startPointer = down.position
+                        val slop = viewConfiguration.touchSlop
+                        var totalDrag = Offset.Zero
+                        var isDragging = false
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) {
+                                if (!isDragging) {
+                                    processSpecializationToolTap(
+                                        schema = schemaAtGestureStart,
+                                        schemaPoint = schemaPoint,
+                                        variant = specializationTool.variant,
                                         onMessage = currentOnTransientUserMessage,
                                         onSchemaCommit = currentOnSchemaCommit,
                                         onSelectionChange = currentOnSelectionChange,
@@ -485,6 +521,28 @@ internal fun SchemaCanvas(
                     .padding(16.dp),
             )
         }
+    }
+}
+
+private fun processSpecializationToolTap(
+    schema: ConceptualSchema,
+    schemaPoint: Offset,
+    variant: ConceptualSpecializationToolVariant,
+    onMessage: (String) -> Unit,
+    onSchemaCommit: (ConceptualSchema) -> Unit,
+    onSelectionChange: (CanvasSelection) -> Unit,
+) {
+    val entityId = hitTestPlainEntityId(schema, schemaPoint)
+    if (entityId == null) {
+        onMessage("Clique na entidade que será especializada.")
+        return
+    }
+    when (val r = applyConceptualSpecializationTool(schema, entityId, variant)) {
+        is ConceptualSpecializationToolResult.Ok -> {
+            onSchemaCommit(r.schema)
+            onSelectionChange(CanvasSelection.Element(r.newSpecializationId))
+        }
+        is ConceptualSpecializationToolResult.Error -> onMessage(r.message)
     }
 }
 

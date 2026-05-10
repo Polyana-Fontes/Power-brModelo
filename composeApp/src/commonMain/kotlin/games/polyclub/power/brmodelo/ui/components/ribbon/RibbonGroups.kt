@@ -44,6 +44,7 @@ import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.MenuEntry
 import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.SpecializationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.components.AppColors
 
 /** Standard group: all buttons in a single row, group title below. */
@@ -78,6 +79,7 @@ internal fun RibbonGroupWithSeparators(
     observationToolBinding: ObservationToolRibbonBinding? = null,
     linkObjectsToolBinding: LinkObjectsToolRibbonBinding? = null,
     autoSelfRelationshipToolBinding: AutoSelfRelationshipToolRibbonBinding? = null,
+    specializationToolBinding: SpecializationToolRibbonBinding? = null,
 ) {
     Column(
         modifier = Modifier
@@ -102,6 +104,7 @@ internal fun RibbonGroupWithSeparators(
                         observationToolBinding,
                         linkObjectsToolBinding,
                         autoSelfRelationshipToolBinding,
+                        specializationToolBinding,
                     )
                 }
             }

@@ -18,6 +18,7 @@
 
 package games.polyclub.power.brmodelo.ui
 
+import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolVariant
 import org.jetbrains.compose.resources.DrawableResource
 
 internal enum class MainMenuType {
@@ -37,6 +38,8 @@ internal data class DropdownEntry(
     val isSeparatorAbove: Boolean = false,
     /** When set, choosing this row selects an entity placement variant on the canvas. */
     val entityVariant: EntityToolVariant? = null,
+    /** When set, choosing this row selects a specialization tool variant on the canvas. */
+    val specializationVariant: ConceptualSpecializationToolVariant? = null,
     /** Shorter label for the ribbon split button when this variant is selected (optional). */
     val ribbonShortTitle: String? = null,
 )
@@ -62,10 +65,20 @@ internal data class LinkObjectsToolRibbonBinding(
     val onClick: () -> Unit,
 )
 
-/** Toggle for the conceptual-schema "Auto relacionar" tool. */
+/** Toggle for the conceptual-schema “Auto-relacionamento” placement tool. */
 internal data class AutoSelfRelationshipToolRibbonBinding(
     val isArmed: Boolean,
     val onClick: () -> Unit,
+)
+
+/** Split-button binding for the conceptual-schema “Especialização” tools (three Pascal variants). */
+internal data class SpecializationToolRibbonBinding(
+    val variant: ConceptualSpecializationToolVariant,
+    val isArmed: Boolean,
+    val displayTitle: String,
+    val displayIcon: DrawableResource,
+    val onMainClick: () -> Unit,
+    val onDropdownVariant: (ConceptualSpecializationToolVariant) -> Unit,
 )
 
 internal data class MenuEntry(

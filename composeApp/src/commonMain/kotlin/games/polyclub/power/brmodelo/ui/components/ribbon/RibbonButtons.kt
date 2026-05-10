@@ -63,6 +63,7 @@ import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.MenuEntry
 import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.SpecializationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.components.AppColors
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
@@ -73,7 +74,6 @@ private val SPLIT_INNER_SEGMENT_SHAPE = RoundedCornerShape(2.dp)
 /** Conceptual-schema ribbon entries that use a split control (main = default tool, arrow = category menu). */
 private val RIBBON_SPLIT_DROPDOWN_TITLES = setOf(
     "Entidade",
-    "Especialização",
     "Atributo",
 )
 
@@ -295,6 +295,7 @@ internal fun RibbonMenuEntryButton(
     observationToolBinding: ObservationToolRibbonBinding? = null,
     linkObjectsToolBinding: LinkObjectsToolRibbonBinding? = null,
     autoSelfRelationshipToolBinding: AutoSelfRelationshipToolRibbonBinding? = null,
+    specializationToolBinding: SpecializationToolRibbonBinding? = null,
 ) {
     if (entry.title == "Observação" && observationToolBinding != null) {
         RibbonArmedToolButton(
@@ -323,6 +324,17 @@ internal fun RibbonMenuEntryButton(
             onMainClick = entityToolBinding.onMainClick,
             onDropdownItemSelected = { row ->
                 row.entityVariant?.let { entityToolBinding.onDropdownVariant(it) }
+            },
+        )
+    } else if (entry.title == "Especialização" && specializationToolBinding != null && !entry.dropdown.isNullOrEmpty()) {
+        RibbonSplitDropdownButton(
+            entry = entry,
+            displayTitle = specializationToolBinding.displayTitle,
+            displayIcon = specializationToolBinding.displayIcon,
+            isPrimaryToolArmed = specializationToolBinding.isArmed,
+            onMainClick = specializationToolBinding.onMainClick,
+            onDropdownItemSelected = { row ->
+                row.specializationVariant?.let { specializationToolBinding.onDropdownVariant(it) }
             },
         )
     } else if (entry.title in RIBBON_SPLIT_DROPDOWN_TITLES && !entry.dropdown.isNullOrEmpty()) {

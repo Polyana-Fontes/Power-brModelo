@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolVariant
 import games.polyclub.power.brmodelo.generated.resources.Res
 import games.polyclub.power.brmodelo.ui.ConceptualCanvasTool
 import org.jetbrains.compose.resources.ExperimentalResourceApi
@@ -52,6 +53,15 @@ internal actual fun rememberConceptualCanvasToolCursorModifier(tool: ConceptualC
             "files/brmodelo_cursors/png/cursor_textoii.png"
         is ConceptualCanvasTool.AutoSelfRelationship ->
             "files/brmodelo_cursors/png/cursor_autorel.png"
+        is ConceptualCanvasTool.Specialization ->
+            when (tool.variant) {
+                ConceptualSpecializationToolVariant.Basic ->
+                    "files/brmodelo_cursors/png/cursor_especializacao.png"
+                ConceptualSpecializationToolVariant.ExclusiveWithEntityCreation ->
+                    "files/brmodelo_cursors/png/cursor_especializacaoa.png"
+                ConceptualSpecializationToolVariant.NonExclusiveWithEntityCreation ->
+                    "files/brmodelo_cursors/png/cursor_especializacaob.png"
+            }
         is ConceptualCanvasTool.LinkObjects.AwaitingFirst ->
             "files/brmodelo_cursors/png/cursor_ligacao.png"
         is ConceptualCanvasTool.LinkObjects.AwaitingSecond ->

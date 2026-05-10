@@ -35,6 +35,7 @@ import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.MenuEntry
 import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.SpecializationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.components.AppColors
 import games.polyclub.power.brmodelo.generated.resources.Res
 import games.polyclub.power.brmodelo.generated.resources.apagar_s
@@ -55,7 +56,6 @@ import games.polyclub.power.brmodelo.generated.resources.entidade_s
 import games.polyclub.power.brmodelo.generated.resources.especializacao_exclusiva_s
 import games.polyclub.power.brmodelo.generated.resources.especializacao_l
 import games.polyclub.power.brmodelo.generated.resources.especializacao_nao_exclusiva_s
-import games.polyclub.power.brmodelo.generated.resources.especializacao_s
 import games.polyclub.power.brmodelo.generated.resources.excluir_2l
 import games.polyclub.power.brmodelo.generated.resources.fonte_l
 import games.polyclub.power.brmodelo.generated.resources.gerar_logico_l
@@ -78,6 +78,7 @@ internal fun RibbonEsquemaConceitual(
     observationToolBinding: ObservationToolRibbonBinding? = null,
     linkObjectsToolBinding: LinkObjectsToolRibbonBinding? = null,
     autoSelfRelationshipToolBinding: AutoSelfRelationshipToolRibbonBinding? = null,
+    specializationToolBinding: SpecializationToolRibbonBinding? = null,
 ) {
     Row(
         modifier = Modifier
@@ -93,6 +94,7 @@ internal fun RibbonEsquemaConceitual(
             observationToolBinding = observationToolBinding,
             linkObjectsToolBinding = linkObjectsToolBinding,
             autoSelfRelationshipToolBinding = autoSelfRelationshipToolBinding,
+            specializationToolBinding = specializationToolBinding,
             groups = listOf(
                 listOf(MenuEntry("Seleção", Res.drawable.cursor_l)),
                 listOf(
@@ -104,20 +106,7 @@ internal fun RibbonEsquemaConceitual(
                     MenuEntry(
                         title = "Especialização",
                         icon = Res.drawable.especializacao_l,
-                        dropdown = listOf(
-                            DropdownEntry(
-                                "Especialização",
-                                Res.drawable.especializacao_s
-                            ),
-                            DropdownEntry(
-                                "Especialização Exclusiva com Criação de Entidade",
-                                Res.drawable.especializacao_exclusiva_s
-                            ),
-                            DropdownEntry(
-                                "Especialização Não-Exclusiva com Criação de Entidade",
-                                Res.drawable.especializacao_nao_exclusiva_s
-                            )
-                        )
+                        dropdown = conceptualSpecializationDropdownEntries(),
                     ),
                     MenuEntry(
                         title = "Atributo",

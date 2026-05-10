@@ -20,6 +20,7 @@ package games.polyclub.power.brmodelo.ui
 
 import games.polyclub.power.brmodelo.domain.ConceptualLinkPick
 import games.polyclub.power.brmodelo.domain.ConceptualPlacementKind
+import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolVariant
 
 /**
  * Active conceptual-schema canvas mode (placement / manipulation tool).
@@ -45,6 +46,12 @@ internal sealed class ConceptualCanvasTool {
      * with two legs (Pascal `Tool_AutoRel` / `TBaseEntidade.AutoRelacionar`). Cursor: `cursor_autorel`.
      */
     internal data object AutoSelfRelationship : ConceptualCanvasTool()
+
+    /**
+     * Especialização — click a plain entity to place a specialization (Pascal `Tool_Especializacao*`).
+     * Cursor depends on [variant] (`cursor_especializacao`, `cursor_especializacaoa`, `cursor_especializacaob`).
+     */
+    internal data class Specialization(val variant: ConceptualSpecializationToolVariant) : ConceptualCanvasTool()
 
     internal sealed class Entity : ConceptualCanvasTool() {
         internal data object Plain : Entity()
@@ -74,6 +81,12 @@ internal fun ConceptualCanvasTool.matchesEntityVariant(variant: EntityToolVarian
         is ConceptualCanvasTool.Entity.Associative -> variant == EntityToolVariant.Associative
         else -> false
     }
+
+internal fun ConceptualSpecializationToolVariant.toConceptualTool(): ConceptualCanvasTool.Specialization =
+    ConceptualCanvasTool.Specialization(this)
+
+internal fun ConceptualCanvasTool.matchesSpecializationVariant(variant: ConceptualSpecializationToolVariant): Boolean =
+    this is ConceptualCanvasTool.Specialization && this.variant == variant
 
 internal fun ConceptualCanvasTool.toPlacementKindOrNull(): ConceptualPlacementKind? =
     when (this) {

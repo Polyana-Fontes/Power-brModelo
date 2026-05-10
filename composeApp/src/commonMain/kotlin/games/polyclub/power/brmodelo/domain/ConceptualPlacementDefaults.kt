@@ -56,4 +56,10 @@ object ConceptualPlacementDefaults {
 
     /** `<Texto nome="Obs.: "/>` — placement always uses this caption (no deduplication). */
     const val annotationDefaultName: String = "Obs.: "
+
+    /**
+     * Default label style for [SchemaElement.Specialization] (`FonteEstilo` bold+italic, `FonteCor` 32896).
+     * Matches `valores-padroes.xml` / [TEspecializacao.Create] in `mer.pas`.
+     */
+    val specializationLabelStyle: LabelStyle = LabelStyle(color = 32896, bold = true, italic = true)
 }

@@ -22,6 +22,7 @@ private val ENTIDADE_PATTERN = Regex("^Entidade(\\d+)$")
 private val RELACAO_PATTERN = Regex("^Relacao(\\d+)$")
 private val ENTASSOC_PATTERN = Regex("^EntAssoc(\\d+)$")
 private val AUTO_SELF_REL_PATTERN = Regex("^Auto(\\d+)$")
+private val ESP_NAME_PATTERN = Regex("^Esp(\\d+)$")
 
 private fun nextFreeIndex(used: Set<Int>): Int {
     var n = 1
@@ -54,6 +55,11 @@ private fun usedAutoSelfRelIndices(schema: ConceptualSchema): Set<Int> =
         AUTO_SELF_REL_PATTERN.matchEntire(sr.name)?.groupValues?.get(1)?.toIntOrNull()
     }.toSet()
 
+private fun usedEspNameIndices(schema: ConceptualSchema): Set<Int> =
+    schema.specializations.mapNotNull { s ->
+        ESP_NAME_PATTERN.matchEntire(s.name)?.groupValues?.get(1)?.toIntOrNull()
+    }.toSet()
+
 private fun nextEntidadeName(schema: ConceptualSchema): String =
     "Entidade${nextFreeIndex(usedEntidadeIndices(schema))}"
 
@@ -83,6 +89,19 @@ internal fun ConceptualSchema.nextUnusedSelfRelationshipName(): String {
     while (true) {
         val candidate = "Auto$n"
         if (selfRelationships.none { it.name == candidate }) return candidate
+        n++
+    }
+}
+
+/**
+ * Next unused specialization name (`EspN`), matching Pascal [GeraBaseNome]('Esp').
+ */
+internal fun ConceptualSchema.nextUnusedSpecializationName(): String {
+    val patternUsed = usedEspNameIndices(this)
+    var n = nextFreeIndex(patternUsed)
+    while (true) {
+        val candidate = "Esp$n"
+        if (specializations.none { it.name == candidate }) return candidate
         n++
     }
 }
