@@ -21,6 +21,7 @@ package games.polyclub.power.brmodelo.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,13 +33,20 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -81,6 +89,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import games.polyclub.power.brmodelo.domain.BulkDeleteCategoryCounts
 import games.polyclub.power.brmodelo.domain.bulkDeleteCategoryCounts
@@ -144,6 +153,20 @@ private fun inspectorValueTextStyle(color: Color): TextStyle = TextStyle(
     lineHeight = VALUE_TEXT_SIZE,
     color = color,
 )
+
+/** First visual line for compact inspector cells (full value is edited in a multiline modal). */
+internal fun inspectorFirstLinePreview(text: String): String {
+    if (text.isEmpty()) return text
+    val idxN = text.indexOf('\n')
+    val idxR = text.indexOf('\r')
+    val cut = when {
+        idxN < 0 && idxR < 0 -> -1
+        idxN < 0 -> idxR
+        idxR < 0 -> idxN
+        else -> minOf(idxN, idxR)
+    }
+    return if (cut < 0) text else text.substring(0, cut)
+}
 
 private val INSPECTOR_DROPDOWN_CARET_STYLE = TextStyle(
     fontSize = 8.sp,
@@ -623,21 +646,21 @@ private fun SchemaMetaContent(
         focusedKey,
         onFocusChange
     )
-    EditableRow(
+    MultilineModalEditableRow(
         "Autor(es)",
         schema.author,
         "AUTOR",
         focusedKey,
-        onFocusChange
+        onFocusChange,
     ) {
         onSchemaCommit(schema.copy(author = it))
     }
-    EditableRow(
+    MultilineModalEditableRow(
         "Observações",
         schema.observations,
         "OBS",
         focusedKey,
-        onFocusChange
+        onFocusChange,
     ) {
         onSchemaCommit(schema.copy(observations = it))
     }
@@ -702,30 +725,47 @@ private fun ElementContent(
 
     // Common fields for all elements
     val nameCommitted = committedSchema?.elements?.get(element.id)?.name ?: element.name
-    EditableRow(
-        label = "Nome",
-        value = nameCommitted,
-        key = "NOME",
-        focusedKey = focusedKey,
-        onFocusChange = onFocusChange,
-        onLiveDraftChange = { draft ->
-            val el = element.withName(draft)
-            if (el is SchemaElement.Attribute && el.autoSize) {
-                previewAttributeElement(schema, el, textMeasurer, layoutDirection, onSchemaPreview)
-            } else {
+    if (element is SchemaElement.Annotation) {
+        MultilineModalEditableRow(
+            label = "Texto",
+            value = nameCommitted,
+            key = "NOME",
+            focusedKey = focusedKey,
+            onFocusChange = onFocusChange,
+            onLiveDraftChange = { draft ->
+                val el = element.withName(draft)
                 onSchemaPreview(schema.withElement(el))
-            }
-        },
-    ) { newName ->
-        val el = element.withName(newName)
-        if (el is SchemaElement.Attribute && el.autoSize) {
-            commitAttributeElement(schema, el, textMeasurer, layoutDirection, onSchemaCommit)
-        } else {
+            },
+        ) { newName ->
+            val el = element.withName(newName)
             onSchemaCommit(schema.withElement(el))
+        }
+    } else {
+        EditableRow(
+            label = "Nome",
+            value = nameCommitted,
+            key = "NOME",
+            focusedKey = focusedKey,
+            onFocusChange = onFocusChange,
+            onLiveDraftChange = { draft ->
+                val el = element.withName(draft)
+                if (el is SchemaElement.Attribute && el.autoSize) {
+                    previewAttributeElement(schema, el, textMeasurer, layoutDirection, onSchemaPreview)
+                } else {
+                    onSchemaPreview(schema.withElement(el))
+                }
+            },
+        ) { newName ->
+            val el = element.withName(newName)
+            if (el is SchemaElement.Attribute && el.autoSize) {
+                commitAttributeElement(schema, el, textMeasurer, layoutDirection, onSchemaCommit)
+            } else {
+                onSchemaCommit(schema.withElement(el))
+            }
         }
     }
     val dictCommitted = committedSchema?.elements?.get(element.id)?.dictionary ?: element.dictionary
-    EditableRow(
+    MultilineModalEditableRow(
         label = "Dicionário",
         value = dictCommitted,
         key = "DIC",
@@ -737,12 +777,12 @@ private fun ElementContent(
     ) { v ->
         onSchemaCommit(schema.withElement(element.withDictionary(v)))
     }
-    EditableRow(
+    MultilineModalEditableRow(
         "Observação",
         element.observations,
         "OBS",
         focusedKey,
-        onFocusChange
+        onFocusChange,
     ) { v ->
         onSchemaCommit(schema.withElement(element.withObservations(v)))
     }
@@ -964,21 +1004,21 @@ private fun AssocEntityFields(
     ) { v ->
         onSchemaCommit(schema.withElement(element.copy(relationshipName = v)))
     }
-    EditableRow(
+    MultilineModalEditableRow(
         "+Dicionário",
         element.relationshipDictionary,
         "EA_DIC",
         focusedKey,
-        onFocusChange
+        onFocusChange,
     ) { v ->
         onSchemaCommit(schema.withElement(element.copy(relationshipDictionary = v)))
     }
-    EditableRow(
+    MultilineModalEditableRow(
         "+Observação",
         element.relationshipObservations,
         "EA_OBS",
         focusedKey,
-        onFocusChange
+        onFocusChange,
     ) { v ->
         onSchemaCommit(schema.withElement(element.copy(relationshipObservations = v)))
     }
@@ -1305,7 +1345,7 @@ private fun CardinalityContent(
     val dicCommitted =
         committedSchema?.connections?.firstOrNull { it.id == conn.id }?.cardinalityDictionary
             ?: conn.cardinalityDictionary
-    EditableRow(
+    MultilineModalEditableRow(
         label = "Dicionário",
         value = dicCommitted,
         key = "CARD_DIC",
@@ -1327,7 +1367,7 @@ private fun CardinalityContent(
     val obsCommitted =
         committedSchema?.connections?.firstOrNull { it.id == conn.id }?.cardinalityObservations
             ?: conn.cardinalityObservations
-    EditableRow(
+    MultilineModalEditableRow(
         label = "Observação",
         value = obsCommitted,
         key = "CARD_OBS",
@@ -1648,6 +1688,145 @@ private fun ReadOnlyRow(
                 if (focused) Color(
                     0xFF80A0C0
                 ) else VALUE_COLOR
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+        )
+    }
+}
+
+@Composable
+private fun MultilineInspectorDialog(
+    label: String,
+    initialText: String,
+    onLiveDraftChange: ((String) -> Unit)?,
+    onCancel: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var draft by remember(initialText) { mutableStateOf(initialText) }
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
+    Dialog(onDismissRequest = onCancel) {
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+            shadowElevation = 8.dp,
+            modifier = Modifier
+                .widthIn(min = 320.dp, max = 560.dp)
+                .onPreviewKeyEvent { evt ->
+                    if (evt.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    if (evt.key == Key.Escape) {
+                        onCancel()
+                        true
+                    } else {
+                        false
+                    }
+                },
+        ) {
+            Column(Modifier.padding(16.dp)) {
+                Text(
+                    text = label,
+                    style = TextStyle(
+                        fontSize = 14.sp,
+                        lineHeight = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    ),
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = {
+                        draft = it
+                        onLiveDraftChange?.invoke(it)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 220.dp, max = 420.dp)
+                        .focusRequester(focusRequester),
+                    minLines = 12,
+                    maxLines = 24,
+                )
+                Spacer(Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = onCancel) {
+                        Text("Cancelar")
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Button(onClick = { onConfirm(draft) }) {
+                        Text("Pronto")
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Editable row that opens a centered modal with a multiline editor; the grid shows only the first line
+ * of [value] ([inspectorFirstLinePreview]).
+ */
+@Composable
+private fun MultilineModalEditableRow(
+    label: String,
+    value: String,
+    key: String,
+    focusedKey: String?,
+    onFocusChange: (String?) -> Unit,
+    enabled: Boolean = true,
+    onLiveDraftChange: ((String) -> Unit)? = null,
+    onCommit: (String) -> Unit,
+) {
+    val revertPreview = LocalRevertSchemaPreview.current
+    val focused = focusedKey == key
+    val previewText = inspectorFirstLinePreview(value)
+    val activateRow = { if (enabled) onFocusChange(key) }
+
+    val onCancel: () -> Unit = {
+        if (onLiveDraftChange != null) revertPreview()
+        onFocusChange(null)
+    }
+
+    if (focused && enabled) {
+        MultilineInspectorDialog(
+            label = label,
+            initialText = value,
+            onLiveDraftChange = onLiveDraftChange,
+            onCancel = onCancel,
+            onConfirm = { draft ->
+                onCommit(draft)
+                onFocusChange(null)
+            },
+        )
+    }
+
+    val valueCellModifier =
+        if (enabled) Modifier.clickable(onClick = activateRow) else Modifier
+
+    PropertyRow(
+        label = label,
+        focused = focused,
+        onLabelClick = activateRow,
+        valueCellModifier = valueCellModifier,
+        valueCellBackground = if (enabled) CELL_VALUE_BG else CELL_VALUE_READ_ONLY_BG,
+    ) {
+        Text(
+            text = previewText,
+            style = inspectorValueTextStyle(
+                when {
+                    !enabled -> Color(0xFF9AA0A8)
+                    focused -> Color(0xFF80A0C0)
+                    else -> VALUE_COLOR
+                },
             ),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
