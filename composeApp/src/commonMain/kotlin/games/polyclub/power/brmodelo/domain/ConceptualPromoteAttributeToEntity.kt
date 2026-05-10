@@ -39,7 +39,7 @@ fun attributeIdSelectedForPromoteToEntity(schema: ConceptualSchema, selection: C
     }
 }
 
-/** True when **Operações → Converter em Entidade** applies (Pascal [promo_entidade]). */
+/** True when **Operações → Promover à Entidade** applies (Pascal [promo_entidade]). */
 fun canPromoteAttributeToEntityMenu(schema: ConceptualSchema, selection: CanvasSelection): Boolean =
     attributeIdSelectedForPromoteToEntity(schema, selection) != null
 

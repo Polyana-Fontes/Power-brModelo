@@ -25,6 +25,7 @@ import games.polyclub.power.brmodelo.generated.resources.atributo_s
 import games.polyclub.power.brmodelo.generated.resources.dicionario_dados_3s
 import games.polyclub.power.brmodelo.generated.resources.entidade_associativa_s
 import games.polyclub.power.brmodelo.generated.resources.entidade_s
+import games.polyclub.power.brmodelo.generated.resources.relacao_s
 import games.polyclub.power.brmodelo.generated.resources.especializacao_exclusiva_s
 import games.polyclub.power.brmodelo.generated.resources.especializacao_nao_exclusiva_s
 import games.polyclub.power.brmodelo.generated.resources.selecionar_s
@@ -34,6 +35,8 @@ internal fun conceptualOperationsDropdownEntries(
     selectAttributesEnabled: Boolean,
     promoteToAssociativeEnabled: Boolean,
     promoteAttributeToEntityEnabled: Boolean,
+    demoteAssociativeToRelationshipEnabled: Boolean,
+    demoteAssociativeToEntityEnabled: Boolean,
 ): List<DropdownEntry> =
     listOf(
         DropdownEntry(
@@ -54,17 +57,30 @@ internal fun conceptualOperationsDropdownEntries(
             conceptualOperation = ConceptualRibbonOperation.SelectAttributes,
         ),
         DropdownEntry(
-            label = "Converter em Entidade Associativa",
+            label = "Promover à Entidade Associativa",
             icon = Res.drawable.entidade_associativa_s,
             isSeparatorAbove = true,
             enabled = promoteToAssociativeEnabled,
             conceptualOperation = ConceptualRibbonOperation.PromoteToAssociativeEntity,
         ),
         DropdownEntry(
-            label = "Converter em Entidade",
+            label = "Promover à Entidade",
             icon = Res.drawable.entidade_s,
             enabled = promoteAttributeToEntityEnabled,
             conceptualOperation = ConceptualRibbonOperation.PromoteAttributeToEntity,
+        ),
+        DropdownEntry(
+            label = "Rebaixar à Relação",
+            icon = Res.drawable.relacao_s,
+            isSeparatorAbove = true,
+            enabled = demoteAssociativeToRelationshipEnabled,
+            conceptualOperation = ConceptualRibbonOperation.DemoteAssociativeToRelationship,
+        ),
+        DropdownEntry(
+            label = "Separar Entidade da Relação",
+            icon = Res.drawable.entidade_s,
+            enabled = demoteAssociativeToEntityEnabled,
+            conceptualOperation = ConceptualRibbonOperation.DemoteAssociativeToEntity,
         ),
         DropdownEntry(
             label = "Converter Esp. para Restrita",

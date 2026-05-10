@@ -40,6 +40,8 @@ internal enum class ConceptualRibbonOperation {
     SelectAttributes,
     PromoteToAssociativeEntity,
     PromoteAttributeToEntity,
+    DemoteAssociativeToRelationship,
+    DemoteAssociativeToEntity,
 }
 
 internal data class DropdownEntry(
@@ -143,6 +145,10 @@ internal data class OperationsMenuRibbonBinding(
     val onPromoteToAssociative: () -> Unit,
     val promoteAttributeToEntityEnabled: Boolean,
     val onPromoteAttributeToEntity: () -> Unit,
+    val demoteAssociativeToRelationshipEnabled: Boolean,
+    val onDemoteAssociativeToRelationship: () -> Unit,
+    val demoteAssociativeToEntityEnabled: Boolean,
+    val onDemoteAssociativeToEntity: () -> Unit,
 )
 
 internal data class MenuEntry(

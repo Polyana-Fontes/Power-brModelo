@@ -37,9 +37,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolVariant
+import games.polyclub.power.brmodelo.domain.applyDemoteAssociativeToEntity
+import games.polyclub.power.brmodelo.domain.applyDemoteAssociativeToRelationship
 import games.polyclub.power.brmodelo.domain.applyOrganizeAttributesMenuAction
 import games.polyclub.power.brmodelo.domain.applyPromoteAttributeToEntity
 import games.polyclub.power.brmodelo.domain.applyPromoteRelationshipsToAssociativeEntities
+import games.polyclub.power.brmodelo.domain.canDemoteAssociativeToEntityMenu
+import games.polyclub.power.brmodelo.domain.canDemoteAssociativeToRelationshipMenu
 import games.polyclub.power.brmodelo.domain.canOrganizeAttributesMenuSelection
 import games.polyclub.power.brmodelo.domain.canPromoteAttributeToEntityMenu
 import games.polyclub.power.brmodelo.domain.canPromoteToAssociativeEntityMenu
@@ -458,6 +462,18 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         val updated = applyPromoteAttributeToEntity(tab.schema, tab.selection) ?: return@promoteEnt
         pushCommitOnSelected(updated.withNormalizedAttributeMultiValuedCounts())
     }
+    val demoteAssocRelEnabled = canDemoteAssociativeToRelationshipMenu(sel.schema, sel.selection)
+    val onDemoteAssociativeToRelationship: () -> Unit = demRel@{
+        val tab = tabSessions.getOrNull(selectedTabIndex) ?: return@demRel
+        val updated = applyDemoteAssociativeToRelationship(tab.schema, tab.selection) ?: return@demRel
+        pushCommitOnSelected(updated.withNormalizedAttributeMultiValuedCounts())
+    }
+    val demoteAssocEntEnabled = canDemoteAssociativeToEntityMenu(sel.schema, sel.selection)
+    val onDemoteAssociativeToEntity: () -> Unit = demEnt@{
+        val tab = tabSessions.getOrNull(selectedTabIndex) ?: return@demEnt
+        val updated = applyDemoteAssociativeToEntity(tab.schema, tab.selection) ?: return@demEnt
+        pushCommitOnSelected(updated.withNormalizedAttributeMultiValuedCounts())
+    }
     val operationsMenuBinding = OperationsMenuRibbonBinding(
         organizeAttributesEnabled = organizeAttrsEnabled,
         onOrganizeAttributes = onOrganizeAttributes,
@@ -467,6 +483,10 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         onPromoteToAssociative = onPromoteToAssociative,
         promoteAttributeToEntityEnabled = promoteAttributeToEntityEnabled,
         onPromoteAttributeToEntity = onPromoteAttributeToEntity,
+        demoteAssociativeToRelationshipEnabled = demoteAssocRelEnabled,
+        onDemoteAssociativeToRelationship = onDemoteAssociativeToRelationship,
+        demoteAssociativeToEntityEnabled = demoteAssocEntEnabled,
+        onDemoteAssociativeToEntity = onDemoteAssociativeToEntity,
     )
 
     MaterialTheme {

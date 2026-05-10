@@ -26,7 +26,7 @@ fun relationshipIdsSelectedForPromote(schema: ConceptualSchema, selection: Canva
     return e.mapNotNull { id -> if (schema.elements[id] is SchemaElement.Relationship) id else null }.toSet()
 }
 
-/** True when **Operações → Converter em Entidade Associativa** applies. */
+/** True when **Operações → Promover à Entidade Associativa** applies. */
 fun canPromoteToAssociativeEntityMenu(schema: ConceptualSchema, selection: CanvasSelection): Boolean =
     relationshipIdsSelectedForPromote(schema, selection).isNotEmpty()
 
