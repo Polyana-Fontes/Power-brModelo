@@ -96,6 +96,7 @@ internal fun BrModeloScreen(
     onBulkDeleteUiChange: (BulkDeleteUiState?) -> Unit = {},
     selectionBandUiState: SelectionBandUiState? = null,
     onSelectionBandUiChange: (SelectionBandUiState?) -> Unit = {},
+    onOrganizeAttributes: () -> Unit = {},
 ) {
     var exportCounter by remember { mutableIntStateOf(0) }
     var exportIsJpeg by remember { mutableStateOf(true) }
@@ -159,6 +160,7 @@ internal fun BrModeloScreen(
                 onBulkDeleteUiChange = onBulkDeleteUiChange,
                 selectionBandUiState = selectionBandUiState,
                 onSelectionBandUiChange = onSelectionBandUiChange,
+                onOrganizeAttributes = onOrganizeAttributes,
             )
         }
 

@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import games.polyclub.power.brmodelo.domain.CanvasSelection
+import games.polyclub.power.brmodelo.domain.canOrganizeAttributesMenu
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.domain.expandBulkDeleteClosure
 import games.polyclub.power.brmodelo.domain.singleElementDeletionClosure
@@ -102,6 +103,7 @@ internal fun MainCanvasPanel(
     onBulkDeleteUiChange: (BulkDeleteUiState?) -> Unit = {},
     selectionBandUiState: SelectionBandUiState? = null,
     onSelectionBandUiChange: (SelectionBandUiState?) -> Unit = {},
+    onOrganizeAttributes: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val selectedTab = canvasTabs.getOrNull(selectedCanvasTabIndex)
@@ -139,6 +141,16 @@ internal fun MainCanvasPanel(
                 .onPreviewKeyEvent { event ->
                     if (event.type == KeyEventType.KeyDown) {
                         val sch = schema
+                        if (sch != null &&
+                            event.isCtrlPressed &&
+                            event.key == Key.O
+                        ) {
+                            val elemId = (selection as? CanvasSelection.Element)?.id
+                            if (elemId != null && canOrganizeAttributesMenu(sch, elemId)) {
+                                onOrganizeAttributes()
+                                return@onPreviewKeyEvent true
+                            }
+                        }
                         if (sch != null) {
                             val nudged = sch.applyCanvasKeyboardArrow(
                                 selection = selection,

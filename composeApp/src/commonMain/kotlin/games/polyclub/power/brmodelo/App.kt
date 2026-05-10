@@ -431,14 +431,15 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
     val selElementId = (sel.selection as? CanvasSelection.Element)?.id
     val organizeAttrsEnabled =
         selElementId != null && canOrganizeAttributesMenu(sel.schema, selElementId)
+    val onOrganizeAttributes: () -> Unit = organize@{
+        val tab = tabSessions.getOrNull(selectedTabIndex) ?: return@organize
+        val id = (tab.selection as? CanvasSelection.Element)?.id ?: return@organize
+        val updated = applyOrganizeAttributesMenuAction(tab.schema, id) ?: return@organize
+        pushCommitOnSelected(updated.withNormalizedAttributeMultiValuedCounts())
+    }
     val operationsMenuBinding = OperationsMenuRibbonBinding(
         organizeAttributesEnabled = organizeAttrsEnabled,
-        onOrganizeAttributes = {
-            val tab = tabSessions.getOrNull(selectedTabIndex) ?: return@OperationsMenuRibbonBinding
-            val id = (tab.selection as? CanvasSelection.Element)?.id ?: return@OperationsMenuRibbonBinding
-            val updated = applyOrganizeAttributesMenuAction(tab.schema, id) ?: return@OperationsMenuRibbonBinding
-            pushCommitOnSelected(updated.withNormalizedAttributeMultiValuedCounts())
-        },
+        onOrganizeAttributes = onOrganizeAttributes,
     )
 
     MaterialTheme {
@@ -495,6 +496,7 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                     onBulkDeleteUiChange = { bulkDeleteUi = it },
                     selectionBandUiState = selectionBandUi,
                     onSelectionBandUiChange = { selectionBandUi = it },
+                    onOrganizeAttributes = onOrganizeAttributes,
                 )
 
                 pendingCloseTabIndex?.let { closeIdx ->

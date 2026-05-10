@@ -53,6 +53,7 @@ internal fun WorkspaceArea(
     onBulkDeleteUiChange: (BulkDeleteUiState?) -> Unit = {},
     selectionBandUiState: SelectionBandUiState? = null,
     onSelectionBandUiChange: (SelectionBandUiState?) -> Unit = {},
+    onOrganizeAttributes: () -> Unit = {},
 ) {
     Row(modifier = Modifier.fillMaxSize().padding(8.dp)) {
         MainCanvasPanel(
@@ -76,6 +77,7 @@ internal fun WorkspaceArea(
             onBulkDeleteUiChange = onBulkDeleteUiChange,
             selectionBandUiState = selectionBandUiState,
             onSelectionBandUiChange = onSelectionBandUiChange,
+            onOrganizeAttributes = onOrganizeAttributes,
             modifier = Modifier.weight(1f),
         )
         Spacer(modifier = Modifier.width(8.dp))
