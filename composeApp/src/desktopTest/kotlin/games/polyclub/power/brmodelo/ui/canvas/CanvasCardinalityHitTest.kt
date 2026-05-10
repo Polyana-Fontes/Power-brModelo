@@ -19,6 +19,10 @@
 package games.polyclub.power.brmodelo.ui.canvas
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.font.createFontFamilyResolver
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualLinkPick
 import games.polyclub.power.brmodelo.domain.ConceptualLinkValidationResult
@@ -31,11 +35,18 @@ import kotlin.test.Test
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
+private fun headlessTextMeasurer(): TextMeasurer {
+    val density = Density(density = 1f, fontScale = 1f)
+    val resolver = createFontFamilyResolver()
+    return TextMeasurer(resolver, density, LayoutDirection.Ltr)
+}
+
 class CanvasCardinalityHitTest {
 
     @Test
-    fun `hitTestCardinality matches fallback label when cardinalityPosition is null`() {
+    fun `hitTestCardinality matches label center after enrich like link creation`() {
         // Arrange
+        val textMeasurer = headlessTextMeasurer()
         val entity = SchemaElement.Entity(id = 1, name = "E", position = ElementPosition(400, 200, 120, 70))
         val rel = SchemaElement.Relationship(id = 2, name = "R", position = ElementPosition(80, 200, 90, 55))
         val base = ConceptualSchema(
@@ -49,24 +60,27 @@ class CanvasCardinalityHitTest {
             newConnectionId = 50,
         )
         val conn = assertIs<ConceptualLinkValidationResult.Ok>(ok).connection
-        assertTrue(conn.cardinalityPosition == null)
-        val schema = base.copy(connections = listOf(conn))
+        val schemaRaw = base.copy(connections = listOf(conn))
+        val enriched = enrichConnectionWithInitialCardinalityPosition(schemaRaw, conn, textMeasurer)
+        assertTrue(enriched.cardinalityPosition != null)
+        val schema = schemaRaw.copy(connections = listOf(enriched))
 
-        val rect = cardinalityLabelInteractionRect(schema, conn)
-        assertTrue(rect != null, "expected a fallback interaction rect for new links")
+        val rect = cardinalityLabelInteractionRect(schema, enriched, textMeasurer)
+        assertTrue(rect != null, "expected interaction rect for cardinality label")
 
         // Act
         val center = Offset((rect!!.left + rect.right) / 2f, (rect.top + rect.bottom) / 2f)
-        val hit = hitTestCardinality(schema, center)
+        val hit = hitTestCardinality(schema, center, textMeasurer)
 
         // Assert
         val card = assertIs<CanvasSelection.Cardinality>(hit)
-        assertTrue(card.connectionId == conn.id)
+        assertTrue(card.connectionId == enriched.id)
     }
 
     @Test
     fun `hitTestCardinality tolerates points near label edge inside padded rect`() {
         // Arrange
+        val textMeasurer = headlessTextMeasurer()
         val entity = SchemaElement.Entity(id = 1, name = "E", position = ElementPosition(300, 150, 100, 60))
         val rel = SchemaElement.Relationship(id = 2, name = "R", position = ElementPosition(40, 150, 80, 50))
         val base = ConceptualSchema(
@@ -80,22 +94,25 @@ class CanvasCardinalityHitTest {
             newConnectionId = 51,
         )
         val conn = assertIs<ConceptualLinkValidationResult.Ok>(ok).connection
-        val schema = base.copy(connections = listOf(conn))
-        val rect = cardinalityLabelInteractionRect(schema, conn)!!
+        val schemaRaw = base.copy(connections = listOf(conn))
+        val enriched = enrichConnectionWithInitialCardinalityPosition(schemaRaw, conn, textMeasurer)
+        val schema = schemaRaw.copy(connections = listOf(enriched))
+        val rect = cardinalityLabelInteractionRect(schema, enriched, textMeasurer)!!
 
         // Act — slightly inside the left edge (padding should include this)
         val nearLeft = Offset(rect.left + 2f, (rect.top + rect.bottom) / 2f)
-        val hit = hitTestCardinality(schema, nearLeft)
+        val hit = hitTestCardinality(schema, nearLeft, textMeasurer)
 
         // Assert
         val card = assertIs<CanvasSelection.Cardinality>(hit)
-        assertTrue(card.connectionId == conn.id)
+        assertTrue(card.connectionId == enriched.id)
         assertTrue(abs(nearLeft.x - rect.left) < 8f)
     }
 
     @Test
     fun `materializeCardinalityPositionForFixed yields stored box so highlight uses file-style bounds`() {
         // Arrange
+        val textMeasurer = headlessTextMeasurer()
         val entity = SchemaElement.Entity(id = 1, name = "E", position = ElementPosition(400, 200, 120, 70))
         val rel = SchemaElement.Relationship(id = 2, name = "R", position = ElementPosition(80, 200, 90, 55))
         val base = ConceptualSchema(elements = mapOf(1 to entity, 2 to rel), nextId = 100)
@@ -110,7 +127,7 @@ class CanvasCardinalityHitTest {
         assertTrue(conn.cardinalityPosition == null)
 
         // Act
-        val materialized = materializeCardinalityPositionForFixed(schema, conn)
+        val materialized = materializeCardinalityPositionForFixed(schema, conn, textMeasurer)
         assertTrue(materialized != null)
         val schemaStored = schema.copy(
             connections = schema.connections.map {
@@ -120,6 +137,7 @@ class CanvasCardinalityHitTest {
         val highlightPos = cardinalityLabelHighlightElementPosition(
             schemaStored,
             schemaStored.connections.first { it.id == conn.id },
+            textMeasurer,
         )
 
         // Assert

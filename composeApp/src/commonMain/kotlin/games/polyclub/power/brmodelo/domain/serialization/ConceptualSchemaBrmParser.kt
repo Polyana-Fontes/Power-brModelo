@@ -469,6 +469,7 @@ object ConceptualSchemaBrmParser {
             isWeak = node.boolProp("Fraca") || isWeak,
             orientation = orientation,
             cardinalityRole = node.strProp("Nome"),
+            cardinalityObservations = node.strProp("Observacao"),
             cardinalityPosition = labelPos,
             cardinalityAutoSize = node.boolProp("TamAuto", true),
         )

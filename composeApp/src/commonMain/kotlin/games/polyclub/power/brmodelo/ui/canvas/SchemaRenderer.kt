@@ -24,6 +24,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextMeasurer
@@ -163,8 +164,11 @@ fun DrawScope.drawSchema(
         is CanvasSelection.Cardinality -> {
             val conn = schema.connections.firstOrNull { it.id == selection.connectionId }
             if (conn != null && conn.showCardinality && conn.cardinality != null) {
-                cardinalityLabelHighlightElementPosition(schema, conn)?.let {
-                    drawCardinalitySelectionHighlight(it)
+                cardinalityLabelHighlightElementPosition(schema, conn, textMeasurer)?.let { pos ->
+                    drawCardinalitySelectionHighlight(pos)
+                    if (!conn.cardinalityAutoSize) {
+                        drawElementSelectionHandles(pos)
+                    }
                 }
             }
         }
@@ -852,57 +856,48 @@ private fun DrawScope.drawConnectionLine(
 }
 
 /**
- * Draws the cardinality label for a connection ON TOP of elements.
- *
- * Must be called after elements are drawn so the label appears above them —
- * matching the original Pascal z-order where [TCardinalidade] floats above the canvas.
- *
- * When a stored position is available ([games.polyclub.power.brmodelo.domain.Connection.cardinalityPosition]), it is used
- * directly — these coordinates were produced by [TLigacao.PosicioneCardinalidade] and
- * saved in the XML. A small X adjustment (lw/4) compensates for the width difference
- * between the original 8pt Tahoma and our rendered font.
+ * Label X used when choosing "role (card)" vs "(card) role" for **automatic** layout
+ * (same as when [Connection.cardinalityPosition] is null in [drawCardinalityLabel]).
  */
-private fun DrawScope.drawCardinalityLabel(
+private const val CARDINALITY_AUTO_LAYOUT_LABEL_LEFT_FOR_ROLE = 0
+
+/**
+ * Full cardinality label string for drawing and hit-testing (Pascal TCardinalidade.Paint order).
+ *
+ * @param labelLeftForRoleInversion Compares against [Connection.elementIdB] left edge to pick order.
+ */
+private fun cardinalityLabelDisplayString(
     conn: Connection,
     schema: ConceptualSchema,
-    dividedPoints: Map<Int, Map<Int, Offset>>,
-    textMeasurer: TextMeasurer,
-) {
-    if (!conn.showCardinality || conn.cardinality == null) return
+    labelLeftForRoleInversion: Int,
+): String? {
+    if (!conn.showCardinality || conn.cardinality == null) return null
     val baseLabel = conn.cardinality.label
-    if (baseLabel.isBlank()) return
-
-    // Pascal TCardinalidade.Paint (mer.pas 9300-9302):
-    //   Default format: "role (card)"  e.g. "Responsável (1,1)"
-    //   Inverted format when Ponta.Left < label.Left: "(card) role"  e.g. "(1,1) Responsável"
-    // Ponta = elementIdB (the destination/entity end of the connection).
-    val cardStr = if (conn.cardinalityRole.isNotEmpty()) {
+    if (baseLabel.isBlank()) return null
+    return if (conn.cardinalityRole.isNotEmpty()) {
         val pontaLeft = schema.elements[conn.elementIdB]?.position?.x ?: 0
-        val labelLeft = conn.cardinalityPosition?.x ?: 0
-        if (pontaLeft < labelLeft) "$baseLabel ${conn.cardinalityRole}"
+        if (pontaLeft < labelLeftForRoleInversion) "$baseLabel ${conn.cardinalityRole}"
         else "${conn.cardinalityRole} $baseLabel"
     } else {
         baseLabel
     }
+}
 
-    val elemA = schema.elements[conn.elementIdA] ?: return
-    val elemB = schema.elements[conn.elementIdB] ?: return
-
+/**
+ * Top-left pixel where the cardinality text is placed in **fallback** mode
+ * (same geometry as the former no-stored-position branch of [drawCardinalityLabel]).
+ */
+private fun floatingCardinalityLabelTextTopLeftMeasured(
+    schema: ConceptualSchema,
+    conn: Connection,
+    dividedPoints: Map<Int, Map<Int, Offset>>,
+    textMeasurer: TextMeasurer,
+    labelLeftForRoleInversion: Int,
+): Offset? {
+    val elemA = schema.elements[conn.elementIdA] ?: return null
+    val elemB = schema.elements[conn.elementIdB] ?: return null
+    val cardStr = cardinalityLabelDisplayString(conn, schema, labelLeftForRoleInversion) ?: return null
     val layout = textMeasurer.measure(cardStr, style = MULTIVALUE_CARD_STYLE)
-
-    // Use stored position when available; apply X correction for font-width difference.
-    // The stored position was calibrated for the cardinality-only string (e.g. "(1,1)"),
-    // so the correction must also be based solely on that part — not the full combined
-    // label that may include a role name ("Responsável"), which would over-shift it.
-    if (conn.cardinalityPosition != null) {
-        val lp = conn.cardinalityPosition
-        val cardOnlyLayout = textMeasurer.measure(baseLabel, style = MULTIVALUE_CARD_STYLE)
-        val xAdjustment = cardOnlyLayout.size.width / 4f
-        drawText(layout, topLeft = Offset(lp.x.toFloat() + xAdjustment, lp.y.toFloat()))
-        return
-    }
-
-    // Fallback: compute position from the entity-end anchor when no stored coordinates.
     val entityElem = when {
         elemB is SchemaElement.Entity || elemB is SchemaElement.AssociativeEntity -> elemB
         elemA is SchemaElement.Entity || elemA is SchemaElement.AssociativeEntity -> elemA
@@ -927,19 +922,81 @@ private fun DrawScope.drawCardinalityLabel(
     val lw = layout.size.width.toFloat()
     val CARD_H = 20f
     var aLeft = anchor.x
-    var aTop  = anchor.y - CARD_H + 5f
+    var aTop = anchor.y - CARD_H + 5f
     when (p) {
         1 -> aLeft = aLeft - lw + 2f
-        4 -> aTop  = aTop + CARD_H - 4f
+        4 -> aTop = aTop + CARD_H - 4f
     }
-    drawText(layout, topLeft = Offset(aLeft, aTop))
+    return Offset(aLeft, aTop)
+}
+
+/**
+ * Draws the cardinality label for a connection ON TOP of elements.
+ *
+ * Must be called after elements are drawn so the label appears above them —
+ * matching the original Pascal z-order where [TCardinalidade] floats above the canvas.
+ *
+ * When a stored position is available ([games.polyclub.power.brmodelo.domain.Connection.cardinalityPosition]), it is used
+ * directly — these coordinates were produced by [TLigacao.PosicioneCardinalidade] and
+ * saved in the XML. A small X adjustment (lw/4) compensates for the width difference
+ * between the original 8pt Tahoma and our rendered font.
+ */
+private fun DrawScope.drawCardinalityLabel(
+    conn: Connection,
+    schema: ConceptualSchema,
+    dividedPoints: Map<Int, Map<Int, Offset>>,
+    textMeasurer: TextMeasurer,
+) {
+    if (!conn.showCardinality || conn.cardinality == null) return
+    val baseLabel = conn.cardinality.label
+    if (baseLabel.isBlank()) return
+
+    val labelLeftForRoleInversion = conn.cardinalityPosition?.x ?: CARDINALITY_AUTO_LAYOUT_LABEL_LEFT_FOR_ROLE
+    val cardStr =
+        cardinalityLabelDisplayString(conn, schema, labelLeftForRoleInversion) ?: return
+
+    val elemA = schema.elements[conn.elementIdA] ?: return
+    val elemB = schema.elements[conn.elementIdB] ?: return
+
+    val layout = textMeasurer.measure(cardStr, style = MULTIVALUE_CARD_STYLE)
+
+    // Use stored position when available; apply X correction for font-width difference.
+    // The stored position was calibrated for the cardinality-only string (e.g. "(1,1)"),
+    // so the correction must also be based solely on that part — not the full combined
+    // label that may include a role name ("Responsável"), which would over-shift it.
+    if (conn.cardinalityPosition != null) {
+        val lp = conn.cardinalityPosition
+        val cardOnlyLayout = textMeasurer.measure(baseLabel, style = MULTIVALUE_CARD_STYLE)
+        val xAdjustment = cardOnlyLayout.size.width / 4f
+        val topLeft = Offset(lp.x.toFloat() + xAdjustment, lp.y.toFloat())
+        if (!conn.cardinalityAutoSize && lp.width > 0 && lp.height > 0) {
+            clipRect(
+                left = lp.x.toFloat(),
+                top = lp.y.toFloat(),
+                right = (lp.x + lp.width).toFloat(),
+                bottom = (lp.y + lp.height).toFloat(),
+            ) {
+                drawText(layout, topLeft = topLeft)
+            }
+        } else {
+            drawText(layout, topLeft = topLeft)
+        }
+        return
+    }
+
+    // Fallback: compute position from the entity-end anchor when no stored coordinates.
+    val topLeft = floatingCardinalityLabelTextTopLeftMeasured(
+        schema,
+        conn,
+        dividedPoints,
+        textMeasurer,
+        labelLeftForRoleInversion,
+    ) ?: return
+    drawText(layout, topLeft = topLeft)
 }
 
 /** Height of the cardinality label hit box in px — matches [CanvasHitTest] / draw fallback. */
 internal const val CARDINALITY_LABEL_HIT_HEIGHT_PX = 20f
-
-private fun estimateCardinalityLabelTextWidthForHit(text: String): Float =
-    (text.length * 8.5f + 16f).coerceAtLeast(40f)
 
 /** Extra margin so hit area covers anti-aliased edges and font wider than the estimate. */
 private const val CARDINALITY_LABEL_HIT_INSET_PX = 6f
@@ -955,97 +1012,166 @@ private fun expandCardinalityHitRect(r: Rect): Rect = Rect(
  * Tight axis-aligned bounds of the cardinality label (same geometry as [drawCardinalityLabel] /
  * hit-test core), **without** the extra padding used for pointer hit-testing.
  */
-private fun cardinalityLabelBoundsRectUnpadded(schema: ConceptualSchema, conn: Connection): Rect? {
+private fun cardinalityLabelBoundsRectUnpadded(
+    schema: ConceptualSchema,
+    conn: Connection,
+    textMeasurer: TextMeasurer,
+): Rect? {
     if (!conn.showCardinality || conn.cardinality == null) return null
     val baseLabel = conn.cardinality.label
     if (baseLabel.isBlank()) return null
 
-    val cardStr = if (conn.cardinalityRole.isNotEmpty()) {
-        val pontaLeft = schema.elements[conn.elementIdB]?.position?.x ?: 0
-        val labelLeft = conn.cardinalityPosition?.x ?: 0
-        if (pontaLeft < labelLeft) "$baseLabel ${conn.cardinalityRole}"
-        else "${conn.cardinalityRole} $baseLabel"
-    } else {
-        baseLabel
-    }
-
-    val labelWidth = estimateCardinalityLabelTextWidthForHit(cardStr)
-    val xAdjust = estimateCardinalityLabelTextWidthForHit(conn.cardinality.label) / 4f
-
     conn.cardinalityPosition?.let { lp ->
+        if (!conn.cardinalityAutoSize && lp.width > 0 && lp.height > 0) {
+            return Rect(
+                left = lp.x.toFloat(),
+                top = lp.y.toFloat(),
+                right = (lp.x + lp.width).toFloat(),
+                bottom = (lp.y + lp.height).toFloat(),
+            )
+        }
+        val cardStr = cardinalityLabelDisplayString(conn, schema, lp.x) ?: return null
+        val layout = textMeasurer.measure(cardStr, style = MULTIVALUE_CARD_STYLE)
+        val cardOnlyLayout = textMeasurer.measure(baseLabel, style = MULTIVALUE_CARD_STYLE)
+        val xAdjust = cardOnlyLayout.size.width / 4f
+        val labelWidth = layout.size.width.toFloat()
+        val labelHeight = layout.size.height.toFloat().coerceAtLeast(CARDINALITY_LABEL_HIT_HEIGHT_PX)
         return Rect(
             left = lp.x + xAdjust,
             top = lp.y.toFloat(),
             right = lp.x + xAdjust + labelWidth,
-            bottom = lp.y + CARDINALITY_LABEL_HIT_HEIGHT_PX,
+            bottom = lp.y + labelHeight,
         )
     }
 
-    val elemA = schema.elements[conn.elementIdA] ?: return null
-    val elemB = schema.elements[conn.elementIdB] ?: return null
-    val entityElem = when {
-        elemB is SchemaElement.Entity || elemB is SchemaElement.AssociativeEntity -> elemB
-        elemA is SchemaElement.Entity || elemA is SchemaElement.AssociativeEntity -> elemA
-        else -> elemB
-    }
-    val otherForEntity = if (entityElem == elemA) elemB else elemA
     val dividedPoints = computeDividedPoints(schema)
-    val anchor = dividedPoints[entityElem.id]?.get(conn.id) ?: run {
-        val enc = connectionEncaixes(entityElem, otherForEntity, schema, conn)
-        enc[connectionPonto(entityElem, otherForEntity, schema, conn)]
-    }
-    val p = pointToEdgeIndex(anchor, entityElem.position)
-    val cardH = CARDINALITY_LABEL_HIT_HEIGHT_PX
-    var aLeft = anchor.x
-    var aTop = anchor.y - cardH + 5f
-    when (p) {
-        1 -> aLeft = aLeft - labelWidth + 2f
-        4 -> aTop = aTop + cardH - 4f
-    }
+    val topLeft = floatingCardinalityLabelTextTopLeftMeasured(
+        schema,
+        conn,
+        dividedPoints,
+        textMeasurer,
+        CARDINALITY_AUTO_LAYOUT_LABEL_LEFT_FOR_ROLE,
+    ) ?: return null
+    val cardStr = cardinalityLabelDisplayString(conn, schema, CARDINALITY_AUTO_LAYOUT_LABEL_LEFT_FOR_ROLE)
+        ?: return null
+    val layout = textMeasurer.measure(cardStr, style = MULTIVALUE_CARD_STYLE)
+    val lw = layout.size.width.toFloat()
+    val lh = layout.size.height.toFloat().coerceAtLeast(CARDINALITY_LABEL_HIT_HEIGHT_PX)
     return Rect(
-        left = aLeft,
-        top = aTop,
-        right = aLeft + labelWidth,
-        bottom = aTop + cardH,
+        left = topLeft.x,
+        top = topLeft.y,
+        right = topLeft.x + lw,
+        bottom = topLeft.y + lh,
     )
 }
 
 /**
- * [ElementPosition] for drawing the selection outline around a cardinality label.
- * Prefer stored non-degenerate bounds from the file; otherwise the same computed box as drawing.
+ * [ElementPosition] for drawing the selection outline and resize handles around a cardinality label.
+ *
+ * Uses the same bounds as the inspector ([connectionCardinalityBoxForModel]): stored `Left`/`Top`/`Width`/`Height`
+ * when present, otherwise the brModelo default box (36×20) anchored from layout. This avoids showing a
+ * wide outline driven by the hit-test width estimate while the sidebar still shows 36.
  */
-internal fun cardinalityLabelHighlightElementPosition(schema: ConceptualSchema, conn: Connection): ElementPosition? {
+internal fun cardinalityLabelHighlightElementPosition(
+    schema: ConceptualSchema,
+    conn: Connection,
+    textMeasurer: TextMeasurer,
+): ElementPosition? {
     val stored = conn.cardinalityPosition
     if (stored != null && stored.width > 0 && stored.height > 0) {
         return stored
     }
-    val r = cardinalityLabelBoundsRectUnpadded(schema, conn) ?: return null
-    val w = (r.right - r.left).toInt().coerceAtLeast(1)
-    val h = (r.bottom - r.top).toInt().coerceAtLeast(1)
-    return ElementPosition(
-        x = r.left.toInt(),
-        y = r.top.toInt(),
-        width = w,
-        height = h,
-    )
+    return connectionCardinalityBoxForModel(schema, conn, textMeasurer)
 }
 
 /**
  * Persists the current on-canvas cardinality box when the user locks the label ("Fixa").
  * [Connection.cardinalityPosition] stores the label **box** origin (Pascal `Left`/`Top`); drawing
  * applies [xAdjust] for font metrics, so we convert from the computed text-space rect.
+ *
+ * Uses the same automatic anchor + measured text width as the former no-stored-position draw path.
  */
-internal fun materializeCardinalityPositionForFixed(schema: ConceptualSchema, conn: Connection): ElementPosition? {
-    val r = cardinalityLabelBoundsRectUnpadded(schema, conn) ?: return null
+internal fun materializeCardinalityPositionForFixed(
+    schema: ConceptualSchema,
+    conn: Connection,
+    textMeasurer: TextMeasurer,
+): ElementPosition? {
+    if (!conn.showCardinality || conn.cardinality == null) return null
     val baseLabel = conn.cardinality?.label ?: return null
-    val xAdjust = estimateCardinalityLabelTextWidthForHit(baseLabel) / 4f
-    val w = (r.right - r.left).toInt().coerceAtLeast(1)
-    val h = (r.bottom - r.top).toInt().coerceAtLeast(1)
+    if (baseLabel.isBlank()) return null
+    val dividedPoints = computeDividedPoints(schema)
+    val topLeft = floatingCardinalityLabelTextTopLeftMeasured(
+        schema,
+        conn,
+        dividedPoints,
+        textMeasurer,
+        CARDINALITY_AUTO_LAYOUT_LABEL_LEFT_FOR_ROLE,
+    ) ?: return null
+    val cardOnlyLayout = textMeasurer.measure(baseLabel, style = MULTIVALUE_CARD_STYLE)
+    val xAdjustment = cardOnlyLayout.size.width / 4f
     return ElementPosition(
-        x = (r.left - xAdjust).toInt(),
-        y = r.top.toInt(),
-        width = w,
-        height = h,
+        x = (topLeft.x - xAdjustment).toInt(),
+        y = topLeft.y.toInt(),
+        width = Connection.DEFAULT_LABEL_WIDTH,
+        height = Connection.DEFAULT_LABEL_HEIGHT,
+    )
+}
+
+/**
+ * Label box in model coordinates ([Connection.cardinalityPosition] convention) for inspector and gestures.
+ * Materializes from layout when the connection has no stored non-degenerate bounds.
+ */
+internal fun connectionCardinalityBoxForModel(
+    schema: ConceptualSchema,
+    conn: Connection,
+    textMeasurer: TextMeasurer,
+): ElementPosition? {
+    val stored = conn.cardinalityPosition
+    if (stored != null && stored.width > 0 && stored.height > 0) return stored
+    return materializeCardinalityPositionForFixed(schema, conn, textMeasurer)
+}
+
+/**
+ * Fills [Connection.cardinalityPosition] from layout when the link shows cardinality but has no
+ * valid stored box (e.g. immediately after [validateAndBuildConceptualLink]).
+ */
+internal fun enrichConnectionWithInitialCardinalityPosition(
+    schemaIncludingConnection: ConceptualSchema,
+    conn: Connection,
+    textMeasurer: TextMeasurer,
+): Connection {
+    if (!conn.showCardinality || conn.cardinality == null) return conn
+    val stored = conn.cardinalityPosition
+    if (stored != null && stored.width > 0 && stored.height > 0) return conn
+    return materializeCardinalityPositionForFixed(schemaIncludingConnection, conn, textMeasurer)?.let { pos ->
+        conn.copy(cardinalityPosition = pos)
+    } ?: conn
+}
+
+/**
+ * Recomputes floating (non-fixed) cardinality label positions from the current element layout.
+ * When [onlyIncidentToElementId] is non-null, only connections touching that element are updated.
+ */
+internal fun ConceptualSchema.withRecalculatedFloatingCardinalityPositions(
+    onlyIncidentToElementId: Int? = null,
+    textMeasurer: TextMeasurer,
+): ConceptualSchema {
+    val s = this
+    return copy(
+        connections = connections.map { conn ->
+            when {
+                !conn.showCardinality || conn.cardinality == null || conn.cardinalityFixed ->
+                    conn
+                onlyIncidentToElementId != null &&
+                    conn.elementIdA != onlyIncidentToElementId &&
+                    conn.elementIdB != onlyIncidentToElementId ->
+                    conn
+                else ->
+                    materializeCardinalityPositionForFixed(s, conn, textMeasurer)?.let { pos ->
+                        conn.copy(cardinalityPosition = pos)
+                    } ?: conn
+            }
+        },
     )
 }
 
@@ -1055,8 +1181,12 @@ internal fun materializeCardinalityPositionForFixed(schema: ConceptualSchema, co
  * [drawCardinalityLabel] so labels from new links (or legacy data without stored coords)
  * remain clickable.
  */
-internal fun cardinalityLabelInteractionRect(schema: ConceptualSchema, conn: Connection): Rect? {
-    val core = cardinalityLabelBoundsRectUnpadded(schema, conn) ?: return null
+internal fun cardinalityLabelInteractionRect(
+    schema: ConceptualSchema,
+    conn: Connection,
+    textMeasurer: TextMeasurer,
+): Rect? {
+    val core = cardinalityLabelBoundsRectUnpadded(schema, conn, textMeasurer) ?: return null
     return expandCardinalityHitRect(core)
 }
 

@@ -41,6 +41,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import games.polyclub.power.brmodelo.domain.CanvasSelection
@@ -119,6 +120,7 @@ internal fun SchemaCanvas(
     val currentConceptualTool by rememberUpdatedState(conceptualCanvasTool)
     val currentOnConceptualCanvasToolChange by rememberUpdatedState(onConceptualCanvasToolChange)
     val currentOnTransientUserMessage by rememberUpdatedState(onTransientUserMessage)
+    val currentTextMeasurer by rememberUpdatedState(textMeasurer)
 
     Box(
         modifier = modifier
@@ -151,6 +153,7 @@ internal fun SchemaCanvas(
                                         schema = schemaAtGestureStart,
                                         schemaPoint = schemaPoint,
                                         toolState = linkTool,
+                                        textMeasurer = currentTextMeasurer,
                                         onToolChange = currentOnConceptualCanvasToolChange,
                                         onMessage = currentOnTransientUserMessage,
                                         onSchemaCommit = currentOnSchemaCommit,
@@ -175,20 +178,42 @@ internal fun SchemaCanvas(
                     val hitResult = schemaAtGestureStart?.let {
                         hitTest(
                             it,
-                            schemaPoint
+                            schemaPoint,
+                            currentTextMeasurer,
                         )
                     }
                         ?: CanvasSelection.None
 
-                    // Check if the pointer is on a resize handle of the currently selected element.
+                    // Check if the pointer is on a resize handle of the currently selected element
+                    // or of the cardinality label (manual size).
                     val selectedElem = (selAtGestureStart as? CanvasSelection.Element)
                         ?.let { schemaAtGestureStart?.elements?.get(it.id) }
-                    val hitHandle = selectedElem?.let {
-                        getResizeHandleAt(
-                            it.position,
-                            schemaPoint
-                        )
+                    val cardinalitySel = selAtGestureStart as? CanvasSelection.Cardinality
+                    val cardinalityConn = cardinalitySel?.let { sid ->
+                        schemaAtGestureStart?.connections?.firstOrNull { it.id == sid.connectionId }
                     }
+                    val cardinalityResizeBox =
+                        if (cardinalityConn != null &&
+                            !cardinalityConn.cardinalityAutoSize &&
+                            cardinalityConn.showCardinality &&
+                            cardinalityConn.cardinality != null &&
+                            schemaAtGestureStart != null
+                        ) {
+                            cardinalityLabelHighlightElementPosition(
+                                schemaAtGestureStart,
+                                cardinalityConn,
+                                currentTextMeasurer,
+                            )
+                        } else {
+                            null
+                        }
+                    val hitHandleElem = selectedElem?.let {
+                        getResizeHandleAt(it.position, schemaPoint)
+                    }
+                    val hitHandleCard = cardinalityResizeBox?.let {
+                        getResizeHandleAt(it, schemaPoint)
+                    }
+                    val hitHandle = hitHandleElem ?: hitHandleCard
 
                     // Pascal behaviour: select immediately on pointer-down, not on pointer-up.
                     // Only skip if we're about to resize (the selection stays as-is).
@@ -198,18 +223,31 @@ internal fun SchemaCanvas(
 
                     // Snapshot the element/connection to be dragged at gesture start,
                     // so we can apply absolute deltas instead of cumulative per-frame ones.
+                    val resizeCardinalityConnId =
+                        if (hitHandleCard != null) cardinalityConn?.id else null
                     val dragElementId = (hitResult as? CanvasSelection.Element)?.id
-                        ?: (hitHandle?.let { (selAtGestureStart as? CanvasSelection.Element)?.id })
-                    val dragConnectionId = (hitResult as? CanvasSelection.Cardinality)?.connectionId
+                        ?: (hitHandleElem?.let { (selAtGestureStart as? CanvasSelection.Element)?.id })
+                    val dragConnectionId =
+                        if (resizeCardinalityConnId != null) {
+                            null
+                        } else {
+                            (hitResult as? CanvasSelection.Cardinality)?.connectionId
+                        }
 
                     val startElementPos: ElementPosition? =
                         dragElementId?.let { schemaAtGestureStart?.elements?.get(it)?.position }
+                    val startCardinalityResizePos: ElementPosition? =
+                        resizeCardinalityConnId?.let { id ->
+                            val s = schemaAtGestureStart ?: return@let null
+                            val c = s.connections.firstOrNull { it.id == id } ?: return@let null
+                            cardinalityLabelHighlightElementPosition(s, c, currentTextMeasurer)
+                        }
                     val startCardPos: ElementPosition? =
                         dragConnectionId?.let { id ->
                             val s = schemaAtGestureStart ?: return@let null
                             val conn = s.connections.firstOrNull { it.id == id } ?: return@let null
                             conn.cardinalityPosition
-                                ?: cardinalityLabelInteractionRect(s, conn)?.let { r ->
+                                ?: cardinalityLabelInteractionRect(s, conn, currentTextMeasurer)?.let { r ->
                                     ElementPosition(
                                         x = r.left.toInt(),
                                         y = r.top.toInt(),
@@ -270,8 +308,33 @@ internal fun SchemaCanvas(
                                 panOffset = panAtGestureStart + totalDrag
                             } else {
                                 when {
-                                    // ── Resize ───────────────────────────────────────
-                                    hitHandle != null && startElementPos != null -> {
+                                    // ── Resize cardinality label (manual size) ────────
+                                    hitHandle != null &&
+                                        resizeCardinalityConnId != null &&
+                                        startCardinalityResizePos != null -> {
+                                        val newPos =
+                                            applyResize(
+                                                handle = hitHandle,
+                                                startPos = startCardinalityResizePos,
+                                                totalDelta = totalDrag,
+                                            )
+                                        currentOnSchemaPreview(
+                                            s.copy(
+                                                connections = s.connections.map {
+                                                    if (it.id == resizeCardinalityConnId) {
+                                                        it.copy(cardinalityPosition = newPos)
+                                                    } else {
+                                                        it
+                                                    }
+                                                },
+                                            ),
+                                        )
+                                    }
+
+                                    // ── Resize element ─────────────────────────────────
+                                    hitHandle != null &&
+                                        dragElementId != null &&
+                                        startElementPos != null -> {
                                         val newPos =
                                             applyResize(
                                                 handle = hitHandle,
@@ -280,7 +343,13 @@ internal fun SchemaCanvas(
                                             )
                                         val elem = s.elements[dragElementId]
                                         if (elem != null) {
-                                            currentOnSchemaPreview(s.withElement(elem.withPosition(newPos)))
+                                            val schemaResized = s.withElement(elem.withPosition(newPos))
+                                            currentOnSchemaPreview(
+                                                schemaResized.withRecalculatedFloatingCardinalityPositions(
+                                                    onlyIncidentToElementId = dragElementId,
+                                                    textMeasurer = currentTextMeasurer,
+                                                ),
+                                            )
                                         }
                                     }
 
@@ -290,39 +359,14 @@ internal fun SchemaCanvas(
                                             x = startElementPos.x + totalDrag.x.toInt(),
                                             y = startElementPos.y + totalDrag.y.toInt(),
                                         )
-                                        val dx = newPos.x - startElementPos.x
-                                        val dy = newPos.y - startElementPos.y
                                         val elem = s.elements[dragElementId]
                                         if (elem != null) {
-                                            val newConns =
-                                                if (dx == 0 && dy == 0) {
-                                                    s.connections
-                                                } else {
-                                                    s.connections.map { conn ->
-                                                        val touches =
-                                                            conn.elementIdA == dragElementId ||
-                                                                conn.elementIdB == dragElementId
-                                                        if (!touches ||
-                                                            !conn.showCardinality ||
-                                                            conn.cardinality == null ||
-                                                            conn.cardinalityFixed ||
-                                                            conn.cardinalityPosition == null
-                                                        ) {
-                                                            conn
-                                                        } else {
-                                                            val p = conn.cardinalityPosition!!
-                                                            conn.copy(
-                                                                cardinalityPosition = p.copy(
-                                                                    x = p.x + dx,
-                                                                    y = p.y + dy,
-                                                                ),
-                                                            )
-                                                        }
-                                                    }
-                                                }
+                                            val schemaMoved = s.withElement(elem.withPosition(newPos))
                                             currentOnSchemaPreview(
-                                                s.copy(connections = newConns)
-                                                    .withElement(elem.withPosition(newPos)),
+                                                schemaMoved.withRecalculatedFloatingCardinalityPositions(
+                                                    onlyIncidentToElementId = dragElementId,
+                                                    textMeasurer = currentTextMeasurer,
+                                                ),
                                             )
                                         }
                                     }
@@ -413,6 +457,7 @@ private fun processLinkObjectsTap(
     schema: ConceptualSchema,
     schemaPoint: Offset,
     toolState: ConceptualCanvasTool.LinkObjects,
+    textMeasurer: TextMeasurer,
     onToolChange: (ConceptualCanvasTool) -> Unit,
     onMessage: (String) -> Unit,
     onSchemaCommit: (ConceptualSchema) -> Unit,
@@ -436,7 +481,15 @@ private fun processLinkObjectsTap(
             val (schemaWithId, newConnId) = schema.allocateId()
             when (val r = validateAndBuildConceptualLink(schema, toolState.first, pick, newConnId)) {
                 is ConceptualLinkValidationResult.Ok -> {
-                    onSchemaCommit(schemaWithId.withConnection(r.connection))
+                    val added = schemaWithId.withConnection(r.connection)
+                    val enriched = enrichConnectionWithInitialCardinalityPosition(added, r.connection, textMeasurer)
+                    onSchemaCommit(
+                        added.copy(
+                            connections = added.connections.map {
+                                if (it.id == enriched.id) enriched else it
+                            },
+                        ),
+                    )
                     onSelectionChange(CanvasSelection.None)
                     onToolChange(ConceptualCanvasTool.LinkObjects.AwaitingFirst)
                 }

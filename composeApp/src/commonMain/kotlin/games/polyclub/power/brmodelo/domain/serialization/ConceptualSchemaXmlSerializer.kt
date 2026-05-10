@@ -456,8 +456,8 @@ object ConceptualSchemaXmlSerializer {
                     conn.cardinalityPosition ?: ElementPosition(
                         0,
                         0,
-                        36,
-                        20
+                        Connection.DEFAULT_LABEL_WIDTH,
+                        Connection.DEFAULT_LABEL_HEIGHT,
                     )
                 add(
                     buildCardinalidadeNode(
@@ -466,6 +466,7 @@ object ConceptualSchemaXmlSerializer {
                         pos,
                         conn.cardinalityFixed,
                         conn.cardinalityRole,
+                        conn.cardinalityObservations,
                         conn.cardinalityAutoSize
                     )
                 )
@@ -478,6 +479,7 @@ object ConceptualSchemaXmlSerializer {
         position: ElementPosition,
         fixed: Boolean,
         role: String = "",
+        observations: String = "",
         autoSize: Boolean = true,
     ): XmlNode {
         val cardCode = when (cardinality) {
@@ -501,10 +503,10 @@ object ConceptualSchemaXmlSerializer {
             add(xmlNode("AtributosOcultos"))
             textNode("Dicionario", "")
             boolValor("Nula", false)
-            textNode("Observacao", "")
+            textNode("Observacao", observations)
             textNode("Futuro", "")
             add(xmlNode("Anexos"))
-            valor("Cor", DEFAULT_CARD_COLOR)
+            valor("Cor", Connection.DEFAULT_LABEL_BACKGROUND_COLOR)
             boolValor("TamAuto", autoSize)
             valor("Tipo", 0)
             valor("TextAlin", 0)
@@ -590,8 +592,6 @@ object ConceptualSchemaXmlSerializer {
             }
         }
 
-    /** Default cardinality label background colour (Windows COLORREF 0xF0CAA6, light blue-grey). */
-    private const val DEFAULT_CARD_COLOR = 15780518
 }
 
 // ── Serialization context ─────────────────────────────────────────────────────

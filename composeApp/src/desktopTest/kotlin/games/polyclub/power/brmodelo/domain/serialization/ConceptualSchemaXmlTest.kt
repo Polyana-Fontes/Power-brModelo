@@ -598,4 +598,25 @@ class ConceptualSchemaXmlTest {
         val reNames = reloadedEntity.hiddenAttributes.map { it.name }
         assertEquals(origNames, reNames)
     }
+
+    @Test
+    fun `valores-padroes XML - default cardinality control matches reference`() {
+        // Arrange
+        val schema = parseResource("valores-padroes.xml")
+
+        // Act
+        val conn = schema.connections.firstOrNull { it.id == 7 }
+
+        // Assert
+        assertNotNull(conn)
+        assertTrue(conn!!.showCardinality)
+        val pos = conn.cardinalityPosition
+        assertNotNull(pos)
+        assertEquals(186, pos!!.x)
+        assertEquals(86, pos.y)
+        assertEquals(Connection.DEFAULT_LABEL_WIDTH, pos.width)
+        assertEquals(Connection.DEFAULT_LABEL_HEIGHT, pos.height)
+        assertTrue(conn.cardinalityAutoSize)
+        assertFalse(conn.cardinalityFixed)
+    }
 }

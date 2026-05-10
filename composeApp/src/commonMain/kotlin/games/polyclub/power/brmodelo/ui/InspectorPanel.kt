@@ -70,6 +70,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -90,6 +91,7 @@ import games.polyclub.power.brmodelo.domain.SchemaElement
 import games.polyclub.power.brmodelo.domain.SpecializationType
 import games.polyclub.power.brmodelo.domain.TextAlignment
 import games.polyclub.power.brmodelo.ui.assocLabel
+import games.polyclub.power.brmodelo.ui.canvas.connectionCardinalityBoxForModel
 import games.polyclub.power.brmodelo.ui.canvas.materializeCardinalityPositionForFixed
 import games.polyclub.power.brmodelo.ui.canvas.withPosition
 import games.polyclub.power.brmodelo.ui.components.CHROMIUM_TAB_ACTIVE_HEIGHT
@@ -165,6 +167,11 @@ private val HINTS: Map<String, String> = mapOf(
     "ENT_FRACA"      to "Tipo de entidade (fraca ou normal).",
     "CARDINALIDADE"  to "Cardinalidade do relacionamento entre as entidades.",
     "PAPEL"          to "Descrição do papel da cardinalidade (descrição/observação).",
+    "CARD_OBS"       to "Algo importante a ser anotado para posterior observação.",
+    "CARD_LT_X"      to "Posição horizontal da caixa da cardinalidade no modelo.",
+    "CARD_LT_Y"      to "Posição vertical da caixa da cardinalidade no modelo.",
+    "CARD_WH_W"      to "Largura da caixa da cardinalidade (somente leitura com tamanho automático).",
+    "CARD_WH_H"      to "Altura da caixa da cardinalidade (somente leitura com tamanho automático).",
     "ATRIB_TAM_AUT"  to "Controle do tamanho do desenho do atributo.",
     "ATRIB_LADO"     to "Alinhamento da fixação do atributo.",
     "IDENTIFICADOR"  to "O atributo pode ser identificador, Opcional, composto e/ou multivalorado.",
@@ -991,7 +998,17 @@ private fun CardinalityContent(
     onSchemaPreview: (ConceptualSchema) -> Unit,
     onSchemaCommit: (ConceptualSchema) -> Unit,
 ) {
-    SectionTitle("Cardinalidade")
+    val textMeasurer = rememberTextMeasurer()
+
+    fun updateConn(block: (games.polyclub.power.brmodelo.domain.Connection) -> games.polyclub.power.brmodelo.domain.Connection) {
+        onSchemaCommit(
+            schema.copy(connections = schema.connections.map { if (it.id == conn.id) block(it) else it }),
+        )
+    }
+
+    val box = connectionCardinalityBoxForModel(schema, conn, textMeasurer)
+
+    SectionTitle("Edição: Cardinalidade")
 
     val papelCommitted =
         committedSchema?.connections?.firstOrNull { it.id == conn.id }?.cardinalityRole ?: conn.cardinalityRole
@@ -1011,9 +1028,181 @@ private fun CardinalityContent(
             )
         },
     ) { v ->
-        onSchemaCommit(schema.copy(connections = schema.connections.map {
-            if (it.id == conn.id) it.copy(cardinalityRole = v) else it
-        }))
+        updateConn { it.copy(cardinalityRole = v) }
+    }
+
+    val obsCommitted =
+        committedSchema?.connections?.firstOrNull { it.id == conn.id }?.cardinalityObservations
+            ?: conn.cardinalityObservations
+    EditableRow(
+        label = "Observação",
+        value = obsCommitted,
+        key = "CARD_OBS",
+        focusedKey = focusedKey,
+        onFocusChange = onFocusChange,
+        onLiveDraftChange = { draft ->
+            onSchemaPreview(
+                schema.copy(
+                    connections = schema.connections.map {
+                        if (it.id == conn.id) it.copy(cardinalityObservations = draft) else it
+                    },
+                ),
+            )
+        },
+    ) { v ->
+        updateConn { it.copy(cardinalityObservations = v) }
+    }
+
+    SectionTitle("Posição e Tamanho")
+
+    if (box != null) {
+        fun ensureBoxForEdit(): ElementPosition =
+            connectionCardinalityBoxForModel(schema, conn, textMeasurer)
+                ?: materializeCardinalityPositionForFixed(schema, conn, textMeasurer)!!
+
+        EditableRow(
+            label = "Esquerda",
+            value = box.x.toString(),
+            key = "CARD_LT_X",
+            focusedKey = focusedKey,
+            onFocusChange = onFocusChange,
+            onLiveDraftChange = { draft ->
+                draft.toIntOrNull()?.let { x ->
+                    val b = ensureBoxForEdit()
+                    onSchemaPreview(
+                        schema.copy(
+                            connections = schema.connections.map {
+                                if (it.id == conn.id) {
+                                    it.copy(cardinalityPosition = b.copy(x = x))
+                                } else {
+                                    it
+                                }
+                            },
+                        ),
+                    )
+                }
+            },
+        ) { v ->
+            v.toIntOrNull()?.let { x ->
+                val b = ensureBoxForEdit()
+                updateConn { it.copy(cardinalityPosition = b.copy(x = x)) }
+            }
+        }
+
+        EditableRow(
+            label = "Acima",
+            value = box.y.toString(),
+            key = "CARD_LT_Y",
+            focusedKey = focusedKey,
+            onFocusChange = onFocusChange,
+            onLiveDraftChange = { draft ->
+                draft.toIntOrNull()?.let { y ->
+                    val b = ensureBoxForEdit()
+                    onSchemaPreview(
+                        schema.copy(
+                            connections = schema.connections.map {
+                                if (it.id == conn.id) {
+                                    it.copy(cardinalityPosition = b.copy(y = y))
+                                } else {
+                                    it
+                                }
+                            },
+                        ),
+                    )
+                }
+            },
+        ) { v ->
+            v.toIntOrNull()?.let { y ->
+                val b = ensureBoxForEdit()
+                updateConn { it.copy(cardinalityPosition = b.copy(y = y)) }
+            }
+        }
+
+        if (conn.cardinalityAutoSize) {
+            ReadOnlyRow(
+                label = "Largura",
+                value = box.width.toString(),
+                key = "CARD_WH_W",
+                focusedKey = focusedKey,
+                onFocusChange = onFocusChange,
+            )
+            ReadOnlyRow(
+                label = "Altura",
+                value = box.height.toString(),
+                key = "CARD_WH_H",
+                focusedKey = focusedKey,
+                onFocusChange = onFocusChange,
+            )
+        } else {
+            EditableRow(
+                label = "Largura",
+                value = box.width.toString(),
+                key = "CARD_WH_W",
+                focusedKey = focusedKey,
+                onFocusChange = onFocusChange,
+                onLiveDraftChange = { draft ->
+                    draft.toIntOrNull()?.let { w ->
+                        val b = ensureBoxForEdit()
+                        onSchemaPreview(
+                            schema.copy(
+                                connections = schema.connections.map {
+                                    if (it.id == conn.id) {
+                                        it.copy(
+                                            cardinalityPosition = b.copy(
+                                                width = w.coerceAtLeast(10),
+                                            ),
+                                        )
+                                    } else {
+                                        it
+                                    }
+                                },
+                            ),
+                        )
+                    }
+                },
+            ) { v ->
+                v.toIntOrNull()?.let { w ->
+                    val b = ensureBoxForEdit()
+                    updateConn {
+                        it.copy(cardinalityPosition = b.copy(width = w.coerceAtLeast(10)))
+                    }
+                }
+            }
+            EditableRow(
+                label = "Altura",
+                value = box.height.toString(),
+                key = "CARD_WH_H",
+                focusedKey = focusedKey,
+                onFocusChange = onFocusChange,
+                onLiveDraftChange = { draft ->
+                    draft.toIntOrNull()?.let { h ->
+                        val b = ensureBoxForEdit()
+                        onSchemaPreview(
+                            schema.copy(
+                                connections = schema.connections.map {
+                                    if (it.id == conn.id) {
+                                        it.copy(
+                                            cardinalityPosition = b.copy(
+                                                height = h.coerceAtLeast(10),
+                                            ),
+                                        )
+                                    } else {
+                                        it
+                                    }
+                                },
+                            ),
+                        )
+                    }
+                },
+            ) { v ->
+                v.toIntOrNull()?.let { h ->
+                    val b = ensureBoxForEdit()
+                    updateConn {
+                        it.copy(cardinalityPosition = b.copy(height = h.coerceAtLeast(10)))
+                    }
+                }
+            }
+        }
     }
 
     DropdownRow(
@@ -1029,15 +1218,21 @@ private fun CardinalityContent(
             schema.copy(
                 connections = schema.connections.map {
                     if (it.id != conn.id) return@map it
-                    if (wantFixed && it.cardinalityPosition == null) {
-                        val pos = materializeCardinalityPositionForFixed(schema, it)
-                        if (pos != null) {
-                            it.copy(cardinalityFixed = true, cardinalityPosition = pos)
-                        } else {
-                            it.copy(cardinalityFixed = true)
+                    when {
+                        wantFixed && it.cardinalityPosition == null -> {
+                            val pos = materializeCardinalityPositionForFixed(schema, it, textMeasurer)
+                            if (pos != null) {
+                                it.copy(cardinalityFixed = true, cardinalityPosition = pos)
+                            } else {
+                                it.copy(cardinalityFixed = true)
+                            }
                         }
-                    } else {
-                        it.copy(cardinalityFixed = wantFixed)
+                        !wantFixed -> {
+                            val unfixed = it.copy(cardinalityFixed = false)
+                            val pos = materializeCardinalityPositionForFixed(schema, unfixed, textMeasurer)
+                            unfixed.copy(cardinalityPosition = pos ?: unfixed.cardinalityPosition)
+                        }
+                        else -> it.copy(cardinalityFixed = true)
                     }
                 },
             ),
@@ -1047,10 +1242,7 @@ private fun CardinalityContent(
     DropdownRow(
         label = "Posição da Linha",
         selected = conn.orientation.label(),
-        options = listOf(
-            LineOrientation.VERTICAL.label(),
-            LineOrientation.HORIZONTAL.label()
-        ),
+        options = LineOrientation.entries.map { it.label() },
         key = "CARD_POS_LINHA",
         focusedKey = focusedKey,
         onFocusChange = onFocusChange,
@@ -1058,9 +1250,7 @@ private fun CardinalityContent(
         val ori =
             LineOrientation.entries.firstOrNull { it.label() == v }
                 ?: LineOrientation.HORIZONTAL
-        onSchemaCommit(schema.copy(connections = schema.connections.map {
-            if (it.id == conn.id) it.copy(orientation = ori) else it
-        }))
+        updateConn { it.copy(orientation = ori) }
     }
 
     DropdownRow(
@@ -1071,10 +1261,25 @@ private fun CardinalityContent(
         focusedKey = focusedKey,
         onFocusChange = onFocusChange,
     ) { v ->
-        onSchemaCommit(schema.copy(connections = schema.connections.map {
-            if (it.id == conn.id) it.copy(cardinalityAutoSize = v == "Sim") else it
-        }))
+        val auto = v == "Sim"
+        onSchemaCommit(
+            schema.copy(
+                connections = schema.connections.map {
+                    if (it.id != conn.id) return@map it
+                    var c = it.copy(cardinalityAutoSize = auto)
+                    if (!auto && (c.cardinalityPosition == null || c.cardinalityPosition.width <= 0 ||
+                            c.cardinalityPosition.height <= 0)
+                    ) {
+                        val b = materializeCardinalityPositionForFixed(schema, it, textMeasurer)
+                        if (b != null) c = c.copy(cardinalityPosition = b)
+                    }
+                    c
+                },
+            ),
+        )
     }
+
+    SectionTitle("Esquema")
 
     DropdownRow(
         label = "Entidade fraca",
@@ -1084,9 +1289,7 @@ private fun CardinalityContent(
         focusedKey = focusedKey,
         onFocusChange = onFocusChange,
     ) { v ->
-        onSchemaCommit(schema.copy(connections = schema.connections.map {
-            if (it.id == conn.id) it.copy(isWeak = v == "Sim") else it
-        }))
+        updateConn { it.copy(isWeak = v == "Sim") }
     }
 
     DropdownRow(
@@ -1099,9 +1302,7 @@ private fun CardinalityContent(
     ) { v ->
         val card =
             Cardinality.entries.firstOrNull { it.label == v }
-        onSchemaCommit(schema.copy(connections = schema.connections.map {
-            if (it.id == conn.id) it.copy(cardinality = card) else it
-        }))
+        updateConn { it.copy(cardinality = card) }
     }
 }
 
@@ -1642,5 +1843,6 @@ private fun TextAlignment.label(): String = when (this) {
 private fun LineOrientation.label(): String = when (this) {
     LineOrientation.VERTICAL   -> "H. Vert."
     LineOrientation.HORIZONTAL -> "H. Horz."
-    else                       -> "H. Horz."
+    LineOrientation.DIAGONAL   -> "H. Diag."
+    LineOrientation.LEFT       -> "H. Esg."
 }

@@ -441,6 +441,7 @@ object ConceptualSchemaXmlParser {
         val cardFixed = cardNode?.boolValor("Fixa") ?: false
         val cardRole = cardNode?.attr("nome")?.trim() ?: ""
         val cardAutoSize = cardNode?.boolValor("TamAuto") ?: true
+        val cardObs = cardNode?.textChild("Observacao") ?: ""
 
         connections.add(
             Connection(
@@ -453,6 +454,7 @@ object ConceptualSchemaXmlParser {
                 isWeak = isWeak,
                 orientation = orientation,
                 cardinalityRole = cardRole,
+                cardinalityObservations = cardObs,
                 cardinalityPosition = cardPos,
                 cardinalityAutoSize = cardAutoSize,
                 useAssociativeOuterForEndA = useOuterA,

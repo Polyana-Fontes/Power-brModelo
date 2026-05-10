@@ -75,6 +75,7 @@ enum class LineOrientation(val code: Int) {
  *                                   of the inner diamond. Normally `false` because the relationship side uses the inner shape.
  * @param useAssociativeOuterForEndB Same for [elementIdB] — typically `true` when the **entity** side of the link
  *                                   was chosen on the outer rectangle of an associative entity.
+ * @param cardinalityObservations Free text on the cardinality label (Pascal `TCardinalidade.Observacao`).
  */
 data class Connection(
     val id: Int,
@@ -86,8 +87,21 @@ data class Connection(
     val isWeak: Boolean = false,
     val orientation: LineOrientation = LineOrientation.HORIZONTAL,
     val cardinalityRole: String = "",
+    val cardinalityObservations: String = "",
     val cardinalityPosition: ElementPosition? = null,
     val cardinalityAutoSize: Boolean = true,
     val useAssociativeOuterForEndA: Boolean = false,
     val useAssociativeOuterForEndB: Boolean = false,
-)
+) {
+    companion object {
+        /**
+         * Default `Width` / `Height` for `TCardinalidade` in brModelo XML
+         * (see `desktopTest/resources/valores-padroes.xml`).
+         */
+        const val DEFAULT_LABEL_WIDTH = 36
+        const val DEFAULT_LABEL_HEIGHT = 20
+
+        /** Default `Cor` (background) for the cardinality label control. */
+        const val DEFAULT_LABEL_BACKGROUND_COLOR = 15780518
+    }
+}

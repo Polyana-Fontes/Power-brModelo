@@ -20,6 +20,7 @@ package games.polyclub.power.brmodelo.ui.canvas
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.text.TextMeasurer
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualLinkPick
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
@@ -50,9 +51,9 @@ enum class ResizeHandle { TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT }
  *
  * Mirrors [TBase.MouseDown] routing in the original `mer.pas`.
  */
-fun hitTest(schema: ConceptualSchema, point: Offset): CanvasSelection {
+fun hitTest(schema: ConceptualSchema, point: Offset, textMeasurer: TextMeasurer): CanvasSelection {
     // 1. Cardinality labels are drawn on top of everything
-    val cardHit = hitTestCardinality(schema, point)
+    val cardHit = hitTestCardinality(schema, point, textMeasurer)
     if (cardHit != CanvasSelection.None) return cardHit
 
     // 2. Elements in reverse insertion order (last element on top)
@@ -65,9 +66,9 @@ fun hitTest(schema: ConceptualSchema, point: Offset): CanvasSelection {
  * Uses [cardinalityLabelInteractionRect], which matches both stored positions and the
  * same fallback layout as [drawCardinalityLabel] when [Connection.cardinalityPosition] is null.
  */
-fun hitTestCardinality(schema: ConceptualSchema, point: Offset): CanvasSelection {
+fun hitTestCardinality(schema: ConceptualSchema, point: Offset, textMeasurer: TextMeasurer): CanvasSelection {
     for (conn in schema.connections.asReversed()) {
-        val rect = cardinalityLabelInteractionRect(schema, conn) ?: continue
+        val rect = cardinalityLabelInteractionRect(schema, conn, textMeasurer) ?: continue
         if (rect.contains(point)) return CanvasSelection.Cardinality(conn.id)
     }
     return CanvasSelection.None
