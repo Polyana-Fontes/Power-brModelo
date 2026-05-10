@@ -42,8 +42,8 @@ object ConceptualPlacementDefaults {
     const val annotationWidth: Int = 150
     const val annotationHeight: Int = 22
 
-    /** `<Cor Valor="15780518"/>`. */
-    const val annotationColorArgb: Int = 15_780_518
+    /** `<Cor Valor="15780518"/>` — Delphi `clSkyBlue` (Windows COLORREF `0x00BBGGRR`, not Compose ARGB). */
+    const val annotationColorArgb: Int = AnnotationBackgroundColorPresets.DEFAULT_COLOR_REF
 
     /** `<Tipo Valor="1"/>` → [AnnotationType.HINT]. */
     val annotationType: AnnotationType = AnnotationType.HINT

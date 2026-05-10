@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
@@ -84,6 +85,7 @@ import androidx.compose.ui.zIndex
 import games.polyclub.power.brmodelo.domain.BulkDeleteCategoryCounts
 import games.polyclub.power.brmodelo.domain.bulkDeleteCategoryCounts
 import games.polyclub.power.brmodelo.domain.bulkDeleteCategoryCountsForCanvasSelection
+import games.polyclub.power.brmodelo.domain.AnnotationBackgroundColorPresets
 import games.polyclub.power.brmodelo.domain.AnnotationType
 import games.polyclub.power.brmodelo.domain.ArrowDirection
 import games.polyclub.power.brmodelo.domain.CanvasSelection
@@ -1210,16 +1212,6 @@ private fun SelfRelFields(
 
 // ── Annotation ────────────────────────────────────────────────────────────────
 
-private val ANNOTATION_COLORS = listOf(
-    "Branco"     to 0xFFFFFFFF,
-    "Azul claro" to 0xFFADD8E6,
-    "Creme"      to 0xFFFFFDD0,
-    "Verde claro" to 0xFF90EE90,
-    "Amarelo"    to 0xFFFFFF00,
-    "Rosa"       to 0xFFFFB6C1,
-    "Cinza claro" to 0xFFD3D3D3,
-)
-
 @Composable
 private fun AnnotationFields(
     element: SchemaElement.Annotation,
@@ -1229,19 +1221,13 @@ private fun AnnotationFields(
     onSchemaCommit: (ConceptualSchema) -> Unit,
 ) {
     SectionTitle("Aparência")
-    DropdownRow(
-        label = "Cor",
-        selected = ANNOTATION_COLORS.firstOrNull { it.second.toLong() == element.color?.toLong() }?.first
-            ?: "Branco",
-        options = ANNOTATION_COLORS.map { it.first },
+    AnnotationColorDropdownRow(
+        colorRef = element.color,
         key = "TIPO_VALOR",
         focusedKey = focusedKey,
         onFocusChange = onFocusChange,
-    ) { label ->
-        val argb =
-            ANNOTATION_COLORS.firstOrNull { it.first == label }?.second?.toInt()
-                ?: return@DropdownRow
-        onSchemaCommit(schema.withElement(element.copy(color = argb)))
+    ) { colorRef ->
+        onSchemaCommit(schema.withElement(element.copy(color = colorRef)))
     }
     DropdownRow(
         label = "Moldura",
@@ -1782,6 +1768,149 @@ private fun EditableRow(
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
             )
         }
+    }
+}
+
+/** Colour preset row: [TColorBox]-style list with a swatch beside each label (Lazarus `lcl/graphics.pp` order). */
+@Composable
+private fun AnnotationColorDropdownRow(
+    colorRef: Int?,
+    key: String,
+    focusedKey: String?,
+    onFocusChange: (String?) -> Unit,
+    onSelectColorRef: (Int) -> Unit,
+) {
+    val focused = focusedKey == key
+    var expanded by remember { mutableStateOf(false) }
+    val density = LocalDensity.current
+    var anchorWidth by remember { mutableStateOf(0.dp) }
+
+    val selectedLabel = AnnotationBackgroundColorPresets.labelForColorRef(colorRef)
+    val previewRef = colorRef ?: AnnotationBackgroundColorPresets.DEFAULT_COLOR_REF
+    val previewCompose = vclColorRefToCompose(previewRef)
+
+    val openMenu = {
+        onFocusChange(key)
+        expanded = true
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+            .border(width = 0.5.dp, color = CELL_BORDER),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Box(
+            modifier = Modifier
+                .width(CELL_LABEL_WIDTH)
+                .fillMaxHeight()
+                .clickable(onClick = openMenu)
+                .background(if (focused) CELL_LABEL_FOCUSED else CELL_LABEL_BG)
+                .padding(horizontal = 4.dp, vertical = 1.dp),
+        ) {
+            Text(
+                text = "Cor",
+                fontSize = ROW_TEXT_SIZE,
+                lineHeight = ROW_TEXT_SIZE,
+                color = if (focused) LABEL_FOCUSED_COLOR else LABEL_COLOR,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .background(CELL_VALUE_BG),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight()
+                    .onGloballyPositioned { coords ->
+                        anchorWidth = with(density) { coords.size.width.toDp() }
+                    }
+                    .clickable(onClick = openMenu)
+                    .padding(horizontal = 4.dp, vertical = 1.dp),
+            ) {
+                ColorSwatch(
+                    color = previewCompose,
+                    modifier = Modifier.padding(end = 6.dp),
+                )
+                Text(
+                    text = selectedLabel,
+                    style = inspectorValueTextStyle(VALUE_COLOR),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(text = "▾", style = INSPECTOR_DROPDOWN_CARET_STYLE)
+            }
+
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.then(
+                    if (anchorWidth > 0.dp) Modifier.width(anchorWidth) else Modifier,
+                ),
+            ) {
+                CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+                    val entries = AnnotationBackgroundColorPresets.ENTRIES
+                    entries.forEachIndexed { index, entry ->
+                        InspectorColorDropdownMenuItem(
+                            swatchColor = vclColorRefToCompose(entry.colorRef),
+                            text = entry.label,
+                            onClick = {
+                                expanded = false
+                                onSelectColorRef(entry.colorRef)
+                            },
+                        )
+                        if (index < entries.lastIndex) {
+                            HorizontalDivider(color = CELL_BORDER, thickness = 0.5.dp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ColorSwatch(color: Color, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .size(14.dp)
+            .border(width = 0.5.dp, color = CELL_BORDER)
+            .background(color),
+    )
+}
+
+@Composable
+private fun InspectorColorDropdownMenuItem(
+    swatchColor: Color,
+    text: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ColorSwatch(
+            color = swatchColor,
+            modifier = Modifier.padding(end = 8.dp),
+        )
+        Text(
+            text = text,
+            style = inspectorValueTextStyle(VALUE_COLOR),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

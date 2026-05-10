@@ -348,8 +348,8 @@ sealed class SchemaElement {
      *
      * Corresponds to `TTexto` in `mer.pas`.
      *
-     * @param color         Background/border color of the annotation box, as ARGB int.
-     *                      Corresponds to `TTexto.Cor`.
+     * @param color         Background colour for drawn box styles, as Windows **COLORREF** (`0x00BBGGRR`),
+     *                      same integer as XML `<Cor Valor="…"/>` and Delphi `TTexto.Cor`.
      * @param annotationType Visual style of the annotation.
      *                      Corresponds to `TTexto.Tipo`.
      * @param alignment     Text alignment inside the annotation.

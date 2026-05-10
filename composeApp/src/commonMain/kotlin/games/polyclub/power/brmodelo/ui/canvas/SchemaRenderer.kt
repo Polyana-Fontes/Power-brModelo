@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.sp
+import games.polyclub.power.brmodelo.domain.AnnotationBackgroundColorPresets
 import games.polyclub.power.brmodelo.domain.AnnotationType
 import games.polyclub.power.brmodelo.domain.ArrowDirection
 import games.polyclub.power.brmodelo.domain.CanvasSelection
@@ -44,6 +45,7 @@ import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.domain.conceptualAttributeAttachPonto
 import games.polyclub.power.brmodelo.domain.ElementPosition
 import games.polyclub.power.brmodelo.domain.SchemaElement
+import games.polyclub.power.brmodelo.ui.vclColorRefToCompose
 import games.polyclub.power.brmodelo.ui.canvas.drawAnnotation
 import games.polyclub.power.brmodelo.ui.canvas.drawAssociativeEntity
 import games.polyclub.power.brmodelo.ui.canvas.drawAttribute
@@ -856,9 +858,7 @@ private fun DrawScope.drawAnnotation(ann: SchemaElement.Annotation, textMeasurer
     val h = p.height.toFloat()
 
     // Resolve background colour (COLORREF BGR → RGB conversion)
-    val bgColor = if (ann.color != null) colorRefToCompose(
-        ann.color
-    ) else Color(0xFF87CEEB) // clSkyBlue
+    val bgColor = vclColorRefToCompose(ann.color ?: AnnotationBackgroundColorPresets.DEFAULT_COLOR_REF)
 
     // Pascal: if (Width < 15) or (Height < 15) then F := 5 else F := 15 → corner = F-5 = 0 or 10.
     // GDI RoundRect corner parameter is the ellipse diameter, so Compose radius = diameter/2 = 5.
@@ -2447,14 +2447,3 @@ private fun DrawScope.drawCenteredLabel(
     drawText(layout, topLeft = Offset(textX, textY))
 }
 
-// ── Helper: Windows COLORREF to Compose Color ────────────────────────────────
-
-/**
- * Converts a Windows COLORREF integer (BGR format, lower 3 bytes) to a [Color].
- */
-private fun colorRefToCompose(colorRef: Int): Color {
-    val r = (colorRef and 0xFF).toFloat() / 255f
-    val g = ((colorRef shr 8) and 0xFF).toFloat() / 255f
-    val b = ((colorRef shr 16) and 0xFF).toFloat() / 255f
-    return Color(red = r, green = g, blue = b)
-}
