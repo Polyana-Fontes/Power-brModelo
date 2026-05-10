@@ -51,13 +51,17 @@ import games.polyclub.power.brmodelo.ui.OperationsMenuRibbonBinding
 import games.polyclub.power.brmodelo.ui.SpecializationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.ConceptualRibbonOperation
 import games.polyclub.power.brmodelo.ui.components.AppColors
+import games.polyclub.power.brmodelo.generated.resources.Res
+import games.polyclub.power.brmodelo.generated.resources.gerar_logico_l
+import games.polyclub.power.brmodelo.generated.resources.operacoes_l
+import games.polyclub.power.brmodelo.generated.resources.redo_l
+import games.polyclub.power.brmodelo.generated.resources.undo_l
 
 /** Standard group: all buttons in a single row, group title below. */
 @Composable
 internal fun RibbonGroup(
     title: String,
     items: List<MenuEntry>,
-    operationsMenuBinding: OperationsMenuRibbonBinding? = null,
 ) {
     Column(
         modifier = Modifier
@@ -74,57 +78,100 @@ internal fun RibbonGroup(
             verticalAlignment = Alignment.Top
         ) {
             items.forEach { item ->
-                if (item.title == "Operações") {
-                    val binding = operationsMenuBinding
-                    val entries = conceptualOperationsDropdownEntries(
-                        binding?.organizeAttributesEnabled ?: false,
-                        binding?.selectAttributesEnabled ?: false,
-                        binding?.promoteToAssociativeEnabled ?: false,
-                        binding?.promoteAttributeToEntityEnabled ?: false,
-                        binding?.demoteAssociativeToRelationshipEnabled ?: false,
-                        binding?.demoteAssociativeToEntityEnabled ?: false,
-                        binding?.mergeEntityAndRelationshipToAssociativeEnabled ?: false,
-                        binding?.convertOptionalSpecializationsToRestrictedEnabled ?: false,
-                        binding?.convertRestrictedSpecializationToOptionalsEnabled ?: false,
-                        binding?.hideCanvasAttributeEnabled ?: false,
-                        binding?.revealHiddenAttributeEnabled ?: false,
-                    )
-                    RibbonButton(
-                        entry = item.copy(dropdown = entries),
-                        onDropdownItemSelected = { row ->
-                            when (row.conceptualOperation) {
-                                ConceptualRibbonOperation.OrganizeAttributes ->
-                                    binding?.onOrganizeAttributes?.invoke()
-                                ConceptualRibbonOperation.SelectAttributes ->
-                                    binding?.onSelectAttributes?.invoke()
-                                ConceptualRibbonOperation.PromoteToAssociativeEntity ->
-                                    binding?.onPromoteToAssociative?.invoke()
-                                ConceptualRibbonOperation.PromoteAttributeToEntity ->
-                                    binding?.onPromoteAttributeToEntity?.invoke()
-                                ConceptualRibbonOperation.DemoteAssociativeToRelationship ->
-                                    binding?.onDemoteAssociativeToRelationship?.invoke()
-                                ConceptualRibbonOperation.DemoteAssociativeToEntity ->
-                                    binding?.onDemoteAssociativeToEntity?.invoke()
-                                ConceptualRibbonOperation.MergeEntityAndRelationshipToAssociative ->
-                                    binding?.onMergeEntityAndRelationshipToAssociative?.invoke()
-                                ConceptualRibbonOperation.ConvertOptionalSpecializationsToRestricted ->
-                                    binding?.onConvertOptionalSpecializationsToRestricted?.invoke()
-                                ConceptualRibbonOperation.ConvertRestrictedSpecializationToOptionals ->
-                                    binding?.onConvertRestrictedSpecializationToOptionals?.invoke()
-                                ConceptualRibbonOperation.HideCanvasAttribute ->
-                                    binding?.onHideCanvasAttribute?.invoke()
-                                ConceptualRibbonOperation.RevealHiddenAttribute ->
-                                    binding?.onRevealHiddenAttribute?.invoke()
-                                null -> Unit
-                            }
-                        },
-                    )
-                } else {
-                    RibbonButton(item)
-                }
+                RibbonButton(item)
             }
         }
         RibbonGroupTitle(title)
+    }
+}
+
+/** **Operações** split menu, **Desfazer** / **Refazer**, and **Gerar Esquema Lógico** in one ribbon group. */
+@Composable
+internal fun RibbonOperacoesGroup(
+    operationsMenuBinding: OperationsMenuRibbonBinding?,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxHeight()
+            .drawBehind { drawRect(AppColors.ribbonBorder, style = Stroke(width = 1.dp.toPx())) }
+            .background(AppColors.ribbonGroupBg)
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            val binding = operationsMenuBinding
+            val entries = conceptualOperationsDropdownEntries(
+                binding?.organizeAttributesEnabled ?: false,
+                binding?.selectAttributesEnabled ?: false,
+                binding?.promoteToAssociativeEnabled ?: false,
+                binding?.promoteAttributeToEntityEnabled ?: false,
+                binding?.demoteAssociativeToRelationshipEnabled ?: false,
+                binding?.demoteAssociativeToEntityEnabled ?: false,
+                binding?.mergeEntityAndRelationshipToAssociativeEnabled ?: false,
+                binding?.convertOptionalSpecializationsToRestrictedEnabled ?: false,
+                binding?.convertRestrictedSpecializationToOptionalsEnabled ?: false,
+                binding?.hideCanvasAttributeEnabled ?: false,
+                binding?.revealHiddenAttributeEnabled ?: false,
+            )
+            RibbonButton(
+                entry = MenuEntry(
+                    title = "Operações",
+                    icon = Res.drawable.operacoes_l,
+                    dropdown = entries,
+                ),
+                onDropdownItemSelected = { row ->
+                    when (row.conceptualOperation) {
+                        ConceptualRibbonOperation.OrganizeAttributes ->
+                            binding?.onOrganizeAttributes?.invoke()
+                        ConceptualRibbonOperation.SelectAttributes ->
+                            binding?.onSelectAttributes?.invoke()
+                        ConceptualRibbonOperation.PromoteToAssociativeEntity ->
+                            binding?.onPromoteToAssociative?.invoke()
+                        ConceptualRibbonOperation.PromoteAttributeToEntity ->
+                            binding?.onPromoteAttributeToEntity?.invoke()
+                        ConceptualRibbonOperation.DemoteAssociativeToRelationship ->
+                            binding?.onDemoteAssociativeToRelationship?.invoke()
+                        ConceptualRibbonOperation.DemoteAssociativeToEntity ->
+                            binding?.onDemoteAssociativeToEntity?.invoke()
+                        ConceptualRibbonOperation.MergeEntityAndRelationshipToAssociative ->
+                            binding?.onMergeEntityAndRelationshipToAssociative?.invoke()
+                        ConceptualRibbonOperation.ConvertOptionalSpecializationsToRestricted ->
+                            binding?.onConvertOptionalSpecializationsToRestricted?.invoke()
+                        ConceptualRibbonOperation.ConvertRestrictedSpecializationToOptionals ->
+                            binding?.onConvertRestrictedSpecializationToOptionals?.invoke()
+                        ConceptualRibbonOperation.HideCanvasAttribute ->
+                            binding?.onHideCanvasAttribute?.invoke()
+                        ConceptualRibbonOperation.RevealHiddenAttribute ->
+                            binding?.onRevealHiddenAttribute?.invoke()
+                        null -> Unit
+                    }
+                },
+            )
+            RibbonLargeGlyphHistoryButton(
+                icon = Res.drawable.undo_l,
+                label = "Desfazer",
+                enabled = binding?.undoEnabled == true,
+                onClick = { binding?.onUndo?.invoke() },
+            )
+            RibbonLargeGlyphHistoryButton(
+                icon = Res.drawable.redo_l,
+                label = "Refazer",
+                enabled = binding?.redoEnabled == true,
+                onClick = { binding?.onRedo?.invoke() },
+            )
+            RibbonButton(
+                MenuEntry(
+                    "Gerar Esquema\nLógico",
+                    Res.drawable.gerar_logico_l,
+                ),
+            )
+        }
+        RibbonGroupTitle("Operações")
     }
 }
 

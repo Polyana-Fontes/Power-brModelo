@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -59,11 +60,11 @@ import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.canOrganizeAttributesMenuSelection
 import games.polyclub.power.brmodelo.domain.canvasSelectionSelectAllElements
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
-import games.polyclub.power.brmodelo.domain.expandBulkDeleteClosure
-import games.polyclub.power.brmodelo.domain.singleElementDeletionClosure
+import games.polyclub.power.brmodelo.domain.deleteCanvasSelection
 import games.polyclub.power.brmodelo.ui.ConceptualCanvasTool
 import games.polyclub.power.brmodelo.ui.canvas.applyCanvasKeyboardArrow
 import games.polyclub.power.brmodelo.ui.canvas.SchemaCanvas
+import games.polyclub.power.brmodelo.ui.canvas.SchemaCanvasViewState
 import games.polyclub.power.brmodelo.ui.canvas.rememberConceptualCanvasToolCursorModifier
 import games.polyclub.power.brmodelo.ui.components.CHROMIUM_TAB_ACTIVE_HEIGHT
 import games.polyclub.power.brmodelo.ui.components.CHROMIUM_TAB_INACTIVE_HEIGHT
@@ -105,6 +106,10 @@ internal fun MainCanvasPanel(
     selectionBandUiState: SelectionBandUiState? = null,
     onSelectionBandUiChange: (SelectionBandUiState?) -> Unit = {},
     onOrganizeAttributes: () -> Unit = {},
+    onCanvasViewStateChange: (SchemaCanvasViewState) -> Unit = {},
+    onCopyRequest: () -> Unit = {},
+    onCutRequest: () -> Unit = {},
+    onPasteRequest: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val selectedTab = canvasTabs.getOrNull(selectedCanvasTabIndex)
@@ -143,7 +148,28 @@ internal fun MainCanvasPanel(
                     if (event.type == KeyEventType.KeyDown) {
                         val sch = schema
                         if (sch != null &&
-                            event.isCtrlPressed &&
+                            (event.isCtrlPressed || event.isMetaPressed) &&
+                            event.key == Key.C
+                        ) {
+                            onCopyRequest()
+                            return@onPreviewKeyEvent true
+                        }
+                        if (sch != null &&
+                            (event.isCtrlPressed || event.isMetaPressed) &&
+                            event.key == Key.X
+                        ) {
+                            onCutRequest()
+                            return@onPreviewKeyEvent true
+                        }
+                        if (sch != null &&
+                            (event.isCtrlPressed || event.isMetaPressed) &&
+                            event.key == Key.V
+                        ) {
+                            onPasteRequest()
+                            return@onPreviewKeyEvent true
+                        }
+                        if (sch != null &&
+                            (event.isCtrlPressed || event.isMetaPressed) &&
                             event.key == Key.A
                         ) {
                             onSelectionChange(canvasSelectionSelectAllElements(sch))
@@ -188,52 +214,13 @@ internal fun MainCanvasPanel(
                         (event.key == Key.Delete || event.key == Key.Backspace)
                     ) {
                         val currentSchema = schema ?: return@onPreviewKeyEvent false
-                        when (val sel = selection) {
-                            is CanvasSelection.Cardinality -> {
-                                val stripped = currentSchema.withoutConnection(sel.connectionId)
-                                if (stripped != currentSchema) {
-                                    onSchemaCommit(
-                                        stripped.withNormalizedAttributeMultiValuedCounts(),
-                                    )
-                                    onSelectionChange(CanvasSelection.None)
-                                    true
-                                } else {
-                                    false
-                                }
-                            }
-                            is CanvasSelection.Multiple -> {
-                                var next = currentSchema
-                                if (sel.elementIds.isNotEmpty()) {
-                                    val ids = expandBulkDeleteClosure(next, sel.elementIds)
-                                    if (ids.isNotEmpty()) {
-                                        next = next.withoutElements(ids)
-                                    }
-                                }
-                                for (cid in sel.cardinalityConnectionIds) {
-                                    val n2 = next.withoutConnection(cid)
-                                    if (n2 != next) next = n2
-                                }
-                                if (next != currentSchema) {
-                                    onSchemaCommit(next.withNormalizedAttributeMultiValuedCounts())
-                                    onSelectionChange(CanvasSelection.None)
-                                    true
-                                } else {
-                                    false
-                                }
-                            }
-                            is CanvasSelection.Element -> {
-                                val ids = singleElementDeletionClosure(currentSchema, sel.id)
-                                if (ids.isNotEmpty()) {
-                                    onSchemaCommit(
-                                        currentSchema.withoutElements(ids).withNormalizedAttributeMultiValuedCounts(),
-                                    )
-                                    onSelectionChange(CanvasSelection.None)
-                                    true
-                                } else {
-                                    false
-                                }
-                            }
-                            CanvasSelection.None -> false
+                        val next = deleteCanvasSelection(currentSchema, selection)
+                        if (next != null) {
+                            onSchemaCommit(next.withNormalizedAttributeMultiValuedCounts())
+                            onSelectionChange(CanvasSelection.None)
+                            true
+                        } else {
+                            false
                         }
                     } else {
                         false
@@ -262,6 +249,7 @@ internal fun MainCanvasPanel(
                     keyboardRemapVerticalScrollPanToHorizontal = keyboardRemapVerticalScrollPan,
                     toolCursorModifier = toolCursorModifier,
                     canvasFocusRequester = focusRequester,
+                    onViewStateChange = onCanvasViewStateChange,
                     modifier = Modifier.fillMaxSize(),
                 )
             }

@@ -117,7 +117,7 @@ fun applyDemoteAssociativeToEntity(
             val other = otherEndId(c, aid)
             val el = work.elements[other] ?: continue
             if (!isConceptualRelationshipParticipant(el)) continue
-            innerParticipantTemplates.putIfAbsent(other, c)
+            innerParticipantTemplates.getOrPut(other) { c }
         }
 
         work = work.copy(connections = work.connections.filter { it.id !in connectionIdsToRemove })

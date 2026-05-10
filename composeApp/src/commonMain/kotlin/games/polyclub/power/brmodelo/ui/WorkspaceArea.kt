@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
+import games.polyclub.power.brmodelo.ui.canvas.SchemaCanvasViewState
 
 @Composable
 internal fun WorkspaceArea(
@@ -57,6 +58,10 @@ internal fun WorkspaceArea(
     hiddenAttributeRevealPath: List<Int>? = null,
     onHiddenAttributeRevealPathChange: (List<Int>?) -> Unit = {},
     onRevealHiddenAttributeInModel: () -> Unit = {},
+    onCanvasViewStateChange: (SchemaCanvasViewState) -> Unit = {},
+    onCopyRequest: () -> Unit = {},
+    onCutRequest: () -> Unit = {},
+    onPasteRequest: () -> Unit = {},
 ) {
     Row(modifier = Modifier.fillMaxSize().padding(8.dp)) {
         MainCanvasPanel(
@@ -81,6 +86,10 @@ internal fun WorkspaceArea(
             selectionBandUiState = selectionBandUiState,
             onSelectionBandUiChange = onSelectionBandUiChange,
             onOrganizeAttributes = onOrganizeAttributes,
+            onCanvasViewStateChange = onCanvasViewStateChange,
+            onCopyRequest = onCopyRequest,
+            onCutRequest = onCutRequest,
+            onPasteRequest = onPasteRequest,
             modifier = Modifier.weight(1f),
         )
         Spacer(modifier = Modifier.width(8.dp))

@@ -42,12 +42,27 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
+import games.polyclub.power.brmodelo.ui.AttributeToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.BulkDeleteObjectsToolRibbonBinding
-import games.polyclub.power.brmodelo.ui.RectangleSelectionToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.BulkDeleteUiState
+import games.polyclub.power.brmodelo.ui.ClipboardRibbonBinding
+import games.polyclub.power.brmodelo.ui.ConceptualCanvasTool
+import games.polyclub.power.brmodelo.ui.EditorTabSession
+import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.MainMenuType
+import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.OperationsMenuRibbonBinding
+import games.polyclub.power.brmodelo.ui.PickedFile
+import games.polyclub.power.brmodelo.ui.RectangleSelectionToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.RibbonTab
 import games.polyclub.power.brmodelo.ui.SelectionBandUiState
+import games.polyclub.power.brmodelo.ui.SpecializationToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.canvas.SchemaCanvasViewState
 import games.polyclub.power.brmodelo.ui.canvas.renderSchemaToImageBitmap
 import games.polyclub.power.brmodelo.ui.components.ribbon.HeaderRibbon
+import games.polyclub.power.brmodelo.ui.saveExportedImage
 import kotlinx.coroutines.launch
 
 private val MENU_TOP_OFFSET = 30.dp
@@ -101,6 +116,11 @@ internal fun BrModeloScreen(
     hiddenAttributeRevealPath: List<Int>? = null,
     onHiddenAttributeRevealPathChange: (List<Int>?) -> Unit = {},
     onRevealHiddenAttributeInModel: () -> Unit = {},
+    clipboardRibbonBinding: ClipboardRibbonBinding? = null,
+    onCanvasViewStateChange: (SchemaCanvasViewState) -> Unit = {},
+    onCopyRequest: () -> Unit = {},
+    onCutRequest: () -> Unit = {},
+    onPasteRequest: () -> Unit = {},
 ) {
     var exportCounter by remember { mutableIntStateOf(0) }
     var exportIsJpeg by remember { mutableStateOf(true) }
@@ -134,6 +154,7 @@ internal fun BrModeloScreen(
                 bulkDeleteObjectsToolBinding = bulkDeleteObjectsToolBinding,
                 rectangleSelectionToolBinding = rectangleSelectionToolBinding,
                 operationsMenuBinding = operationsMenuBinding,
+                clipboardRibbonBinding = clipboardRibbonBinding,
                 onMainMenuClick = onMainMenuToggle,
                 onTabSelect = onTabSelect,
             )
@@ -168,6 +189,10 @@ internal fun BrModeloScreen(
                 hiddenAttributeRevealPath = hiddenAttributeRevealPath,
                 onHiddenAttributeRevealPathChange = onHiddenAttributeRevealPathChange,
                 onRevealHiddenAttributeInModel = onRevealHiddenAttributeInModel,
+                onCanvasViewStateChange = onCanvasViewStateChange,
+                onCopyRequest = onCopyRequest,
+                onCutRequest = onCutRequest,
+                onPasteRequest = onPasteRequest,
             )
         }
 

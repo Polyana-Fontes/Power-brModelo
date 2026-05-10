@@ -164,10 +164,21 @@ internal data class OperationsMenuRibbonBinding(
     val onHideCanvasAttribute: () -> Unit,
     val revealHiddenAttributeEnabled: Boolean,
     val onRevealHiddenAttribute: () -> Unit,
+    val undoEnabled: Boolean,
+    val onUndo: () -> Unit,
+    val redoEnabled: Boolean,
+    val onRedo: () -> Unit,
+)
+
+internal data class ClipboardRibbonBinding(
+    val onCopy: () -> Unit,
+    val onCut: () -> Unit,
+    val onPaste: () -> Unit,
 )
 
 internal data class MenuEntry(
     val title: String,
     val icon: DrawableResource,
-    val dropdown: List<DropdownEntry>? = null
+    val dropdown: List<DropdownEntry>? = null,
+    val onClick: (() -> Unit)? = null,
 )

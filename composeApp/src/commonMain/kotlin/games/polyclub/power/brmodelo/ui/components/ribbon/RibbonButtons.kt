@@ -50,6 +50,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
@@ -462,6 +464,17 @@ internal fun LargeRibbonButton(entry: MenuEntry, buttonWidth: Dp) {
             .width(buttonWidth)
             .fillMaxHeight()
             .hoverable(interactionSource)
+            .then(
+                if (entry.onClick != null) {
+                    Modifier.clickable(
+                        interactionSource = interactionSource,
+                        indication = null,
+                        onClick = entry.onClick,
+                    )
+                } else {
+                    Modifier
+                },
+            )
             .background(if (isHovered) AppColors.hoverBg else Color.Transparent, AppColors.hoverShape)
             .border(1.dp, if (isHovered) AppColors.hoverBorder else Color.Transparent, AppColors.hoverShape)
             .padding(horizontal = 3.dp, vertical = 3.dp)
@@ -495,6 +508,17 @@ internal fun SmallRibbonButton(entry: MenuEntry) {
         modifier = Modifier
             .height(20.dp)
             .hoverable(interactionSource)
+            .then(
+                if (entry.onClick != null) {
+                    Modifier.clickable(
+                        interactionSource = interactionSource,
+                        indication = null,
+                        onClick = entry.onClick,
+                    )
+                } else {
+                    Modifier
+                },
+            )
             .background(if (isHovered) AppColors.hoverBg else Color.Transparent, AppColors.hoverShape)
             .border(1.dp, if (isHovered) AppColors.hoverBorder else Color.Transparent, AppColors.hoverShape)
             .padding(horizontal = 2.dp)
@@ -515,6 +539,68 @@ internal fun SmallRibbonButton(entry: MenuEntry) {
             color = Color(0xFF2C3E50),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+private val disabledHistoryGrayscale = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
+
+/**
+ * Large ribbon glyph (same icon size as tool buttons) for undo/redo: enabled only when [enabled].
+ */
+@Composable
+internal fun RibbonLargeGlyphHistoryButton(
+    icon: DrawableResource,
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
+    val isActive = enabled && isHovered
+    val bg = if (isActive) AppColors.hoverBg else Color.Transparent
+    val border = if (isActive) AppColors.hoverBorder else Color.Transparent
+    val labelColor = if (enabled) Color(0xFF2C3E50) else Color(0xFF8A8A8A)
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Top,
+        modifier = Modifier
+            .wrapContentWidth()
+            .fillMaxHeight()
+            .then(
+                if (enabled) {
+                    Modifier
+                        .hoverable(interactionSource)
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication = null,
+                            onClick = onClick,
+                        )
+                } else {
+                    Modifier
+                },
+            )
+            .background(bg, AppColors.hoverShape)
+            .border(1.dp, border, AppColors.hoverShape)
+            .padding(horizontal = 3.dp, vertical = 3.dp),
+    ) {
+        Image(
+            painter = painterResource(icon),
+            contentDescription = label,
+            modifier = Modifier.size(32.dp),
+            contentScale = ContentScale.Fit,
+            alpha = if (enabled) 1f else 0.55f,
+            colorFilter = if (enabled) null else disabledHistoryGrayscale,
+        )
+        Text(
+            text = label,
+            fontSize = 9.sp,
+            color = labelColor,
+            textAlign = TextAlign.Center,
+            lineHeight = 10.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 3.dp),
         )
     }
 }

@@ -35,11 +35,13 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -102,6 +104,20 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
+/** Latest canvas layout / pan / pointer state for paste anchoring and cross-tab behaviour. */
+internal data class SchemaCanvasViewState(
+    val layoutWidthPx: Float = 0f,
+    val layoutHeightPx: Float = 0f,
+    val panX: Float = 0f,
+    val panY: Float = 0f,
+    val pointerViewX: Float? = null,
+    val pointerViewY: Float? = null,
+    val isPointerOverCanvas: Boolean = false,
+) {
+    fun pointerModelX(): Float? = pointerViewX?.let { it - panX }
+    fun pointerModelY(): Float? = pointerViewY?.let { it - panY }
+}
+
 // Background colour of the canvas (light grey, matching the original brModelo canvas background)
 private val CANVAS_BG = Color(0xFFE8E8E8)
 // Dot-grid colour (subtle)
@@ -154,7 +170,8 @@ private val SELECTION_BAND_STROKE = Color(0xFF0060C0)
  * @param editorTabSessionId [games.polyclub.power.brmodelo.ui.EditorTabSession.id] for the canvas tab (for "Ligar objetos" second-click validation).
  * @param keyboardRemapVerticalScrollPanToHorizontal Desktop only: when true, vertical scroll maps to horizontal pan;
  *   fed from AWT (Shift only).
- * @param modifier            Layout modifier applied to the outer Box.
+ * @param onViewStateChange Optional hook for layout, pan, and hover pointer (view coordinates) —
+ *   used to anchor clipboard paste in model space.
  */
 @Composable
 internal fun SchemaCanvas(
@@ -174,9 +191,13 @@ internal fun SchemaCanvas(
     keyboardRemapVerticalScrollPanToHorizontal: Boolean = false,
     toolCursorModifier: Modifier = Modifier,
     canvasFocusRequester: FocusRequester? = null,
+    onViewStateChange: ((SchemaCanvasViewState) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var panOffset by remember { mutableStateOf(Offset(8f, 8f)) }
+    var layoutSize by remember { mutableStateOf(Size.Zero) }
+    var pointerView by remember { mutableStateOf<Offset?>(null) }
+    var pointerOverCanvas by remember { mutableStateOf(false) }
     val textMeasurer = rememberTextMeasurer()
     val layoutDirection = LocalLayoutDirection.current
     var hiddenAttributesTooltipAnchor by remember { mutableStateOf<Pair<Offset, String>?>(null) }
@@ -191,6 +212,7 @@ internal fun SchemaCanvas(
     val currentOnSchemaPreview by rememberUpdatedState(onSchemaPreview)
     val currentOnSchemaCommit by rememberUpdatedState(onSchemaCommit)
     val currentPanOffset by rememberUpdatedState(panOffset)
+    val currentLayoutSize by rememberUpdatedState(layoutSize)
     val currentCanvasFocusRequester by rememberUpdatedState(canvasFocusRequester)
     val currentConceptualTool by rememberUpdatedState(conceptualCanvasTool)
     val currentOnConceptualCanvasToolChange by rememberUpdatedState(onConceptualCanvasToolChange)
@@ -201,9 +223,45 @@ internal fun SchemaCanvas(
     val currentLayoutDirection by rememberUpdatedState(layoutDirection)
     val currentEditorTabSessionId by rememberUpdatedState(editorTabSessionId)
     val currentKeyboardRemapVerticalScrollPan by rememberUpdatedState(keyboardRemapVerticalScrollPanToHorizontal)
+    val onViewStateChangeCb by rememberUpdatedState(onViewStateChange)
+
+    /** Pushes pointer/layout to the parent immediately (avoids one-frame lag vs [SideEffect] only). */
+    fun pushClipboardViewStateToParent(pointerLocal: Offset?, over: Boolean) {
+        onViewStateChangeCb?.invoke(
+            SchemaCanvasViewState(
+                layoutWidthPx = currentLayoutSize.width,
+                layoutHeightPx = currentLayoutSize.height,
+                panX = currentPanOffset.x,
+                panY = currentPanOffset.y,
+                pointerViewX = pointerLocal?.x,
+                pointerViewY = pointerLocal?.y,
+                isPointerOverCanvas = over,
+            ),
+        )
+    }
+
+    SideEffect {
+        onViewStateChangeCb?.invoke(
+            SchemaCanvasViewState(
+                layoutWidthPx = layoutSize.width,
+                layoutHeightPx = layoutSize.height,
+                panX = panOffset.x,
+                panY = panOffset.y,
+                pointerViewX = pointerView?.x,
+                pointerViewY = pointerView?.y,
+                isPointerOverCanvas = pointerOverCanvas,
+            ),
+        )
+    }
 
     Box(
         modifier = modifier
+            .onGloballyPositioned { coords ->
+                layoutSize = Size(
+                    coords.size.width.toFloat(),
+                    coords.size.height.toFloat(),
+                )
+            }
             .then(toolCursorModifier)
             .clipToBounds()
             .background(CANVAS_BG)
@@ -879,6 +937,9 @@ internal fun SchemaCanvas(
                             PointerEventType.Enter,
                             -> {
                                 val pos = event.changes.firstOrNull()?.position ?: continue
+                                pointerOverCanvas = true
+                                pointerView = pos
+                                pushClipboardViewStateToParent(pos, over = true)
                                 val sch = hoverSchemaForTooltip
                                 if (sch == null) {
                                     hiddenAttributesTooltipAnchor = null
@@ -900,7 +961,12 @@ internal fun SchemaCanvas(
                                 hiddenAttributesTooltipAnchor =
                                     if (text != null) pos to text else null
                             }
-                            PointerEventType.Exit -> hiddenAttributesTooltipAnchor = null
+                            PointerEventType.Exit -> {
+                                hiddenAttributesTooltipAnchor = null
+                                pointerOverCanvas = false
+                                pointerView = null
+                                pushClipboardViewStateToParent(pointerLocal = null, over = false)
+                            }
                             else -> {}
                         }
                     }

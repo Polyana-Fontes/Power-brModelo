@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import games.polyclub.power.brmodelo.ui.AttributeToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.ClipboardRibbonBinding
 import games.polyclub.power.brmodelo.ui.BulkDeleteObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.RectangleSelectionToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
@@ -51,10 +52,8 @@ import games.polyclub.power.brmodelo.generated.resources.entidade_l
 import games.polyclub.power.brmodelo.generated.resources.especializacao_l
 import games.polyclub.power.brmodelo.generated.resources.excluir_2l
 import games.polyclub.power.brmodelo.generated.resources.fonte_l
-import games.polyclub.power.brmodelo.generated.resources.gerar_logico_l
 import games.polyclub.power.brmodelo.generated.resources.ligacao_l
 import games.polyclub.power.brmodelo.generated.resources.log_s
-import games.polyclub.power.brmodelo.generated.resources.operacoes_l
 import games.polyclub.power.brmodelo.generated.resources.recortar_s
 import games.polyclub.power.brmodelo.generated.resources.salvar_s
 import games.polyclub.power.brmodelo.generated.resources.texto_l
@@ -134,26 +133,14 @@ internal fun RibbonEsquemaConceitual(
             )
         )
         Spacer(modifier = Modifier.width(5.dp))
-        RibbonGroup(
-            title = "Operações",
-            operationsMenuBinding = operationsMenuBinding,
-            items = listOf(
-                MenuEntry(
-                    title = "Operações",
-                    icon = Res.drawable.operacoes_l,
-                    dropdown = emptyList(),
-                ),
-                MenuEntry(
-                    "Gerar Esquema\nLógico",
-                    Res.drawable.gerar_logico_l
-                )
-            )
-        )
+        RibbonOperacoesGroup(operationsMenuBinding = operationsMenuBinding)
     }
 }
 
 @Composable
-internal fun RibbonOpcoes() {
+internal fun RibbonOpcoes(
+    clipboardRibbonBinding: ClipboardRibbonBinding? = null,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -182,11 +169,15 @@ internal fun RibbonOpcoes() {
         RibbonGroupMixed(
             title = "Área de Transferência",
             largeButtonWidth = 56.dp,
-            largeEntry = MenuEntry("Colar", Res.drawable.colar_l),
+            largeEntry = MenuEntry(
+                "Colar",
+                Res.drawable.colar_l,
+                onClick = clipboardRibbonBinding?.onPaste,
+            ),
             smallEntries = listOf(
-                MenuEntry("Recortar", Res.drawable.recortar_s),
-                MenuEntry("Copiar", Res.drawable.copiar_s)
-            )
+                MenuEntry("Recortar", Res.drawable.recortar_s, onClick = clipboardRibbonBinding?.onCut),
+                MenuEntry("Copiar", Res.drawable.copiar_s, onClick = clipboardRibbonBinding?.onCopy),
+            ),
         )
         Spacer(modifier = Modifier.width(5.dp))
         RibbonGroup(

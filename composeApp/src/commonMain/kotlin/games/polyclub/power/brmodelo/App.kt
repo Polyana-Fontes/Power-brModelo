@@ -36,6 +36,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import games.polyclub.power.brmodelo.domain.CanvasSelection
+import games.polyclub.power.brmodelo.domain.buildConceptualClipboardPayload
+import games.polyclub.power.brmodelo.domain.deleteCanvasSelection
+import games.polyclub.power.brmodelo.domain.ConceptualPasteContext
+import games.polyclub.power.brmodelo.domain.pasteConceptualClipboard
 import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolVariant
 import games.polyclub.power.brmodelo.domain.applyHideCanvasAttribute
 import games.polyclub.power.brmodelo.domain.applyRevealHiddenAttribute
@@ -67,9 +71,12 @@ import games.polyclub.power.brmodelo.domain.SchemaElement
 import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolVariant
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaBrmParser
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaXmlParser
+import games.polyclub.power.brmodelo.ui.BrModeloScreen
 import games.polyclub.power.brmodelo.ui.AttributeToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
-import games.polyclub.power.brmodelo.ui.BrModeloScreen
+import games.polyclub.power.brmodelo.ui.ClipboardRibbonBinding
+import games.polyclub.power.brmodelo.ui.clipboard.BrModeloConceptualClipboardStore
+import games.polyclub.power.brmodelo.ui.canvas.SchemaCanvasViewState
 import games.polyclub.power.brmodelo.ui.BulkDeleteObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.RectangleSelectionToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.BulkDeleteUiState
@@ -336,6 +343,80 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
 
     val sel = selectedSession()
 
+    var schemaCanvasViewState by remember { mutableStateOf(SchemaCanvasViewState()) }
+    val selectedTabIdxState = rememberUpdatedState(selectedTabIndex)
+    val schemaCanvasViewStateRef = rememberUpdatedState(schemaCanvasViewState)
+
+    val onCopyConceptualClipboard: () -> Unit = copy@{
+        val tab = tabSessions.getOrNull(selectedTabIndex) ?: return@copy
+        val payload = buildConceptualClipboardPayload(tab.schema, tab.selection, tab.id) ?: return@copy
+        scope.launch {
+            BrModeloConceptualClipboardStore.writePreferred(payload)
+        }
+    }
+
+    val onCutConceptualClipboard: () -> Unit = cut@{
+        val idx = selectedTabIndex
+        val tab = tabSessions.getOrNull(idx) ?: return@cut
+        val payload = buildConceptualClipboardPayload(tab.schema, tab.selection, tab.id) ?: return@cut
+        scope.launch {
+            BrModeloConceptualClipboardStore.writePreferred(payload)
+            val current = tabsState.value.getOrNull(idx) ?: return@launch
+            if (current.id != tab.id) return@launch
+            val next = deleteCanvasSelection(current.schema, current.selection) ?: return@launch
+            current.history.push(next)
+            replaceTabAt(
+                idx,
+                current.copy(
+                    schema = next,
+                    inspectorCommittedSchema = current.history.current,
+                    selection = CanvasSelection.None,
+                    hiddenAttributeRevealPath = null,
+                ),
+            )
+        }
+    }
+
+    val onPasteConceptualClipboard: () -> Unit = paste@{
+        // Snapshot anchor **before** suspending on clipboard I/O (async read would advance frames and stale pointers).
+        val viewSnapshot = schemaCanvasViewStateRef.value
+        val idx = selectedTabIdxState.value
+        val tabSnapshot = tabsState.value.getOrNull(idx) ?: return@paste
+        scope.launch {
+            val text = BrModeloConceptualClipboardStore.readPreferred() ?: return@launch
+            val t = tabsState.value.getOrNull(idx) ?: return@launch
+            if (t.id != tabSnapshot.id) return@launch
+            val ctx = ConceptualPasteContext(
+                targetSchema = t.schema,
+                targetEditorTabId = t.id,
+                layoutWidthPx = viewSnapshot.layoutWidthPx,
+                layoutHeightPx = viewSnapshot.layoutHeightPx,
+                panX = viewSnapshot.panX,
+                panY = viewSnapshot.panY,
+                pointerModelX = viewSnapshot.pointerModelX(),
+                pointerModelY = viewSnapshot.pointerModelY(),
+                isPointerOverCanvas = viewSnapshot.isPointerOverCanvas,
+            )
+            val result = pasteConceptualClipboard(ctx, text) ?: return@launch
+            t.history.push(result.schema)
+            replaceTabAt(
+                idx,
+                t.copy(
+                    schema = result.schema,
+                    inspectorCommittedSchema = t.history.current,
+                    selection = result.selection,
+                    hiddenAttributeRevealPath = null,
+                ),
+            )
+        }
+    }
+
+    val clipboardRibbonBinding = ClipboardRibbonBinding(
+        onCopy = onCopyConceptualClipboard,
+        onCut = onCutConceptualClipboard,
+        onPaste = onPasteConceptualClipboard,
+    )
+
     val (entityTitle, entityIcon) = entityVariantRibbonPresentation(entityToolVariant)
     val entityToolBinding = EntityToolRibbonBinding(
         variant = entityToolVariant,
@@ -563,6 +644,34 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         onHideCanvasAttribute = onHideCanvasAttribute,
         revealHiddenAttributeEnabled = revealHiddenEnabled,
         onRevealHiddenAttribute = onRevealHiddenAttribute,
+        undoEnabled = sel.history.canUndo,
+        onUndo = {
+            mutateSelectedTab { tab ->
+                if (!tab.history.canUndo) return@mutateSelectedTab tab
+                tab.history.undo()
+                val cur = tab.history.current ?: tab.schema
+                tab.copy(
+                    schema = cur,
+                    inspectorCommittedSchema = cur,
+                    selection = CanvasSelection.None,
+                    hiddenAttributeRevealPath = null,
+                )
+            }
+        },
+        redoEnabled = sel.history.canRedo,
+        onRedo = {
+            mutateSelectedTab { tab ->
+                if (!tab.history.canRedo) return@mutateSelectedTab tab
+                tab.history.redo()
+                val cur = tab.history.current ?: tab.schema
+                tab.copy(
+                    schema = cur,
+                    inspectorCommittedSchema = cur,
+                    selection = CanvasSelection.None,
+                    hiddenAttributeRevealPath = null,
+                )
+            }
+        },
     )
 
     MaterialTheme {
@@ -626,6 +735,11 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                         mutateSelectedTab { it.copy(hiddenAttributeRevealPath = p) }
                     },
                     onRevealHiddenAttributeInModel = onRevealHiddenAttribute,
+                    clipboardRibbonBinding = clipboardRibbonBinding,
+                    onCanvasViewStateChange = { schemaCanvasViewState = it },
+                    onCopyRequest = onCopyConceptualClipboard,
+                    onCutRequest = onCutConceptualClipboard,
+                    onPasteRequest = onPasteConceptualClipboard,
                 )
 
                 pendingCloseTabIndex?.let { closeIdx ->

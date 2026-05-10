@@ -198,3 +198,36 @@ fun bulkDeleteResolvedIds(schema: ConceptualSchema, band: ConceptualBulkDeleteBa
  */
 fun singleElementDeletionClosure(schema: ConceptualSchema, elementId: Int): Set<Int> =
     expandBulkDeleteClosure(schema, setOf(elementId))
+
+/**
+ * Deletes the current canvas selection in one step (same rules as the Delete / Backspace handler).
+ * Returns null when nothing would change.
+ */
+fun deleteCanvasSelection(schema: ConceptualSchema, selection: CanvasSelection): ConceptualSchema? =
+    when (selection) {
+        CanvasSelection.None -> null
+        is CanvasSelection.Cardinality -> {
+            val stripped = schema.withoutConnection(selection.connectionId)
+            if (stripped == schema) null
+            else stripped.withNormalizedAttributeMultiValuedCounts()
+        }
+        is CanvasSelection.Element -> {
+            val ids = singleElementDeletionClosure(schema, selection.id)
+            if (ids.isEmpty()) null
+            else schema.withoutElements(ids).withNormalizedAttributeMultiValuedCounts()
+        }
+        is CanvasSelection.Multiple -> {
+            var next = schema
+            if (selection.elementIds.isNotEmpty()) {
+                val ids = expandBulkDeleteClosure(schema, selection.elementIds)
+                if (ids.isNotEmpty()) {
+                    next = next.withoutElements(ids)
+                }
+            }
+            for (cid in selection.cardinalityConnectionIds) {
+                val n2 = next.withoutConnection(cid)
+                if (n2 != next) next = n2
+            }
+            if (next != schema) next.withNormalizedAttributeMultiValuedCounts() else null
+        }
+    }

@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import games.polyclub.power.brmodelo.ui.AttributeToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.BulkDeleteObjectsToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.ClipboardRibbonBinding
 import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
@@ -50,6 +51,7 @@ internal fun HeaderRibbon(
     bulkDeleteObjectsToolBinding: BulkDeleteObjectsToolRibbonBinding? = null,
     rectangleSelectionToolBinding: RectangleSelectionToolRibbonBinding? = null,
     operationsMenuBinding: OperationsMenuRibbonBinding? = null,
+    clipboardRibbonBinding: ClipboardRibbonBinding? = null,
     onMainMenuClick: () -> Unit,
     onTabSelect: (RibbonTab) -> Unit,
 ) {
@@ -78,7 +80,7 @@ internal fun HeaderRibbon(
                 rectangleSelectionToolBinding = rectangleSelectionToolBinding,
                 operationsMenuBinding = operationsMenuBinding,
             )
-            RibbonTab.Opcoes            -> RibbonOpcoes()
+            RibbonTab.Opcoes            -> RibbonOpcoes(clipboardRibbonBinding = clipboardRibbonBinding)
         }
     }
 }
