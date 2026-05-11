@@ -76,7 +76,6 @@ import games.polyclub.power.brmodelo.ui.AttributeToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.ClipboardRibbonBinding
 import games.polyclub.power.brmodelo.ui.clipboard.BrModeloConceptualClipboardStore
-import games.polyclub.power.brmodelo.ui.clipboard.WasmRibbonOsClipboardRead
 import games.polyclub.power.brmodelo.ui.canvas.SchemaCanvasViewState
 import games.polyclub.power.brmodelo.ui.BulkDeleteObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.RectangleSelectionToolRibbonBinding
@@ -116,26 +115,10 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
     var activeMenu by remember { mutableStateOf<MainMenuType?>(null) }
     var selectedRibbonTab by remember { mutableStateOf(RibbonTab.EsquemaConceitual) }
     var clipboardUiTick by remember { mutableIntStateOf(0) }
-    var wasmRibbonOsClip by remember { mutableStateOf<WasmRibbonOsClipboardRead>(WasmRibbonOsClipboardRead.Pending) }
 
     LaunchedEffect(selectedRibbonTab) {
         if (selectedRibbonTab == RibbonTab.Opcoes) {
             clipboardUiTick++
-        }
-    }
-
-    LaunchedEffect(selectedRibbonTab, clipboardUiTick, isDesktopTarget) {
-        if (isDesktopTarget) return@LaunchedEffect
-        if (selectedRibbonTab != RibbonTab.Opcoes) {
-            wasmRibbonOsClip = WasmRibbonOsClipboardRead.Pending
-            return@LaunchedEffect
-        }
-        wasmRibbonOsClip = WasmRibbonOsClipboardRead.Pending
-        val result = runCatching { BrModeloConceptualClipboardStore.probeOsPlainTextForWasmRibbon() }
-        wasmRibbonOsClip = if (result.isSuccess) {
-            WasmRibbonOsClipboardRead.Ready(result.getOrNull() ?: "")
-        } else {
-            WasmRibbonOsClipboardRead.Unavailable
         }
     }
 
@@ -406,11 +389,7 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
     }
 
     val onPasteConceptualClipboard: () -> Unit = paste@{
-        if (!BrModeloConceptualClipboardStore.hasPasteableConceptualPayloadForRibbonUi(
-                isDesktop = isDesktopTarget,
-                wasmClipboardRead = wasmRibbonOsClip,
-            )
-        ) {
+        if (isDesktopTarget && !BrModeloConceptualClipboardStore.hasPasteableConceptualPayloadForRibbonUi()) {
             return@paste
         }
         // Snapshot anchor **before** suspending on clipboard I/O (async read would advance frames and stale pointers).
@@ -449,10 +428,11 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
     val conceptualCopyCutEnabled = buildConceptualClipboardPayload(sel.schema, sel.selection, sel.id) != null
     val conceptualPasteEnabled = run {
         clipboardUiTick
-        BrModeloConceptualClipboardStore.hasPasteableConceptualPayloadForRibbonUi(
-            isDesktop = isDesktopTarget,
-            wasmClipboardRead = wasmRibbonOsClip,
-        )
+        if (!isDesktopTarget) {
+            true
+        } else {
+            BrModeloConceptualClipboardStore.hasPasteableConceptualPayloadForRibbonUi()
+        }
     }
 
     val clipboardRibbonBinding = ClipboardRibbonBinding(
