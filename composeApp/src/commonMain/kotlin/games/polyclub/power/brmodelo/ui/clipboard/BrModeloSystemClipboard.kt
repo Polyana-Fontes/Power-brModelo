@@ -20,21 +20,6 @@ package games.polyclub.power.brmodelo.ui.clipboard
 
 import games.polyclub.power.brmodelo.domain.decodeClipboardPayload
 
-/**
- * Result of an async OS clipboard read on Wasm (used to enable/disable the ribbon Paste button).
- * Desktop uses synchronous [brModeloClipboardGetPlainText] instead.
- */
-internal sealed class WasmRibbonOsClipboardRead {
-    /** Probe not finished yet, or user left the **Opções** tab (ribbon not showing clipboard). */
-    data object Pending : WasmRibbonOsClipboardRead()
-
-    /** [readText] threw or Clipboard API is unavailable. */
-    data object Unavailable : WasmRibbonOsClipboardRead()
-
-    /** Fulfilled read; [plainText] may be empty when the OS clipboard has no text (e.g. image-only). */
-    data class Ready(val plainText: String) : WasmRibbonOsClipboardRead()
-}
-
 /** Platform text clipboard; returns false / null when unavailable or denied. */
 internal expect fun brModeloClipboardSetPlainText(text: String): Boolean
 
@@ -69,55 +54,27 @@ internal object BrModeloConceptualClipboardStore {
     internal fun isDecodableConceptualPayload(text: String): Boolean =
         decodeClipboardPayload(text.trim()) != null
 
-    private fun memoryHasDecodablePayload(): Boolean {
-        val m = memoryFallback?.trim().orEmpty()
-        return m.isNotEmpty() && isDecodableConceptualPayload(m)
-    }
-
     /**
-     * Whether the ribbon Paste control should be enabled.
+     * Whether the ribbon Paste control should be enabled (desktop only).
      *
-     * - **Desktop:** only the system clipboard counts (no stale in-memory mirror when the OS holds
-     *   non-text such as an image). If there is no plain-text flavor or the text is not a brModelo payload,
-     *   Paste stays off.
-     * - **Wasm:** after [wasmClipboardRead] becomes [WasmRibbonOsClipboardRead.Ready], only that OS text
-     *   is used (empty or non-payload → off). While [WasmRibbonOsClipboardRead.Pending] or
-     *   [WasmRibbonOsClipboardRead.Unavailable], falls back to the in-memory mirror (session copy).
+     * Only the system clipboard counts (no stale in-memory mirror when the OS holds non-text
+     * such as an image). If there is no plain-text flavor or the text is not a brModelo payload,
+     * Paste stays off.
+     *
+     * On Wasm the Paste button is always enabled because probing the browser Clipboard API
+     * requires a permission prompt — the actual read happens on the user-gesture paste action.
      */
-    internal fun hasPasteableConceptualPayloadForRibbonUi(
-        isDesktop: Boolean,
-        wasmClipboardRead: WasmRibbonOsClipboardRead,
-    ): Boolean {
-        if (isDesktop) {
-            val raw = try {
-                brModeloClipboardGetPlainText()
-            } catch (_: Throwable) {
-                null
-            }
-            if (raw == null) return false
-            val t = raw.trim()
-            if (t.isEmpty()) return false
-            return isDecodableConceptualPayload(t)
-        }
-        return when (wasmClipboardRead) {
-            WasmRibbonOsClipboardRead.Pending,
-            WasmRibbonOsClipboardRead.Unavailable,
-            -> memoryHasDecodablePayload()
-            is WasmRibbonOsClipboardRead.Ready -> {
-                val t = wasmClipboardRead.plainText.trim()
-                if (t.isEmpty()) return false
-                isDecodableConceptualPayload(t)
-            }
-        }
-    }
-
-    /** Best-effort read for Wasm ribbon enablement (may require user permission in the browser). */
-    internal suspend fun probeOsPlainTextForWasmRibbon(): String? =
-        try {
-            brModeloClipboardTryReadPlainTextAsync()
+    internal fun hasPasteableConceptualPayloadForRibbonUi(): Boolean {
+        val raw = try {
+            brModeloClipboardGetPlainText()
         } catch (_: Throwable) {
             null
         }
+        if (raw == null) return false
+        val t = raw.trim()
+        if (t.isEmpty()) return false
+        return isDecodableConceptualPayload(t)
+    }
 
     /**
      * Writes [text] using [brModeloClipboardTryWritePlainTextAsync] first, then updates
