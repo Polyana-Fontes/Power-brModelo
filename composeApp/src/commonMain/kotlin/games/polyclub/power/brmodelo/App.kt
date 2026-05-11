@@ -36,7 +36,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import games.polyclub.power.brmodelo.domain.CanvasSelection
+import games.polyclub.power.brmodelo.domain.applyDictionarySlots
 import games.polyclub.power.brmodelo.domain.buildConceptualClipboardPayload
+import games.polyclub.power.brmodelo.domain.canOpenBulkDataDictionaryForSelection
+import games.polyclub.power.brmodelo.domain.collectDictionarySlotsForSelection
+import games.polyclub.power.brmodelo.domain.ConceptualDictionarySlotRow
 import games.polyclub.power.brmodelo.domain.deleteCanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualPasteContext
 import games.polyclub.power.brmodelo.domain.pasteConceptualClipboard
@@ -71,6 +75,7 @@ import games.polyclub.power.brmodelo.domain.SchemaElement
 import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolVariant
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaBrmParser
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaXmlParser
+import games.polyclub.power.brmodelo.ui.BulkDataDictionaryDialog
 import games.polyclub.power.brmodelo.ui.BrModeloScreen
 import games.polyclub.power.brmodelo.ui.AttributeToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
@@ -157,6 +162,7 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
 
     var pendingCloseTabIndex by remember { mutableStateOf<Int?>(null) }
     var pendingApplicationQuit by remember { mutableStateOf(false) }
+    var bulkDataDictionaryRows by remember { mutableStateOf<List<ConceptualDictionarySlotRow>?>(null) }
 
     fun selectedSession(): EditorTabSession = tabSessions[selectedTabIndex]
 
@@ -648,6 +654,11 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
             )
         }
     }
+    val dataDictionaryBulkEnabled = canOpenBulkDataDictionaryForSelection(sel.selection)
+    val onOpenDataDictionaryBulk: () -> Unit = dict@{
+        val tab = tabSessions.getOrNull(selectedTabIndex) ?: return@dict
+        bulkDataDictionaryRows = collectDictionarySlotsForSelection(tab.schema, tab.selection)
+    }
     val operationsMenuBinding = OperationsMenuRibbonBinding(
         organizeAttributesEnabled = organizeAttrsEnabled,
         onOrganizeAttributes = onOrganizeAttributes,
@@ -671,6 +682,8 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         onHideCanvasAttribute = onHideCanvasAttribute,
         revealHiddenAttributeEnabled = revealHiddenEnabled,
         onRevealHiddenAttribute = onRevealHiddenAttribute,
+        dataDictionaryBulkEnabled = dataDictionaryBulkEnabled,
+        onOpenDataDictionaryBulk = onOpenDataDictionaryBulk,
         undoEnabled = sel.history.canUndo,
         onUndo = {
             mutateSelectedTab { tab ->
@@ -774,6 +787,25 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                         if (operationsMenuBinding.redoEnabled) operationsMenuBinding.onRedo()
                     },
                 )
+
+                bulkDataDictionaryRows?.let { dictRows ->
+                    BulkDataDictionaryDialog(
+                        rows = dictRows,
+                        onDismiss = { bulkDataDictionaryRows = null },
+                        onCommit = { writes ->
+                            val idx = selectedTabIndex
+                            val tab = tabSessions.getOrNull(idx)
+                            if (tab != null && writes.isNotEmpty()) {
+                                val next = applyDictionarySlots(tab.schema, writes)
+                                    ?.withNormalizedAttributeMultiValuedCounts()
+                                if (next != null) {
+                                    pushCommitOnSelected(next)
+                                }
+                            }
+                            bulkDataDictionaryRows = null
+                        },
+                    )
+                }
 
                 pendingCloseTabIndex?.let { closeIdx ->
                     if (closeIdx in tabSessions.indices) {

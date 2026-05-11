@@ -42,6 +42,7 @@ internal fun conceptualOperationsDropdownEntries(
     convertRestrictedSpecializationToOptionalsEnabled: Boolean,
     hideCanvasAttributeEnabled: Boolean,
     revealHiddenAttributeEnabled: Boolean,
+    dataDictionaryBulkEnabled: Boolean,
 ): List<DropdownEntry> =
     listOf(
         DropdownEntry(
@@ -114,8 +115,10 @@ internal fun conceptualOperationsDropdownEntries(
             conceptualOperation = ConceptualRibbonOperation.ConvertRestrictedSpecializationToOptionals,
         ),
         DropdownEntry(
-            label = "Dicionário de Dados do Objeto",
+            label = "Dicionário de Dados de Objetos",
             icon = Res.drawable.dicionario_dados_3s,
             isSeparatorAbove = true,
+            enabled = dataDictionaryBulkEnabled,
+            conceptualOperation = ConceptualRibbonOperation.EditBulkDataDictionary,
         ),
     )
