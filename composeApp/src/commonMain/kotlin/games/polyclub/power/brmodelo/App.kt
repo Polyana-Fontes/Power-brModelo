@@ -40,6 +40,8 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.buildConceptualClipboardPayload
 import games.polyclub.power.brmodelo.domain.deleteCanvasSelection
+import games.polyclub.power.brmodelo.domain.elementIdsForClipboard
+import games.polyclub.power.brmodelo.domain.extractClipboardFragment
 import games.polyclub.power.brmodelo.domain.ConceptualPasteContext
 import games.polyclub.power.brmodelo.domain.pasteConceptualClipboard
 import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolVariant
@@ -366,8 +368,12 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         BrModeloConceptualClipboardStore.mirrorLocalClipboardText(payload)
         clipboardUiTick++
         scope.launch {
+            val previewSchema = extractClipboardFragment(
+                tab.schema,
+                elementIdsForClipboard(tab.schema, tab.selection),
+            ) ?: tab.schema
             val preview = renderSchemaToImageBitmap(
-                schema = tab.schema,
+                schema = previewSchema,
                 textMeasurer = clipboardPreviewTextMeasurer,
                 density = clipboardPreviewDensity,
                 withBackground = false,
@@ -384,8 +390,12 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         BrModeloConceptualClipboardStore.mirrorLocalClipboardText(payload)
         clipboardUiTick++
         scope.launch {
+            val previewSchema = extractClipboardFragment(
+                tab.schema,
+                elementIdsForClipboard(tab.schema, tab.selection),
+            ) ?: tab.schema
             val preview = renderSchemaToImageBitmap(
-                schema = tab.schema,
+                schema = previewSchema,
                 textMeasurer = clipboardPreviewTextMeasurer,
                 density = clipboardPreviewDensity,
                 withBackground = false,
