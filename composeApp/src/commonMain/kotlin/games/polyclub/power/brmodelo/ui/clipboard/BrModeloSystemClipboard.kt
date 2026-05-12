@@ -26,6 +26,14 @@ internal expect fun brModeloClipboardSetPlainText(text: String): Boolean
 internal expect fun brModeloClipboardGetPlainText(): String?
 
 /**
+ * Writes UTF-8 payload and, when [pngBytes] is non-null, a PNG image to the system clipboard.
+ * With a PNG, the payload is offered as **application/octet-stream** (not `text/plain`) so chat
+ * apps are less likely to paste XML; brModelo still decodes the same bytes as UTF-8 text.
+ * Text-only writes keep using plain text where the platform supports it.
+ */
+internal expect suspend fun brModeloClipboardTryWriteTextAndPngAsync(text: String, pngBytes: ByteArray?): Boolean
+
+/**
  * Preferred path for Ctrl+C / Ctrl+V flows: tries the platform async clipboard first
  * (e.g. [navigator.clipboard] on Wasm), then falls back to [brModeloClipboardSetPlainText] /
  * [brModeloClipboardGetPlainText], and finally the in-memory store.
@@ -77,12 +85,15 @@ internal object BrModeloConceptualClipboardStore {
     }
 
     /**
-     * Writes [text] using [brModeloClipboardTryWritePlainTextAsync] first, then updates
+     * Writes [text] using [brModeloClipboardTryWriteTextAndPngAsync] first, then updates
      * the in-memory fallback (always).
+     *
+     * When [pngBytes] is non-null, the OS clipboard also receives **image/png** alongside the
+     * payload as **application/octet-stream** (desktop JVM and Wasm where supported).
      */
-    suspend fun writePreferred(text: String) {
+    suspend fun writePreferred(text: String, pngBytes: ByteArray? = null) {
         try {
-            brModeloClipboardTryWritePlainTextAsync(text)
+            brModeloClipboardTryWriteTextAndPngAsync(text, pngBytes)
         } catch (_: Throwable) {
             /* ignore */
         }

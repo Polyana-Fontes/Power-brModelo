@@ -35,6 +35,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.buildConceptualClipboardPayload
 import games.polyclub.power.brmodelo.domain.deleteCanvasSelection
@@ -76,7 +78,9 @@ import games.polyclub.power.brmodelo.ui.AttributeToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.ClipboardRibbonBinding
 import games.polyclub.power.brmodelo.ui.clipboard.BrModeloConceptualClipboardStore
+import games.polyclub.power.brmodelo.ui.clipboard.encodeImageBitmapToPngBytes
 import games.polyclub.power.brmodelo.ui.canvas.SchemaCanvasViewState
+import games.polyclub.power.brmodelo.ui.canvas.renderSchemaToImageBitmap
 import games.polyclub.power.brmodelo.ui.BulkDeleteObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.RectangleSelectionToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.BulkDeleteUiState
@@ -242,6 +246,8 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
     var isDragOverFromCallback by remember { mutableStateOf(false) }
     val isDragOver = isDragOverFromPolling || isDragOverFromCallback
     val scope = rememberCoroutineScope()
+    val clipboardPreviewTextMeasurer = rememberTextMeasurer()
+    val clipboardPreviewDensity = LocalDensity.current
 
     suspend fun saveTabAt(index: Int, saveAs: Boolean): Boolean {
         val tab = tabSessions.getOrNull(index) ?: return true
@@ -360,7 +366,14 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         BrModeloConceptualClipboardStore.mirrorLocalClipboardText(payload)
         clipboardUiTick++
         scope.launch {
-            BrModeloConceptualClipboardStore.writePreferred(payload)
+            val preview = renderSchemaToImageBitmap(
+                schema = tab.schema,
+                textMeasurer = clipboardPreviewTextMeasurer,
+                density = clipboardPreviewDensity,
+                withBackground = false,
+            )
+            val pngBytes = encodeImageBitmapToPngBytes(preview)
+            BrModeloConceptualClipboardStore.writePreferred(payload, pngBytes)
         }
     }
 
@@ -371,7 +384,14 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         BrModeloConceptualClipboardStore.mirrorLocalClipboardText(payload)
         clipboardUiTick++
         scope.launch {
-            BrModeloConceptualClipboardStore.writePreferred(payload)
+            val preview = renderSchemaToImageBitmap(
+                schema = tab.schema,
+                textMeasurer = clipboardPreviewTextMeasurer,
+                density = clipboardPreviewDensity,
+                withBackground = false,
+            )
+            val pngBytes = encodeImageBitmapToPngBytes(preview)
+            BrModeloConceptualClipboardStore.writePreferred(payload, pngBytes)
             val current = tabsState.value.getOrNull(idx) ?: return@launch
             if (current.id != tab.id) return@launch
             val next = deleteCanvasSelection(current.schema, current.selection) ?: return@launch
