@@ -21,10 +21,12 @@ package games.polyclub.power.brmodelo
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -48,6 +50,10 @@ import games.polyclub.power.brmodelo.domain.elementIdsForClipboard
 import games.polyclub.power.brmodelo.domain.extractClipboardFragment
 import games.polyclub.power.brmodelo.domain.ConceptualPasteContext
 import games.polyclub.power.brmodelo.domain.pasteConceptualClipboard
+import games.polyclub.power.brmodelo.mcp.BrModeloMcpDesktopSync
+import games.polyclub.power.brmodelo.mcp.BrModeloMcpRuntime
+import games.polyclub.power.brmodelo.mcp.BrModeloMcpSettingsDialog
+import games.polyclub.power.brmodelo.mcp.BrModeloMcpSettingsStore
 import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolVariant
 import games.polyclub.power.brmodelo.domain.applyHideCanvasAttribute
 import games.polyclub.power.brmodelo.domain.applyRevealHiddenAttribute
@@ -104,6 +110,7 @@ import games.polyclub.power.brmodelo.ui.EntityToolVariant
 import games.polyclub.power.brmodelo.ui.MainMenuType
 import games.polyclub.power.brmodelo.ui.PickedFile
 import games.polyclub.power.brmodelo.ui.QuitApplicationUnsavedDialog
+import games.polyclub.power.brmodelo.ui.RibbonMcpUi
 import games.polyclub.power.brmodelo.ui.RibbonTab
 import games.polyclub.power.brmodelo.ui.consumeWindowDropFile
 import games.polyclub.power.brmodelo.ui.isDesktopTarget
@@ -219,6 +226,11 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         }
     }
 
+    fun forceCloseTab(index: Int) {
+        if (index !in tabSessions.indices) return
+        performRemoveTab(index)
+    }
+
     fun openLoadedModel(model: ConceptualSchema) {
         val incomingPath = model.filePath.trim()
         if (incomingPath.isNotEmpty()) {
@@ -254,6 +266,19 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
     var isDragOverFromCallback by remember { mutableStateOf(false) }
     val isDragOver = isDragOverFromPolling || isDragOverFromCallback
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val mcpRuntime = remember { BrModeloMcpRuntime() }
+    var showMcpSettings by remember { mutableStateOf(false) }
+    var mcpServerRunning by remember { mutableStateOf(false) }
+
+    DisposableEffect(mcpRuntime) {
+        mcpRuntime.setSettingsDialogOpener { showMcpSettings = true }
+        onDispose {
+            mcpRuntime.setSettingsDialogOpener { }
+            mcpRuntime.shutdown()
+        }
+    }
+
     val clipboardPreviewTextMeasurer = rememberTextMeasurer()
     val clipboardPreviewDensity = LocalDensity.current
 
@@ -744,6 +769,56 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         },
     )
 
+    SideEffect {
+        if (isDesktopTarget) {
+            BrModeloMcpDesktopSync.syncBindingsFromApp(
+                runtime = mcpRuntime,
+                snackbarHostState = snackbarHostState,
+                scope = scope,
+                tabSessions = tabSessions,
+                selectedTabIndex = selectedTabIndex,
+                onSelectTab = { selectedTabIndex = it },
+                onAddBlankTab = { addBlankTab() },
+                onForceCloseTab = { forceCloseTab(it) },
+                onRequestCloseTab = { requestCloseTab(it) },
+                saveTabAt = ::saveTabAt,
+                parseAndMergePickedFile = { picked ->
+                    runCatching { parseModelBytesWithSource(picked.bytes) }
+                        .onSuccess { (parsed, fromBrm) ->
+                            openLoadedModel(mergeLoadedModel(parsed, fromBrm, picked))
+                        }
+                },
+                onServerRunningChanged = { running -> mcpServerRunning = running },
+            )
+        } else {
+            BrModeloMcpDesktopSync.clearBindings(mcpRuntime)
+        }
+    }
+
+    LaunchedEffect(tabSessions, selectedTabIndex) {
+        if (isDesktopTarget) {
+            mcpRuntime.onTabsChanged()
+        }
+    }
+
+    val ribbonMcp = if (isDesktopTarget) {
+        RibbonMcpUi(
+            onOpenSettings = { mcpRuntime.openSettingsDialog() },
+            onStartServer = {
+                mcpRuntime.startServer()
+                mcpServerRunning = mcpRuntime.isServerRunning()
+            },
+            onStopServer = {
+                mcpRuntime.stopServer()
+                mcpServerRunning = mcpRuntime.isServerRunning()
+            },
+            startServerEnabled = !mcpServerRunning,
+            stopServerEnabled = mcpServerRunning,
+        )
+    } else {
+        null
+    }
+
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFE3E3E3)) {
             Box(modifier = Modifier.fillMaxSize()) {
@@ -816,6 +891,8 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                     onRedoRequest = {
                         if (operationsMenuBinding.redoEnabled) operationsMenuBinding.onRedo()
                     },
+                    snackbarHostState = snackbarHostState,
+                    ribbonMcp = ribbonMcp,
                 )
 
                 bulkDataDictionaryRows?.let { dictRows ->
@@ -833,6 +910,23 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                                 }
                             }
                             bulkDataDictionaryRows = null
+                        },
+                    )
+                }
+
+                if (showMcpSettings && isDesktopTarget) {
+                    val (mh, mp, ma) = BrModeloMcpSettingsStore.load()
+                    BrModeloMcpSettingsDialog(
+                        initialBindHost = mh,
+                        initialPort = mp,
+                        initialAllowLanHosts = ma,
+                        onDismiss = { showMcpSettings = false },
+                        onConfirm = { nh, np, na ->
+                            BrModeloMcpSettingsStore.save(nh, np, na)
+                            showMcpSettings = false
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Configurações MCP salvas.")
+                            }
                         },
                     )
                 }

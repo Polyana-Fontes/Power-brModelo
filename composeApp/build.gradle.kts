@@ -96,6 +96,7 @@ kotlin {
                 implementation(compose.material3)
                 implementation(compose.ui)
                 implementation(compose.components.resources)
+                implementation(libs.kotlinx.coroutines.core)
             }
         }
 
@@ -103,6 +104,13 @@ kotlin {
             dependencies {
                 implementation(compose.desktop.currentOs)
                 implementation(libs.flatlaf)
+                val mcpJava = libs.versions.mcpJava.get()
+                val jettyVer = libs.versions.jetty.get()
+                implementation(platform("io.modelcontextprotocol.sdk:mcp-bom:$mcpJava"))
+                implementation("io.modelcontextprotocol.sdk:mcp")
+                implementation(platform("org.eclipse.jetty:jetty-bom:$jettyVer"))
+                implementation("org.eclipse.jetty:jetty-server")
+                implementation("org.eclipse.jetty:jetty-servlet")
             }
         }
 

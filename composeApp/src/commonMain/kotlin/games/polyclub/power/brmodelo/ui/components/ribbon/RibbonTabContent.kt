@@ -39,6 +39,7 @@ import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.MenuEntry
 import games.polyclub.power.brmodelo.ui.OperationsMenuRibbonBinding
+import games.polyclub.power.brmodelo.ui.RibbonMcpUi
 import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.SpecializationToolRibbonBinding
 import games.polyclub.power.brmodelo.generated.resources.Res
@@ -140,6 +141,7 @@ internal fun RibbonEsquemaConceitual(
 @Composable
 internal fun RibbonOpcoes(
     clipboardRibbonBinding: ClipboardRibbonBinding? = null,
+    ribbonMcp: RibbonMcpUi? = null,
     onRibbonUserMessage: (String) -> Unit = {},
 ) {
     Row(
@@ -205,6 +207,9 @@ internal fun RibbonOpcoes(
             )
         )
         Spacer(modifier = Modifier.width(5.dp))
-        RibbonGroupIa(onUserMessage = onRibbonUserMessage)
+        RibbonGroupIa(
+            ribbonMcp = ribbonMcp,
+            onRibbonUserMessage = onRibbonUserMessage,
+        )
     }
 }
