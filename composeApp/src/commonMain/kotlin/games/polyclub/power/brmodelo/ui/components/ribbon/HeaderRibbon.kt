@@ -52,6 +52,7 @@ internal fun HeaderRibbon(
     rectangleSelectionToolBinding: RectangleSelectionToolRibbonBinding? = null,
     operationsMenuBinding: OperationsMenuRibbonBinding? = null,
     clipboardRibbonBinding: ClipboardRibbonBinding? = null,
+    onRibbonUserMessage: (String) -> Unit = {},
     onMainMenuClick: () -> Unit,
     onTabSelect: (RibbonTab) -> Unit,
 ) {
@@ -80,7 +81,10 @@ internal fun HeaderRibbon(
                 rectangleSelectionToolBinding = rectangleSelectionToolBinding,
                 operationsMenuBinding = operationsMenuBinding,
             )
-            RibbonTab.Opcoes            -> RibbonOpcoes(clipboardRibbonBinding = clipboardRibbonBinding)
+            RibbonTab.Opcoes            -> RibbonOpcoes(
+                clipboardRibbonBinding = clipboardRibbonBinding,
+                onRibbonUserMessage = onRibbonUserMessage,
+            )
         }
     }
 }

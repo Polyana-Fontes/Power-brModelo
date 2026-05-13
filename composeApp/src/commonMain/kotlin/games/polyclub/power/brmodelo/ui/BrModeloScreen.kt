@@ -157,6 +157,11 @@ internal fun BrModeloScreen(
                 rectangleSelectionToolBinding = rectangleSelectionToolBinding,
                 operationsMenuBinding = operationsMenuBinding,
                 clipboardRibbonBinding = clipboardRibbonBinding,
+                onRibbonUserMessage = { msg ->
+                    scope.launch {
+                        snackbarHostState.showSnackbar(msg)
+                    }
+                },
                 onMainMenuClick = onMainMenuToggle,
                 onTabSelect = onTabSelect,
             )

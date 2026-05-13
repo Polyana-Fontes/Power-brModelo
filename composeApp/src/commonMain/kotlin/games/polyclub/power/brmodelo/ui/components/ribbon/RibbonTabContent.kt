@@ -140,6 +140,7 @@ internal fun RibbonEsquemaConceitual(
 @Composable
 internal fun RibbonOpcoes(
     clipboardRibbonBinding: ClipboardRibbonBinding? = null,
+    onRibbonUserMessage: (String) -> Unit = {},
 ) {
     Row(
         modifier = Modifier
@@ -203,5 +204,7 @@ internal fun RibbonOpcoes(
                 )
             )
         )
+        Spacer(modifier = Modifier.width(5.dp))
+        RibbonGroupIa(onUserMessage = onRibbonUserMessage)
     }
 }
