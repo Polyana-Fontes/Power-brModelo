@@ -179,6 +179,15 @@ internal data class ClipboardRibbonBinding(
     val onPaste: () -> Unit,
 )
 
+/** Desktop MCP ribbon controls; null on Wasm (snackbar-only MCP messaging). */
+internal data class RibbonMcpUi(
+    val onOpenSettings: () -> Unit,
+    val onStartServer: () -> Unit,
+    val onStopServer: () -> Unit,
+    val startServerEnabled: Boolean,
+    val stopServerEnabled: Boolean,
+)
+
 internal data class MenuEntry(
     val title: String,
     val icon: DrawableResource,

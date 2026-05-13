@@ -35,6 +35,7 @@ import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.OperationsMenuRibbonBinding
 import games.polyclub.power.brmodelo.ui.RectangleSelectionToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.RibbonMcpUi
 import games.polyclub.power.brmodelo.ui.RibbonTab
 import games.polyclub.power.brmodelo.ui.SpecializationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.components.AppColors
@@ -52,6 +53,7 @@ internal fun HeaderRibbon(
     rectangleSelectionToolBinding: RectangleSelectionToolRibbonBinding? = null,
     operationsMenuBinding: OperationsMenuRibbonBinding? = null,
     clipboardRibbonBinding: ClipboardRibbonBinding? = null,
+    ribbonMcp: RibbonMcpUi? = null,
     onRibbonUserMessage: (String) -> Unit = {},
     onMainMenuClick: () -> Unit,
     onTabSelect: (RibbonTab) -> Unit,
@@ -83,6 +85,7 @@ internal fun HeaderRibbon(
             )
             RibbonTab.Opcoes            -> RibbonOpcoes(
                 clipboardRibbonBinding = clipboardRibbonBinding,
+                ribbonMcp = ribbonMcp,
                 onRibbonUserMessage = onRibbonUserMessage,
             )
         }

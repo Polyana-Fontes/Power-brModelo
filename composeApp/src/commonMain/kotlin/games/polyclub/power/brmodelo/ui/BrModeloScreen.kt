@@ -56,6 +56,7 @@ import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.OperationsMenuRibbonBinding
 import games.polyclub.power.brmodelo.ui.PickedFile
 import games.polyclub.power.brmodelo.ui.RectangleSelectionToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.RibbonMcpUi
 import games.polyclub.power.brmodelo.ui.RibbonTab
 import games.polyclub.power.brmodelo.ui.SelectionBandUiState
 import games.polyclub.power.brmodelo.ui.SpecializationToolRibbonBinding
@@ -123,13 +124,14 @@ internal fun BrModeloScreen(
     onPasteRequest: () -> Unit = {},
     onUndoRequest: () -> Unit = {},
     onRedoRequest: () -> Unit = {},
+    snackbarHostState: SnackbarHostState,
+    ribbonMcp: RibbonMcpUi? = null,
 ) {
     var exportCounter by remember { mutableIntStateOf(0) }
     var exportIsJpeg by remember { mutableStateOf(true) }
 
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
-    val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(exportCounter) {
@@ -157,6 +159,7 @@ internal fun BrModeloScreen(
                 rectangleSelectionToolBinding = rectangleSelectionToolBinding,
                 operationsMenuBinding = operationsMenuBinding,
                 clipboardRibbonBinding = clipboardRibbonBinding,
+                ribbonMcp = ribbonMcp,
                 onRibbonUserMessage = { msg ->
                     scope.launch {
                         snackbarHostState.showSnackbar(msg)

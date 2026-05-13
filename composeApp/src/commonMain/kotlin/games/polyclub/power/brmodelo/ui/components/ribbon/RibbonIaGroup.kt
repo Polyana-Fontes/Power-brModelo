@@ -49,6 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import games.polyclub.power.brmodelo.ui.RibbonMcpUi
 import games.polyclub.power.brmodelo.ui.components.AppColors
 import games.polyclub.power.brmodelo.ui.isDesktopTarget
 
@@ -60,10 +61,18 @@ private val IA_LARGE_BUTTON_W = 72.dp
  */
 @Composable
 internal fun RibbonGroupIa(
-    onUserMessage: (String) -> Unit,
+    ribbonMcp: RibbonMcpUi?,
+    onRibbonUserMessage: (String) -> Unit,
 ) {
-    val startEnabled = isDesktopTarget
-    val stopEnabled = false
+    val startEnabled = ribbonMcp?.startServerEnabled == true
+    val stopEnabled = ribbonMcp?.stopServerEnabled == true
+    val onMcpClick = {
+        if (ribbonMcp != null) {
+            ribbonMcp.onOpenSettings()
+        } else {
+            onRibbonUserMessage(iaRibbonMcpSettingsBannerText(isDesktopTarget))
+        }
+    }
     Column(
         modifier = Modifier
             .fillMaxHeight()
@@ -79,7 +88,7 @@ internal fun RibbonGroupIa(
         ) {
             IaLargeMcpButton(
                 buttonWidth = IA_LARGE_BUTTON_W,
-                onClick = { onUserMessage(iaRibbonMcpSettingsBannerText(isDesktopTarget)) },
+                onClick = onMcpClick,
             )
             Spacer(modifier = Modifier.width(4.dp))
             Column(
@@ -89,13 +98,13 @@ internal fun RibbonGroupIa(
                 IaSmallGlyphButton(
                     title = "Iniciar",
                     enabled = startEnabled,
-                    onClick = { },
+                    onClick = { ribbonMcp?.onStartServer?.invoke() },
                     icon = { m, en -> RibbonPlayGlyphIcon(m, en) },
                 )
                 IaSmallGlyphButton(
                     title = "Parar",
                     enabled = stopEnabled,
-                    onClick = { },
+                    onClick = { ribbonMcp?.onStopServer?.invoke() },
                     icon = { m, en -> RibbonStopGlyphIcon(m, en) },
                 )
             }
