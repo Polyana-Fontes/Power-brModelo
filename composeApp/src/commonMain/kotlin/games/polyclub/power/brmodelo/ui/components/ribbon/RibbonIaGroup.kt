@@ -55,7 +55,7 @@ import games.polyclub.power.brmodelo.ui.isDesktopTarget
 private val IA_LARGE_BUTTON_W = 72.dp
 
 /**
- * Ribbon group **IA**: large MCP settings control plus **Iniciar** / **Parar** placeholders.
+ * Ribbon group **Inteligência Artificial**: large MCP settings control plus **Iniciar** / **Parar** placeholders.
  * Icons are drawn with vector-style Canvas paths (no PNG assets).
  */
 @Composable
@@ -100,7 +100,7 @@ internal fun RibbonGroupIa(
                 )
             }
         }
-        RibbonGroupTitle("IA")
+        RibbonGroupTitle("Inteligência Artificial", maxLines = 2)
     }
 }
 
