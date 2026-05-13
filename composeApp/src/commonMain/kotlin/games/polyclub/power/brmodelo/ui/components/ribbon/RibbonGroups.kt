@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
@@ -270,16 +271,19 @@ internal fun RibbonGroupMixed(
 }
 
 @Composable
-internal fun RibbonGroupTitle(title: String) {
+internal fun RibbonGroupTitle(title: String, maxLines: Int = 1) {
+    val line = if (maxLines > 1) 10.sp else 9.sp
     Text(
         text = title,
         fontSize = 9.sp,
-        lineHeight = 9.sp,
+        lineHeight = line,
         color = AppColors.ribbonGroupTitle,
         textAlign = TextAlign.Center,
-        maxLines = 1,
+        maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.padding(top = 1.dp, bottom = 1.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 1.dp, bottom = 1.dp),
     )
 }
 
