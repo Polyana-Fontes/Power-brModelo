@@ -117,6 +117,7 @@ internal fun RibbonOperacoesGroup(
                 binding?.convertRestrictedSpecializationToOptionalsEnabled ?: false,
                 binding?.hideCanvasAttributeEnabled ?: false,
                 binding?.revealHiddenAttributeEnabled ?: false,
+                binding?.dataDictionaryBulkEnabled ?: false,
             )
             RibbonButton(
                 entry = MenuEntry(
@@ -148,6 +149,8 @@ internal fun RibbonOperacoesGroup(
                             binding?.onHideCanvasAttribute?.invoke()
                         ConceptualRibbonOperation.RevealHiddenAttribute ->
                             binding?.onRevealHiddenAttribute?.invoke()
+                        ConceptualRibbonOperation.EditBulkDataDictionary ->
+                            binding?.onOpenDataDictionaryBulk?.invoke()
                         null -> Unit
                     }
                 },

@@ -47,6 +47,7 @@ internal enum class ConceptualRibbonOperation {
     ConvertRestrictedSpecializationToOptionals,
     HideCanvasAttribute,
     RevealHiddenAttribute,
+    EditBulkDataDictionary,
 }
 
 internal data class DropdownEntry(
@@ -164,6 +165,8 @@ internal data class OperationsMenuRibbonBinding(
     val onHideCanvasAttribute: () -> Unit,
     val revealHiddenAttributeEnabled: Boolean,
     val onRevealHiddenAttribute: () -> Unit,
+    val dataDictionaryBulkEnabled: Boolean,
+    val onOpenDataDictionaryBulk: () -> Unit,
     val undoEnabled: Boolean,
     val onUndo: () -> Unit,
     val redoEnabled: Boolean,
