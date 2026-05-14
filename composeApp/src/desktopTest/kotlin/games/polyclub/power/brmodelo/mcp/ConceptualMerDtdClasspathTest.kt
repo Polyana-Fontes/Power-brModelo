@@ -18,8 +18,26 @@
 
 package games.polyclub.power.brmodelo.mcp
 
-internal actual object BrModeloMcpSettingsStore {
-    actual fun load(): Triple<String, Int, Boolean> = Triple("127.0.0.1", 8765, false)
+import java.nio.charset.StandardCharsets
+import kotlin.test.Test
+import kotlin.test.assertTrue
 
-    actual fun save(bindHost: String, port: Int, allowLanHosts: Boolean) = Unit
+class ConceptualMerDtdClasspathTest {
+
+    @Test
+    fun `conceptual mer dtd is on the desktop classpath`() {
+        // Arrange
+        val path = "mcp/conceptual-mer.dtd"
+
+        // Act
+        val text = ConceptualMerDtdClasspathTest::class.java.classLoader
+            .getResourceAsStream(path)
+            ?.bufferedReader(StandardCharsets.UTF_8)
+            ?.use { it.readText() }
+            .orEmpty()
+
+        // Assert
+        assertTrue(text.contains("<!ELEMENT MER"), "DTD should declare root MER")
+        assertTrue(text.contains("brModelo conceptual schema"), "DTD should carry documentation comments")
+    }
 }

@@ -1,0 +1,271 @@
+<!--
+  - Power brModelo - Kotlin port of brModelo 3.0 originally written in Pascal
+  - Copyright (C) 2026  Polyana Fontes
+  -
+  - This program is free software: you can redistribute it and/or modify
+  - it under the terms of the GNU General Public License as published by
+  - the Free Software Foundation, either version 3 of the License, or
+  - (at your option) any later version.
+  -
+  - This program is distributed in the hope that it will be useful,
+  - but WITHOUT ANY WARRANTY; without even the implied warranty of
+  - MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  - GNU General Public License for more details.
+  -
+  - You should have received a copy of the GNU General Public License
+  - along with this program.  If not, see <http://www.gnu.org/licenses/>.
+  -->
+
+<!--
+  brModelo conceptual schema — XML document type (informative)
+  =================================================================
+  This external subset describes the MER (Modelo Entidade-Relacionamento)
+  conceptual XML produced and consumed by Power brModelo / legacy brModelo 3.x
+  (Pascal: TModelo.GeraXml / LoadFromXML in mer.pas, attribute trees in att.pas).
+
+  IMPORTANT
+  ---------
+  • This DTD is for documentation and agent guidance only. The runtime parser
+    does not validate documents against it; invalid or incomplete trees may
+    still fail at load time.
+  • Booleans follow Delphi convention: element with attribute Valor="-1" means
+    true, Valor="0" means false (see bool-style elements below).
+  • Numeric IDs are decimal integers on attributes "id", "Destino_ID", "Card_id",
+    coordinate Valor attributes, etc.
+  • Connections: each <Ligacao> is stored under the element that owns the
+    origin end; Destino_ID is the target element ID. Cardinality labels use
+    Card_id and optional <Cardinalidade> when MostraCardinalidade/@Valor="-1".
+  • Encoding: legacy files often declare ISO-8859-1; new serialization uses
+    UTF-8. Always include a proper <?xml ... encoding="..."?> on instance files.
+
+  Root document structure
+  -------------------------
+  <?xml version="1.0" encoding="UTF-8"?>
+  <!DOCTYPE MER SYSTEM "conceptual-mer.dtd">
+  <MER> … </MER>
+-->
+
+<!-- ========= Root ========= -->
+
+<!ELEMENT MER (Informacoes, Entidades, Relacoes, EntAssoss, Texto)>
+
+<!-- ========= Metadata block ========= -->
+
+<!ELEMENT Informacoes (Posicao, TotalItens, Tipo, Versao, Autor, Observacao, Template)>
+
+<!ELEMENT Posicao EMPTY>
+<!ATTLIST Posicao Left CDATA #IMPLIED Top CDATA #IMPLIED>
+
+<!ELEMENT TotalItens EMPTY>
+<!ATTLIST TotalItens Valor CDATA #REQUIRED>
+
+<!ELEMENT Tipo EMPTY>
+<!ATTLIST Tipo Valor CDATA #REQUIRED>
+
+<!ELEMENT Versao EMPTY>
+<!ATTLIST Versao Valor CDATA #REQUIRED>
+
+<!ELEMENT Autor EMPTY>
+<!ATTLIST Autor Valor CDATA #IMPLIED>
+
+<!ELEMENT Observacao (#PCDATA)>
+<!ATTLIST Observacao Valor CDATA #IMPLIED>
+<!ELEMENT Futuro (#PCDATA)>
+
+<!--
+  Template: logical-to-physical mapping boilerplate carried in every save.
+  Content order matches the reference serializer; agents may copy a minimal
+  block from an existing export if needed.
+-->
+<!ELEMENT Template (CAMPOS, TIPOS, COMPLEMENTO_CAMPOS, COMPLEMENTO_TABELAS, DDL)>
+<!ELEMENT CAMPOS EMPTY>
+<!ELEMENT TIPOS EMPTY>
+<!ELEMENT COMPLEMENTO_CAMPOS EMPTY>
+<!ELEMENT COMPLEMENTO_TABELAS EMPTY>
+
+<!ELEMENT DDL (CTab_A | CTab_B | CTab_Compl | CTab_C | CCamp | Pk_inTab | Fk_inTab | Const_Nomear | CConst_Nome | Separador)*>
+<!ELEMENT CTab_A (#PCDATA)>
+<!ELEMENT CTab_B (#PCDATA)>
+<!ELEMENT CTab_Compl (#PCDATA)>
+<!ELEMENT CTab_C (#PCDATA)>
+<!ELEMENT CCamp (#PCDATA)>
+<!ELEMENT Pk_inTab (#PCDATA)>
+<!ELEMENT Fk_inTab (#PCDATA)>
+<!ELEMENT Const_Nomear (#PCDATA)>
+<!ELEMENT CConst_Nome (#PCDATA)>
+<!ELEMENT Separador EMPTY>
+
+<!-- ========= Canvas annotation bucket ========= -->
+<!--
+  Outer <Texto> is often empty in new saves. Nested <Texto> holds free
+  annotations; child layout mirrors other diagram elements (Cor, Tipo, …).
+-->
+<!ELEMENT Texto (Texto | Left | Top | Width | Height | Fonte | Cor | Tipo | TextAlin | TamAuto | Dicionario | Observacao | Futuro | Anexos | Atributos | AtributosOcultos)*>
+<!ATTLIST Texto nome CDATA #IMPLIED id CDATA #IMPLIED>
+
+<!ELEMENT Cor EMPTY>
+<!ATTLIST Cor Valor CDATA #IMPLIED>
+
+<!-- ========= Entity graph ========= -->
+
+<!ELEMENT Entidades (Entidade)*>
+
+<!--
+  Entidade: conceptual entity. Optional flags on AutoRelacoes / Especializacoes
+  use AutoRelacionado / ehEsp = -1 when the corresponding list is non-empty.
+-->
+<!ELEMENT Entidade (Left | Top | Width | Height | Fonte | Atributos | AtributosOcultos | Dicionario | Nula | Observacao | Futuro | Anexos | AutoRelacoes | Especializacoes)*>
+<!ATTLIST Entidade nome CDATA #REQUIRED id CDATA #REQUIRED>
+
+<!ELEMENT Relacoes (Relacao)*>
+<!ELEMENT Relacao (Left | Top | Width | Height | Fonte | Atributos | AtributosOcultos | Dicionario | Nula | Observacao | Futuro | Anexos | SetaDirecao | Ligacoes)*>
+<!ATTLIST Relacao nome CDATA #REQUIRED id CDATA #REQUIRED>
+
+<!ELEMENT EntAssoss (EntidadeAssoss)*>
+<!--
+  EntidadeAssoss: associative entity; embeds ChildRelacao for the inner n-ary link.
+-->
+<!ELEMENT EntidadeAssoss (Left | Top | Width | Height | Fonte | Atributos | AtributosOcultos | Dicionario | Nula | Observacao | Futuro | Anexos | AutoRelacoes | ChildRelacao)*>
+<!ATTLIST EntidadeAssoss nome CDATA #REQUIRED id CDATA #REQUIRED>
+
+<!ELEMENT ChildRelacao (Left | Top | Width | Height | Fonte | Atributos | AtributosOcultos | Dicionario | Nula | Observacao | Futuro | Anexos | SetaDirecao | Ligacoes)*>
+<!ATTLIST ChildRelacao nome CDATA #REQUIRED id CDATA #REQUIRED>
+
+<!-- ========= Attributes (canvas) ========= -->
+
+<!ELEMENT Atributos (Atributo)*>
+
+<!--
+  Atributo: owned by an entity, relationship, associative entity, or composite
+  parent. Composite children are nested under <BarraDeAtributos>; non-composite
+  attributes reference a synthetic BarraID for layout.
+-->
+<!ELEMENT Atributo (Left | Top | Width | Height | Fonte | Atributos | AtributosOcultos | Dicionario | Nula | Observacao | Futuro | Anexos | MaxCard | MinCard | Composto | Identificador | Tipo | Multivalorado | QtdeMultivalorado | Orientacao | TamAuto | Desvio | BarraDeAtributos | BarraID | Ligacoes)*>
+<!ATTLIST Atributo nome CDATA #REQUIRED id CDATA #REQUIRED>
+
+<!ELEMENT BarraDeAtributos (Atributo)*>
+
+<!-- ========= Hidden attributes (dictionary / deferred) ========= -->
+
+<!ELEMENT AtributosOcultos (AtributoOculto)*>
+
+<!--
+  AtributoOculto: Nome attribute (capital N) distinguishes from canvas Atributo.
+  Nested composite hidden children use <Atributos>; parallel nested hidden
+  bucket uses <AtributosOcultosAninhados>.
+-->
+<!ELEMENT AtributoOculto (LeftTop | MaxCard | MinCard | Composto | Identificador | Opcional | Tipo | Observacao | Dicionario | Atributos | AtributosOcultosAninhados)*>
+<!ATTLIST AtributoOculto Nome CDATA #REQUIRED>
+
+<!ELEMENT LeftTop EMPTY>
+<!ATTLIST LeftTop X CDATA #IMPLIED Y CDATA #IMPLIED>
+
+<!ELEMENT AtributosOcultosAninhados (AtributoOculto)*>
+
+<!-- ========= Self-relationships & specializations ========= -->
+
+<!ELEMENT AutoRelacoes (AutoRelacao)*>
+<!ATTLIST AutoRelacoes AutoRelacionado CDATA #IMPLIED>
+
+<!ELEMENT AutoRelacao (Left | Top | Width | Height | Fonte | Atributos | AtributosOcultos | Dicionario | Nula | Observacao | Futuro | Anexos | SetaDirecao | Ligacoes)*>
+<!ATTLIST AutoRelacao nome CDATA #REQUIRED id CDATA #REQUIRED>
+
+<!ELEMENT Especializacoes (Especializacao)*>
+<!ATTLIST Especializacoes ehEsp CDATA #IMPLIED>
+
+<!--
+  Especializacao: optional <Tipo Valor="0|1"/> (restricted vs optional) may appear
+  on round-trips from legacy files even if some serializers omit it.
+-->
+<!ELEMENT Especializacao (Left | Top | Width | Height | Fonte | Atributos | AtributosOcultos | Dicionario | Nula | Observacao | Futuro | Anexos | Parcial | Tipo | Ligacoes)*>
+<!ATTLIST Especializacao nome CDATA #REQUIRED id CDATA #REQUIRED>
+
+<!-- ========= Connections & cardinality ========= -->
+
+<!ELEMENT Ligacoes (Ligacao)*>
+
+<!ELEMENT Ligacao (MostraCardinalidade | Cardinalidades | Orientacao | Fraca | AssocOuterA | AssocOuterB)*>
+<!ATTLIST Ligacao Destino_ID CDATA #REQUIRED>
+
+<!ELEMENT MostraCardinalidade EMPTY>
+<!ATTLIST MostraCardinalidade Valor CDATA #REQUIRED Card_id CDATA #REQUIRED>
+
+<!ELEMENT Cardinalidades (Cardinalidade?)>
+<!ATTLIST Cardinalidades Cardinalidade CDATA #IMPLIED>
+
+<!--
+  Cardinalidade: free-standing label on a link. Card attribute: 1=1:1, 2=0:1,
+  3=1:N, 4=0:N (see Cardinality.fromCode in the Kotlin port).
+-->
+<!ELEMENT Cardinalidade (Left | Top | Width | Height | Fonte | Atributos | AtributosOcultos | Dicionario | Nula | Observacao | Futuro | Anexos | Cor | TamAuto | Tipo | TextAlin | Card | Fixa | Ligacoes)*>
+<!ATTLIST Cardinalidade nome CDATA #IMPLIED id CDATA #REQUIRED>
+
+<!-- ========= Geometry & typography (shared) ========= -->
+
+<!ELEMENT Left (Valor)>
+<!ELEMENT Top (Valor)>
+<!ELEMENT Width (Valor)>
+<!ELEMENT Height (Valor)>
+<!ELEMENT Valor (#PCDATA)>
+
+<!ELEMENT Fonte (FonteNome, FonteTamanho, FonteEstilo, FonteCor)>
+<!ATTLIST Fonte default CDATA #IMPLIED>
+<!ELEMENT FonteNome EMPTY>
+<!ATTLIST FonteNome Valor CDATA #IMPLIED>
+<!ELEMENT FonteTamanho EMPTY>
+<!ATTLIST FonteTamanho Valor CDATA #IMPLIED>
+<!ELEMENT FonteEstilo EMPTY>
+<!ATTLIST FonteEstilo Valor CDATA #IMPLIED>
+<!ELEMENT FonteCor EMPTY>
+<!ATTLIST FonteCor Valor CDATA #IMPLIED>
+
+<!-- ========= Miscellaneous leaves ========= -->
+
+<!ELEMENT Anexos EMPTY>
+
+<!ELEMENT Dicionario (#PCDATA)>
+
+<!-- Boolean-as-int leaves (Valor -1 true, 0 false) -->
+<!ELEMENT Nula EMPTY>
+<!ATTLIST Nula Valor CDATA #REQUIRED>
+<!ELEMENT Composto EMPTY>
+<!ATTLIST Composto Valor CDATA #REQUIRED>
+<!ELEMENT Identificador EMPTY>
+<!ATTLIST Identificador Valor CDATA #REQUIRED>
+<!ELEMENT Multivalorado EMPTY>
+<!ATTLIST Multivalorado Valor CDATA #REQUIRED>
+<!ELEMENT TamAuto EMPTY>
+<!ATTLIST TamAuto Valor CDATA #REQUIRED>
+<!ELEMENT Parcial EMPTY>
+<!ATTLIST Parcial Valor CDATA #REQUIRED>
+<!ELEMENT Opcional EMPTY>
+<!ATTLIST Opcional Valor CDATA #REQUIRED>
+<!ELEMENT Fixa EMPTY>
+<!ATTLIST Fixa Valor CDATA #REQUIRED>
+<!ELEMENT Fraca EMPTY>
+<!ATTLIST Fraca Valor CDATA #REQUIRED>
+
+<!ELEMENT MaxCard EMPTY>
+<!ATTLIST MaxCard Valor CDATA #REQUIRED>
+<!ELEMENT MinCard EMPTY>
+<!ATTLIST MinCard Valor CDATA #REQUIRED>
+<!ELEMENT QtdeMultivalorado EMPTY>
+<!ATTLIST QtdeMultivalorado Valor CDATA #IMPLIED>
+<!ELEMENT Orientacao EMPTY>
+<!ATTLIST Orientacao Valor CDATA #REQUIRED>
+<!ELEMENT Desvio EMPTY>
+<!ATTLIST Desvio Valor CDATA #IMPLIED>
+<!ELEMENT BarraID EMPTY>
+<!ATTLIST BarraID Valor CDATA #IMPLIED>
+<!ELEMENT SetaDirecao EMPTY>
+<!ATTLIST SetaDirecao Valor CDATA #REQUIRED>
+<!ELEMENT Tipo EMPTY>
+<!ATTLIST Tipo Valor CDATA #IMPLIED>
+<!ELEMENT TextAlin EMPTY>
+<!ATTLIST TextAlin Valor CDATA #IMPLIED>
+<!ELEMENT Card EMPTY>
+<!ATTLIST Card Valor CDATA #IMPLIED>
+<!ELEMENT AssocOuterA EMPTY>
+<!ATTLIST AssocOuterA Valor CDATA #IMPLIED>
+<!ELEMENT AssocOuterB EMPTY>
+<!ATTLIST AssocOuterB Valor CDATA #IMPLIED>

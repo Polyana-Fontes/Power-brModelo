@@ -24,7 +24,7 @@ import games.polyclub.power.brmodelo.ui.EditorTabSession
 /**
  * Snapshot of open editor tabs exposed to the MCP server (read on the UI thread).
  */
-internal data class BrModeloMcpTabSnapshot(
+internal data class McpTabSnapshot(
     val sessions: List<EditorTabSession>,
     val selectedIndex: Int,
 )
@@ -32,14 +32,20 @@ internal data class BrModeloMcpTabSnapshot(
 /**
  * UI-thread actions invoked from MCP tool handlers (desktop only).
  */
-internal class BrModeloMcpUiBindings(
-    val current: () -> BrModeloMcpTabSnapshot,
+internal class McpUiBindings(
+    val current: () -> McpTabSnapshot,
     val onSelectTab: (Int) -> Unit,
     val onAddBlankTab: () -> Unit,
     val onForceCloseTab: (Int) -> Unit,
     val onRequestCloseTab: (Int) -> Unit,
     val onSaveTab: (Int, Boolean) -> Boolean,
-    val onOpenFile: () -> Unit,
+    /** Loads a model from an absolute file path; returns null on success or a short error code/message. */
+    val onOpenModelFileAtPath: (String) -> String?,
+    /**
+     * Opens conceptual XML from UTF-8 text. [fileName] is basename only (no path); used for the tab title.
+     * Returns null on success or a short error code/message.
+     */
+    val onOpenXmlAsUnsavedTab: (fileName: String, xmlUtf8: String) -> String?,
     val onNotifyUser: (String) -> Unit,
     val onServerRunningChanged: (Boolean) -> Unit,
 )
@@ -47,10 +53,10 @@ internal class BrModeloMcpUiBindings(
 /**
  * Desktop MCP server + settings; WASM [actual] is a no-op stub.
  */
-internal expect class BrModeloMcpRuntime() {
+internal expect class McpRuntime() {
     fun setSettingsDialogOpener(opener: () -> Unit)
 
-    fun updateBindings(bindings: BrModeloMcpUiBindings?)
+    fun updateBindings(bindings: McpUiBindings?)
 
     fun openSettingsDialog()
 
@@ -65,5 +71,5 @@ internal expect class BrModeloMcpRuntime() {
     fun shutdown()
 }
 
-internal fun BrModeloMcpTabSnapshot.schemaForTab(index: Int): ConceptualSchema? =
+internal fun McpTabSnapshot.schemaForTab(index: Int): ConceptualSchema? =
     sessions.getOrNull(index)?.schema

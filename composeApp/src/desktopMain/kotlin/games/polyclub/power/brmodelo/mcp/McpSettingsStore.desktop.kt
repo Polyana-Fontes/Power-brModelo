@@ -26,7 +26,7 @@ private const val PREF_BIND = "bindHost"
 private const val PREF_PORT = "port"
 private const val PREF_ALLOW_LAN_HOSTS = "allowLanHosts"
 
-internal actual object BrModeloMcpSettingsStore {
+internal actual object McpSettingsStore {
     actual fun load(): Triple<String, Int, Boolean> {
         val host = prefs.get(PREF_BIND, "127.0.0.1").trim().ifBlank { "127.0.0.1" }
         val port = prefs.getInt(PREF_PORT, 8765).coerceIn(1, 65535)

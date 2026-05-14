@@ -187,6 +187,7 @@ internal data class RibbonMcpUi(
     val onOpenSettings: () -> Unit,
     val onStartServer: () -> Unit,
     val onStopServer: () -> Unit,
+    val onCopyServerAddress: () -> Unit,
     val startServerEnabled: Boolean,
     val stopServerEnabled: Boolean,
 )

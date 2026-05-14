@@ -22,7 +22,19 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-class BrModeloMcpResourceUrisTest {
+class McpResourceUrisTest {
+
+    @Test
+    fun `modelResourceUri roundtrips through parse`() {
+        // Arrange
+        val uri = modelResourceUri(4)
+
+        // Act
+        val index = parseModelResourceTabIndex(uri)
+
+        // Assert
+        assertEquals(4, index)
+    }
 
     @Test
     fun `parses tab index from canonical uri`() {
@@ -30,7 +42,7 @@ class BrModeloMcpResourceUrisTest {
         val uri = "brmodelo://model/2"
 
         // Act
-        val index = parseBrModeloModelResourceTabIndex(uri)
+        val index = parseModelResourceTabIndex(uri)
 
         // Assert
         assertEquals(2, index)
@@ -42,7 +54,7 @@ class BrModeloMcpResourceUrisTest {
         val uri = "brmodelo://model/0/extra?x=1"
 
         // Act
-        val index = parseBrModeloModelResourceTabIndex(uri)
+        val index = parseModelResourceTabIndex(uri)
 
         // Assert
         assertEquals(0, index)
@@ -54,9 +66,18 @@ class BrModeloMcpResourceUrisTest {
         val uri = "file:///tmp/model.xml"
 
         // Act
-        val index = parseBrModeloModelResourceTabIndex(uri)
+        val index = parseModelResourceTabIndex(uri)
 
         // Assert
         assertNull(index)
+    }
+
+    @Test
+    fun `conceptual mer dtd resource uri is stable`() {
+        // Act
+        val uri = conceptualMerDtdResourceUri()
+
+        // Assert
+        assertEquals("brmodelo://schema/conceptual-mer.dtd", uri)
     }
 }

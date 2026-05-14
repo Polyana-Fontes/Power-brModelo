@@ -18,8 +18,24 @@
 
 package games.polyclub.power.brmodelo.mcp
 
-internal expect object BrModeloMcpSettingsStore {
-    fun load(): Triple<String, Int, Boolean>
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
-    fun save(bindHost: String, port: Int, allowLanHosts: Boolean)
+class McpTabToolNamesTest {
+
+    @Test
+    fun `tool names use category double underscore suffix pattern`() {
+        // Arrange
+        val sep = McpTabToolNames.TAB_TOOL_SEPARATOR
+
+        // Act & Assert
+        assertEquals("tabs", McpTabToolNames.TAB_TOOL_CATEGORY)
+        assertEquals("__", sep)
+        assertTrue(McpTabToolNames.LIST_OPEN.startsWith("tabs$sep"))
+        assertEquals("tabs__list_open", McpTabToolNames.LIST_OPEN)
+        assertEquals("tabs__select_resource", McpTabToolNames.SELECT_RESOURCE)
+        assertEquals("tabs__open_xml", McpTabToolNames.OPEN_XML)
+        assertEquals("tabs__save_resource", McpTabToolNames.SAVE_RESOURCE)
+    }
 }

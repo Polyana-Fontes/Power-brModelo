@@ -83,5 +83,21 @@ internal data class EditorTabSession(
                 hiddenAttributeRevealPath = null,
             )
         }
+
+        /**
+         * In-memory model (e.g. XML from MCP) with no disk baseline — the tab stays dirty until the first save.
+         */
+        fun fromUnsavedModel(id: Long, schema: ConceptualSchema): EditorTabSession {
+            val history = SchemaHistory(schema)
+            return EditorTabSession(
+                id = id,
+                history = history,
+                schema = schema,
+                inspectorCommittedSchema = schema,
+                savedDiskBaseline = null,
+                selection = CanvasSelection.None,
+                hiddenAttributeRevealPath = null,
+            )
+        }
     }
 }

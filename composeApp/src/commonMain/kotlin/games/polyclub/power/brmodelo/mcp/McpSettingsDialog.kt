@@ -43,7 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 
 @Composable
-internal fun BrModeloMcpSettingsDialog(
+internal fun McpSettingsDialog(
     initialBindHost: String,
     initialPort: Int,
     initialAllowLanHosts: Boolean,
@@ -99,8 +99,8 @@ internal fun BrModeloMcpSettingsDialog(
                     )
                 }
                 Text(
-                    text = "Desative em redes não confiáveis. O validador de transporte MCP " +
-                        "ainda exige Host/Origin coerentes com esta lista.",
+                    text = "Desative em redes não confiáveis. O cliente MCP envia Host como \"endereço:porta\"; " +
+                        "o validador aceita padrões compatíveis com o bind e com localhost.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

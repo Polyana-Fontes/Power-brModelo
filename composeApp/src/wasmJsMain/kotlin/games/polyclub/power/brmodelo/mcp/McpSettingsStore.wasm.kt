@@ -18,20 +18,8 @@
 
 package games.polyclub.power.brmodelo.mcp
 
-internal actual class BrModeloMcpRuntime {
-    actual fun setSettingsDialogOpener(opener: () -> Unit) = Unit
+internal actual object McpSettingsStore {
+    actual fun load(): Triple<String, Int, Boolean> = Triple("127.0.0.1", 8765, false)
 
-    actual fun updateBindings(bindings: BrModeloMcpUiBindings?) = Unit
-
-    actual fun openSettingsDialog() = Unit
-
-    actual fun startServer(): Boolean = false
-
-    actual fun stopServer() = Unit
-
-    actual fun isServerRunning(): Boolean = false
-
-    actual fun onTabsChanged() = Unit
-
-    actual fun shutdown() = Unit
+    actual fun save(bindHost: String, port: Int, allowLanHosts: Boolean) = Unit
 }

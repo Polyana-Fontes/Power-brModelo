@@ -50,10 +50,12 @@ import games.polyclub.power.brmodelo.domain.elementIdsForClipboard
 import games.polyclub.power.brmodelo.domain.extractClipboardFragment
 import games.polyclub.power.brmodelo.domain.ConceptualPasteContext
 import games.polyclub.power.brmodelo.domain.pasteConceptualClipboard
-import games.polyclub.power.brmodelo.mcp.BrModeloMcpDesktopSync
-import games.polyclub.power.brmodelo.mcp.BrModeloMcpRuntime
-import games.polyclub.power.brmodelo.mcp.BrModeloMcpSettingsDialog
-import games.polyclub.power.brmodelo.mcp.BrModeloMcpSettingsStore
+import games.polyclub.power.brmodelo.mcp.McpDesktopSync
+import games.polyclub.power.brmodelo.mcp.McpRuntime
+import games.polyclub.power.brmodelo.mcp.McpSettingsDialog
+import games.polyclub.power.brmodelo.mcp.McpSettingsStore
+import games.polyclub.power.brmodelo.mcp.mcpServerUrlFromStoredSettings
+import games.polyclub.power.brmodelo.mcp.tryLoadPickedFileFromAbsolutePath
 import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolVariant
 import games.polyclub.power.brmodelo.domain.applyHideCanvasAttribute
 import games.polyclub.power.brmodelo.domain.applyRevealHiddenAttribute
@@ -91,6 +93,7 @@ import games.polyclub.power.brmodelo.ui.AttributeToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.ClipboardRibbonBinding
 import games.polyclub.power.brmodelo.ui.clipboard.BrModeloConceptualClipboardStore
+import games.polyclub.power.brmodelo.ui.clipboard.brModeloClipboardSetPlainText
 import games.polyclub.power.brmodelo.ui.clipboard.encodeImageBitmapToPngBytes
 import games.polyclub.power.brmodelo.ui.canvas.SchemaCanvasViewState
 import games.polyclub.power.brmodelo.ui.canvas.renderSchemaToImageBitmap
@@ -256,6 +259,19 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         selectedTabIndex = tabSessions.lastIndex
     }
 
+    fun openNewUnsavedTab(model: ConceptualSchema) {
+        if (tabSessions.size == 1 && tabSessions[0].isReplaceableBlankStarter()) {
+            val soleId = tabSessions[0].id
+            tabSessions = listOf(EditorTabSession.fromUnsavedModel(soleId, model))
+            selectedTabIndex = 0
+            return
+        }
+
+        val session = EditorTabSession.fromUnsavedModel(nextTabId++, model)
+        tabSessions = tabSessions + session
+        selectedTabIndex = tabSessions.lastIndex
+    }
+
     fun addBlankTab() {
         val session = EditorTabSession.blank(nextTabId++)
         tabSessions = tabSessions + session
@@ -267,7 +283,7 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
     val isDragOver = isDragOverFromPolling || isDragOverFromCallback
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
-    val mcpRuntime = remember { BrModeloMcpRuntime() }
+    val mcpRuntime = remember { McpRuntime() }
     var showMcpSettings by remember { mutableStateOf(false) }
     var mcpServerRunning by remember { mutableStateOf(false) }
 
@@ -771,7 +787,7 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
 
     SideEffect {
         if (isDesktopTarget) {
-            BrModeloMcpDesktopSync.syncBindingsFromApp(
+            McpDesktopSync.syncBindingsFromApp(
                 runtime = mcpRuntime,
                 snackbarHostState = snackbarHostState,
                 scope = scope,
@@ -782,16 +798,37 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                 onForceCloseTab = { forceCloseTab(it) },
                 onRequestCloseTab = { requestCloseTab(it) },
                 saveTabAt = ::saveTabAt,
-                parseAndMergePickedFile = { picked ->
-                    runCatching { parseModelBytesWithSource(picked.bytes) }
-                        .onSuccess { (parsed, fromBrm) ->
-                            openLoadedModel(mergeLoadedModel(parsed, fromBrm, picked))
-                        }
+                onOpenModelFileAtPath = mcpOpenPath@{ path ->
+                    val picked = tryLoadPickedFileFromAbsolutePath(path)
+                        ?: return@mcpOpenPath "unreadable_or_missing_file"
+                    val (parsed, fromBrm) = try {
+                        parseModelBytesWithSource(picked.bytes)
+                    } catch (e: Throwable) {
+                        return@mcpOpenPath "parse_failed:${e.message ?: (e::class.simpleName ?: "Error")}"
+                    }
+                    openLoadedModel(mergeLoadedModel(parsed, fromBrm, picked))
+                    null
+                },
+                onOpenXmlAsUnsavedTab = mcpXml@{ fileName, xml ->
+                    validateMcpOpenXmlBasename(fileName)?.let { return@mcpXml it }
+                    val bytes = xml.encodeToByteArray()
+                    val (parsed, fromBrm) = try {
+                        parseModelBytesWithSource(bytes)
+                    } catch (e: Throwable) {
+                        return@mcpXml "parse_failed:${e.message ?: (e::class.simpleName ?: "Error")}"
+                    }
+                    if (fromBrm) {
+                        return@mcpXml "only_conceptual_xml_supported"
+                    }
+                    val title = schemaNameFromMcpXmlBasename(fileName)
+                    val model = parsed.copy(name = title, filePath = "", openedFromBrm = false)
+                    openNewUnsavedTab(model)
+                    null
                 },
                 onServerRunningChanged = { running -> mcpServerRunning = running },
             )
         } else {
-            BrModeloMcpDesktopSync.clearBindings(mcpRuntime)
+            McpDesktopSync.clearBindings(mcpRuntime)
         }
     }
 
@@ -811,6 +848,19 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
             onStopServer = {
                 mcpRuntime.stopServer()
                 mcpServerRunning = mcpRuntime.isServerRunning()
+            },
+            onCopyServerAddress = {
+                val url = mcpServerUrlFromStoredSettings()
+                val ok = brModeloClipboardSetPlainText(url)
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        if (ok) {
+                            "Endereço do servidor copiado para a área de transferência."
+                        } else {
+                            "Não foi possível copiar o endereço."
+                        },
+                    )
+                }
             },
             startServerEnabled = !mcpServerRunning,
             stopServerEnabled = mcpServerRunning,
@@ -915,14 +965,14 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                 }
 
                 if (showMcpSettings && isDesktopTarget) {
-                    val (mh, mp, ma) = BrModeloMcpSettingsStore.load()
-                    BrModeloMcpSettingsDialog(
+                    val (mh, mp, ma) = McpSettingsStore.load()
+                    McpSettingsDialog(
                         initialBindHost = mh,
                         initialPort = mp,
                         initialAllowLanHosts = ma,
                         onDismiss = { showMcpSettings = false },
                         onConfirm = { nh, np, na ->
-                            BrModeloMcpSettingsStore.save(nh, np, na)
+                            McpSettingsStore.save(nh, np, na)
                             showMcpSettings = false
                             scope.launch {
                                 snackbarHostState.showSnackbar("Configurações MCP salvas.")
@@ -995,6 +1045,22 @@ private fun mergeLoadedModel(parsed: ConceptualSchema, openedFromBrm: Boolean, p
         filePath = picked.diskPath ?: "",
         openedFromBrm = openedFromBrm,
     )
+
+/** Non-null return value is an MCP error code for [onOpenXmlAsUnsavedTab]. */
+private fun validateMcpOpenXmlBasename(fileName: String): String? {
+    val t = fileName.trim()
+    if (t.isEmpty()) return "fileName_required"
+    if (t.any { it == '/' || it == '\\' }) return "fileName_must_be_basename_no_path"
+    return null
+}
+
+/** Display name for [ConceptualSchema.name] from MCP `fileName` (basename, may include extension). */
+private fun schemaNameFromMcpXmlBasename(fileName: String): String {
+    val t = fileName.trim()
+    val dot = t.lastIndexOf('.')
+    val stem = if (dot > 0) t.substring(0, dot) else t
+    return stem.ifBlank { "modelo" }
+}
 
 internal fun parseModelBytes(bytes: ByteArray): ConceptualSchema =
     parseModelBytesWithSource(bytes).first

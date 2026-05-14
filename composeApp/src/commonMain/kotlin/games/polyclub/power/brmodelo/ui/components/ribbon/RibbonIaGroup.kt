@@ -107,6 +107,13 @@ internal fun RibbonGroupIa(
                     onClick = { ribbonMcp?.onStopServer?.invoke() },
                     icon = { m, en -> RibbonStopGlyphIcon(m, en) },
                 )
+                ribbonMcp?.let { mcp ->
+                    IaSmallTextOnlyButton(
+                        title = "Copiar endereço",
+                        enabled = true,
+                        onClick = { mcp.onCopyServerAddress() },
+                    )
+                }
             }
         }
         RibbonGroupTitle("Inteligência Artificial", maxLines = 2)
@@ -187,6 +194,47 @@ private fun IaSmallGlyphButton(
     ) {
         icon(Modifier.size(16.dp), enabled)
         Spacer(modifier = Modifier.width(3.dp))
+        Text(
+            text = title,
+            fontSize = 9.sp,
+            lineHeight = 9.sp,
+            color = if (enabled) Color(0xFF2C3E50) else Color(0xFF8A8A8A),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun IaSmallTextOnlyButton(
+    title: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
+    val canClick = enabled
+    val isActive = enabled && isHovered
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .height(20.dp)
+            .then(if (enabled) Modifier.hoverable(interactionSource) else Modifier)
+            .then(
+                if (canClick) {
+                    Modifier.clickable(
+                        interactionSource = interactionSource,
+                        indication = null,
+                        onClick = onClick,
+                    )
+                } else {
+                    Modifier
+                },
+            )
+            .background(if (isActive) AppColors.hoverBg else Color.Transparent, AppColors.hoverShape)
+            .border(1.dp, if (isActive) AppColors.hoverBorder else Color.Transparent, AppColors.hoverShape)
+            .padding(horizontal = 4.dp),
+    ) {
         Text(
             text = title,
             fontSize = 9.sp,

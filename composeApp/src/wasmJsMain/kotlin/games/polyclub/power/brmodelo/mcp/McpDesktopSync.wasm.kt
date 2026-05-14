@@ -20,13 +20,12 @@ package games.polyclub.power.brmodelo.mcp
 
 import androidx.compose.material3.SnackbarHostState
 import games.polyclub.power.brmodelo.ui.EditorTabSession
-import games.polyclub.power.brmodelo.ui.PickedFile
 import kotlinx.coroutines.CoroutineScope
 
 @Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING")
-internal actual object BrModeloMcpDesktopSync {
+internal actual object McpDesktopSync {
     actual fun syncBindingsFromApp(
-        runtime: BrModeloMcpRuntime,
+        runtime: McpRuntime,
         snackbarHostState: SnackbarHostState,
         scope: CoroutineScope,
         tabSessions: List<EditorTabSession>,
@@ -36,13 +35,14 @@ internal actual object BrModeloMcpDesktopSync {
         onForceCloseTab: (Int) -> Unit,
         onRequestCloseTab: (Int) -> Unit,
         saveTabAt: suspend (Int, Boolean) -> Boolean,
-        parseAndMergePickedFile: (PickedFile) -> Unit,
+        onOpenModelFileAtPath: (String) -> String?,
+        onOpenXmlAsUnsavedTab: (String, String) -> String?,
         onServerRunningChanged: (Boolean) -> Unit,
     ) {
         runtime.updateBindings(null)
     }
 
-    actual fun clearBindings(runtime: BrModeloMcpRuntime) {
+    actual fun clearBindings(runtime: McpRuntime) {
         runtime.updateBindings(null)
     }
 }

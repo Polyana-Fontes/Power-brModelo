@@ -18,11 +18,6 @@
 
 package games.polyclub.power.brmodelo.mcp
 
-/** MCP resource URI for in-memory conceptual XML: `brmodelo://model/{tabIndex}`. */
-internal fun parseBrModeloModelResourceTabIndex(uri: String): Int? {
-    val marker = "brmodelo://model/"
-    val idx = uri.indexOf(marker)
-    if (idx < 0) return null
-    val tail = uri.substring(idx + marker.length).substringBefore('/').substringBefore('?')
-    return tail.toIntOrNull()
-}
+import games.polyclub.power.brmodelo.ui.PickedFile
+
+internal actual fun tryLoadPickedFileFromAbsolutePath(path: String): PickedFile? = null
