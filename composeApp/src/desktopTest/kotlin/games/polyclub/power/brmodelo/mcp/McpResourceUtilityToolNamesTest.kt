@@ -22,22 +22,21 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-class McpTabToolNamesTest {
+class McpResourceUtilityToolNamesTest {
 
     @Test
-    fun `tool names use category double underscore suffix pattern`() {
+    fun `utility tool names use resource_utility double underscore suffix pattern`() {
         // Arrange
-        val sep = McpTabToolNames.TAB_TOOL_SEPARATOR
+        val sep = McpResourceUtilityToolNames.RESOURCE_UTILITY_SEPARATOR
 
         // Act & Assert
-        assertEquals("tabs", McpTabToolNames.TAB_TOOL_CATEGORY)
+        assertEquals("resource_utility", McpResourceUtilityToolNames.RESOURCE_UTILITY_GROUP)
         assertEquals("__", sep)
-        assertTrue(McpTabToolNames.LIST_OPEN.startsWith("tabs$sep"))
-        assertEquals("tabs__list_open", McpTabToolNames.LIST_OPEN)
-        assertEquals("tabs__select_resource", McpTabToolNames.SELECT_RESOURCE)
-        assertEquals("tabs__open_xml", McpTabToolNames.OPEN_XML)
-        assertEquals("tabs__save_resource", McpTabToolNames.SAVE_RESOURCE)
-        assertEquals("tabs__replace_model_xml", McpTabToolNames.REPLACE_MODEL_XML)
-        assertEquals("tabs__patch_model_xml", McpTabToolNames.PATCH_MODEL_XML)
+        assertTrue(McpResourceUtilityToolNames.READ_FULL.startsWith("resource_utility$sep"))
+        assertEquals("resource_utility__read_full", McpResourceUtilityToolNames.READ_FULL)
+        assertEquals("resource_utility__read_lines", McpResourceUtilityToolNames.READ_LINES)
+        assertEquals("resource_utility__read_range", McpResourceUtilityToolNames.READ_RANGE)
+        assertEquals("resource_utility__search", McpResourceUtilityToolNames.SEARCH)
+        assertEquals("resource_utility__search_regex", McpResourceUtilityToolNames.SEARCH_REGEX)
     }
 }

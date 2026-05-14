@@ -51,6 +51,7 @@ import games.polyclub.power.brmodelo.domain.extractClipboardFragment
 import games.polyclub.power.brmodelo.domain.ConceptualPasteContext
 import games.polyclub.power.brmodelo.domain.pasteConceptualClipboard
 import games.polyclub.power.brmodelo.mcp.McpDesktopSync
+import games.polyclub.power.brmodelo.mcp.McpModelXmlPatch
 import games.polyclub.power.brmodelo.mcp.McpRuntime
 import games.polyclub.power.brmodelo.mcp.McpSettingsDialog
 import games.polyclub.power.brmodelo.mcp.McpSettingsStore
@@ -87,6 +88,7 @@ import games.polyclub.power.brmodelo.domain.SchemaElement
 import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolVariant
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaBrmParser
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaXmlParser
+import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaXmlSerializer
 import games.polyclub.power.brmodelo.ui.BulkDataDictionaryDialog
 import games.polyclub.power.brmodelo.ui.BrModeloScreen
 import games.polyclub.power.brmodelo.ui.AttributeToolRibbonBinding
@@ -200,6 +202,24 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
             tab.copy(
                 schema = normalized,
                 inspectorCommittedSchema = tab.history.current,
+            ),
+        )
+    }
+
+    /** One undo checkpoint for an arbitrary open tab (e.g. MCP XML replace/patch). */
+    fun pushCommitOnTabAt(index: Int, normalized: ConceptualSchema) {
+        if (index !in tabSessions.indices) return
+        val tab = tabSessions[index]
+        val n = normalized.withNormalizedAttributeMultiValuedCounts()
+        tab.history.push(n)
+        val committed = tab.history.current ?: return
+        replaceTabAt(
+            index,
+            tab.copy(
+                schema = committed,
+                inspectorCommittedSchema = committed,
+                selection = CanvasSelection.None,
+                hiddenAttributeRevealPath = null,
             ),
         )
     }
@@ -823,6 +843,63 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                     val title = schemaNameFromMcpXmlBasename(fileName)
                     val model = parsed.copy(name = title, filePath = "", openedFromBrm = false)
                     openNewUnsavedTab(model)
+                    null
+                },
+                onReplaceModelXmlAtTab = mcpReplace@{ tabIdx, xml ->
+                    if (tabIdx !in tabSessions.indices) {
+                        return@mcpReplace "invalid_tab_index"
+                    }
+                    val bytes = xml.encodeToByteArray()
+                    val (parsed, fromBrm) = try {
+                        parseModelBytesWithSource(bytes)
+                    } catch (e: Throwable) {
+                        return@mcpReplace "parse_failed:${e.message ?: (e::class.simpleName ?: "Error")}"
+                    }
+                    if (fromBrm) {
+                        return@mcpReplace "only_conceptual_xml_supported"
+                    }
+                    val tab = tabSessions[tabIdx]
+                    val merged = parsed.copy(
+                        filePath = tab.schema.filePath,
+                        openedFromBrm = tab.schema.openedFromBrm,
+                    )
+                    pushCommitOnTabAt(tabIdx, merged)
+                    null
+                },
+                onPatchModelXmlAtTab = mcpPatch@{ tabIdx, oldStr, newStr, replaceAll ->
+                    if (tabIdx !in tabSessions.indices) {
+                        return@mcpPatch "invalid_tab_index"
+                    }
+                    val currentXml = try {
+                        ConceptualSchemaXmlSerializer.serialize(tabSessions[tabIdx].schema)
+                    } catch (e: Throwable) {
+                        return@mcpPatch "serialize_failed:${e.message ?: (e::class.simpleName ?: "Error")}"
+                    }
+                    val (patchedXml, patchErr) = McpModelXmlPatch.applyXmlStringPatch(
+                        currentXml,
+                        oldStr,
+                        newStr,
+                        replaceAll,
+                    )
+                    if (patchErr != null) {
+                        return@mcpPatch patchErr
+                    }
+                    val out = patchedXml ?: return@mcpPatch "patch_failed"
+                    val bytes = out.encodeToByteArray()
+                    val (parsed, fromBrm) = try {
+                        parseModelBytesWithSource(bytes)
+                    } catch (e: Throwable) {
+                        return@mcpPatch "parse_failed_after_patch:${e.message ?: (e::class.simpleName ?: "Error")}"
+                    }
+                    if (fromBrm) {
+                        return@mcpPatch "only_conceptual_xml_supported"
+                    }
+                    val tab = tabSessions[tabIdx]
+                    val merged = parsed.copy(
+                        filePath = tab.schema.filePath,
+                        openedFromBrm = tab.schema.openedFromBrm,
+                    )
+                    pushCommitOnTabAt(tabIdx, merged)
                     null
                 },
                 onServerRunningChanged = { running -> mcpServerRunning = running },

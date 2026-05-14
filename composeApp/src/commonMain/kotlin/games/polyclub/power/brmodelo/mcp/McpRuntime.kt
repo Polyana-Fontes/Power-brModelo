@@ -46,6 +46,16 @@ internal class McpUiBindings(
      * Returns null on success or a short error code/message.
      */
     val onOpenXmlAsUnsavedTab: (fileName: String, xmlUtf8: String) -> String?,
+    /**
+     * Parses [xmlUtf8] as conceptual MER XML and replaces the tab schema in one undoable step.
+     * Preserves the tab's disk path and opened-from-brm flags on the merged schema.
+     */
+    val onReplaceModelXmlAtTab: (tabIndex: Int, xmlUtf8: String) -> String?,
+    /**
+     * Runs a search/replace on the tab's serialized XML, re-parses, and commits in one undoable step.
+     * When [replaceAll] is false, [oldString] must appear exactly once in the serialized XML.
+     */
+    val onPatchModelXmlAtTab: (tabIndex: Int, oldString: String, newString: String, replaceAll: Boolean) -> String?,
     val onNotifyUser: (String) -> Unit,
     val onServerRunningChanged: (Boolean) -> Unit,
 )

@@ -39,4 +39,6 @@ internal object McpTabToolNames {
     val SAVE_RESOURCE = tabTool("save_resource")
     val OPEN_FILE = tabTool("open_file")
     val OPEN_XML = tabTool("open_xml")
+    val REPLACE_MODEL_XML = tabTool("replace_model_xml")
+    val PATCH_MODEL_XML = tabTool("patch_model_xml")
 }

@@ -56,6 +56,8 @@ private fun <T> runOnEdt(block: () -> T): T {
 internal actual class McpRuntime {
 
     companion object {
+        private const val MAX_RESOURCE_UTILITY_MATCHES = 2000
+
         private const val CONCEPTUAL_MER_DTD_CLASSPATH = "mcp/conceptual-mer.dtd"
 
         private val conceptualMerDtdClasspathText: String by lazy {
@@ -308,6 +310,32 @@ internal actual class McpRuntime {
         )
     }
 
+    /**
+     * Plain UTF-16 text for any URI registered on this MCP server (same payload as `resources/read`).
+     * Returns `(text, null)` on success or `(null, errorCode)` on failure.
+     */
+    private fun resolveRegisteredResourcePlainText(uri: String): Pair<String?, String?> {
+        val u = uri.trim()
+        if (u.isEmpty()) return null to "uri_required"
+
+        val tabIdx = parseModelResourceTabIndex(u)
+        if (tabIdx != null) {
+            return runOnEdt {
+                val b = bindingsRef.get() ?: return@runOnEdt (null to "bindings_unavailable")
+                val schema = b.current().schemaForTab(tabIdx) ?: return@runOnEdt (null to "no_model_for_tab")
+                ConceptualSchemaXmlSerializer.serialize(schema) to null
+            }
+        }
+        if (u == conceptualMerDtdResourceUri()) {
+            return conceptualMerDtdClasspathText to null
+        }
+        val example = exampleMerBodiesByUri[u]
+        if (example != null) {
+            return example to null
+        }
+        return null to "unknown_resource_uri"
+    }
+
     private fun ensureConceptualMerDtdMcpResource(server: McpSyncServer) {
         val uri = conceptualMerDtdResourceUri()
         if (server.listResources().any { it.uri() == uri }) {
@@ -411,6 +439,15 @@ internal actual class McpRuntime {
     private fun tabIndexFromModelResourceUri(req: McpSchema.CallToolRequest): Int? {
         val uri = stringArg(req, "uri") ?: return null
         return parseModelResourceTabIndex(uri)
+    }
+
+    /** Resolves [tabIndex] if present; otherwise a live tab URI (`brmodelo://model/n`). */
+    private fun tabIndexFromTabOrUriArgs(req: McpSchema.CallToolRequest): Int? {
+        val explicit = intArg(req, "tabIndex")
+        if (explicit != null) {
+            return explicit
+        }
+        return tabIndexFromModelResourceUri(req)
     }
 
     private fun buildTools(jsonMapper: io.modelcontextprotocol.json.McpJsonMapper): List<McpServerFeatures.SyncToolSpecification> {
@@ -595,7 +632,193 @@ internal actual class McpRuntime {
                 }
                 okText("""{"ok":true,"fileName":${jsonString(fileName)}}""")
             },
+            syncTool(
+                jsonMapper,
+                name = McpTabToolNames.REPLACE_MODEL_XML,
+                title = "Replace tab conceptual XML",
+                description = "Parses UTF-8 MER XML and replaces the entire conceptual schema of one open tab in a single undoable step. " +
+                    "Provide tabIndex or a live tab resource URI (see MCP server instructions). " +
+                    "Preserves the tab's disk path metadata. " +
+                    McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
+                schema = """{"type":"object","properties":{"tabIndex":{"type":"integer","minimum":0},"uri":{"type":"string","minLength":1},"xml":{"type":"string","description":"Full MER XML (UTF-8)"}},"required":["xml"],"additionalProperties":false}""",
+            ) { _, req ->
+                val idx = tabIndexFromTabOrUriArgs(req) ?: return@syncTool err("tabIndex_or_uri_required")
+                val xml = rawStringArg(req, "xml") ?: return@syncTool err("xml required")
+                val errMsg = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt "bindings_unavailable"
+                    val snap = b.current()
+                    if (idx !in snap.sessions.indices) return@runOnEdt "invalid_tab_index"
+                    b.onReplaceModelXmlAtTab(idx, xml)
+                }
+                if (errMsg != null) {
+                    return@syncTool err(errMsg)
+                }
+                okText("""{"ok":true,"tabIndex":$idx}""")
+            },
+            syncTool(
+                jsonMapper,
+                name = McpTabToolNames.PATCH_MODEL_XML,
+                title = "Patch tab conceptual XML (search/replace)",
+                description = "Serializes the tab's current conceptual MER to XML, applies old_string→new_string, re-parses, and commits in one undoable step (Cursor-style single edit when replace_all is false). " +
+                    "Provide tabIndex or a live tab resource URI (see MCP server instructions). " +
+                    McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
+                schema = """{"type":"object","properties":{"tabIndex":{"type":"integer","minimum":0},"uri":{"type":"string","minLength":1},"old_string":{"type":"string","minLength":1},"new_string":{"type":"string"},"replace_all":{"type":"boolean"}},"required":["old_string"],"additionalProperties":false}""",
+            ) { _, req ->
+                val idx = tabIndexFromTabOrUriArgs(req) ?: return@syncTool err("tabIndex_or_uri_required")
+                val oldStr = rawStringArg(req, "old_string") ?: return@syncTool err("old_string required")
+                val newStrArg = req.arguments()["new_string"]
+                val newStr = when (newStrArg) {
+                    null -> ""
+                    is String -> newStrArg
+                    else -> newStrArg.toString()
+                }
+                val replaceAll = boolArg(req, "replace_all") == true
+                val errMsg = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt "bindings_unavailable"
+                    val snap = b.current()
+                    if (idx !in snap.sessions.indices) return@runOnEdt "invalid_tab_index"
+                    b.onPatchModelXmlAtTab(idx, oldStr, newStr, replaceAll)
+                }
+                if (errMsg != null) {
+                    return@syncTool err(errMsg)
+                }
+                okText("""{"ok":true,"tabIndex":$idx,"replaceAll":$replaceAll}""")
+            },
+        ) + buildResourceUtilityTools(jsonMapper)
+    }
+
+    private fun buildResourceUtilityTools(
+        jsonMapper: io.modelcontextprotocol.json.McpJsonMapper,
+    ): List<McpServerFeatures.SyncToolSpecification> {
+        val uriProp =
+            """"uri":{"type":"string","minLength":1,"description":"Registered MCP resource URI (live tab, DTD, or classpath example — see server instructions)."}"""
+        return listOf(
+            syncTool(
+                jsonMapper,
+                name = McpResourceUtilityToolNames.READ_FULL,
+                title = "Read full MCP resource text",
+                description = "Returns the entire UTF-16 text body for a registered resource URI (same content as resources/read). " +
+                    "Prefer this when you need the exact serialized string without HTTP resource round-trips.",
+                schema = """{"type":"object","properties":{$uriProp},"required":["uri"],"additionalProperties":false}""",
+            ) { _, req ->
+                val uri = stringArg(req, "uri") ?: return@syncTool err("uri required")
+                val (text, code) = resolveRegisteredResourcePlainText(uri)
+                if (text == null) {
+                    return@syncTool err(code ?: "read_failed")
+                }
+                okText(
+                    """{"ok":true,"uri":${jsonString(uri)},"characterLength":${text.length},"content":${jsonString(text)}}""",
+                )
+            },
+            syncTool(
+                jsonMapper,
+                name = McpResourceUtilityToolNames.READ_LINES,
+                title = "Read MCP resource text by line range",
+                description = "Returns a slice of the resource text using 1-based line numbers inclusive on both ends (newline character is `\\n`). " +
+                    "If endLine is past EOF, the slice ends at the last line.",
+                schema = """{"type":"object","properties":{$uriProp,"startLine":{"type":"integer","minimum":1},"endLine":{"type":"integer","minimum":1}},"required":["uri","startLine","endLine"],"additionalProperties":false}""",
+            ) { _, req ->
+                val uri = stringArg(req, "uri") ?: return@syncTool err("uri required")
+                val startLine = intArg(req, "startLine") ?: return@syncTool err("startLine required")
+                val endLine = intArg(req, "endLine") ?: return@syncTool err("endLine required")
+                val (text, code) = resolveRegisteredResourcePlainText(uri)
+                if (text == null) {
+                    return@syncTool err(code ?: "read_failed")
+                }
+                val (slice, err) = McpResourceTextOps.sliceLines1Based(text, startLine, endLine)
+                if (slice == null) {
+                    return@syncTool err(err ?: "line_slice_failed")
+                }
+                okText(
+                    """{"ok":true,"uri":${jsonString(uri)},"startLine":$startLine,"endLine":$endLine,"content":${jsonString(slice)}}""",
+                )
+            },
+            syncTool(
+                jsonMapper,
+                name = McpResourceUtilityToolNames.READ_RANGE,
+                title = "Read MCP resource text by character index range",
+                description = "Returns text.substring(startIndex, endIndex) using Kotlin/Java semantics: startIndex is inclusive, " +
+                    "endIndex is exclusive, both are 0-based UTF-16 code unit indices.",
+                schema = """{"type":"object","properties":{$uriProp,"startIndex":{"type":"integer","minimum":0},"endIndex":{"type":"integer","minimum":0}},"required":["uri","startIndex","endIndex"],"additionalProperties":false}""",
+            ) { _, req ->
+                val uri = stringArg(req, "uri") ?: return@syncTool err("uri required")
+                val startIndex = intArg(req, "startIndex") ?: return@syncTool err("startIndex required")
+                val endIndex = intArg(req, "endIndex") ?: return@syncTool err("endIndex required")
+                val (text, code) = resolveRegisteredResourcePlainText(uri)
+                if (text == null) {
+                    return@syncTool err(code ?: "read_failed")
+                }
+                val (slice, err) = McpResourceTextOps.sliceByCharRange(text, startIndex, endIndex)
+                if (slice == null) {
+                    return@syncTool err(err ?: "range_slice_failed")
+                }
+                okText(
+                    """{"ok":true,"uri":${jsonString(uri)},"startIndex":$startIndex,"endIndex":$endIndex,"content":${jsonString(slice)}}""",
+                )
+            },
+            syncTool(
+                jsonMapper,
+                name = McpResourceUtilityToolNames.SEARCH,
+                title = "Search literal text in an MCP resource",
+                description = "Non-overlapping literal search in the resolved resource body. " +
+                    "Each match includes 0-based start/end character indices (end exclusive) and 1-based line/column for both ends. " +
+                    "At most $MAX_RESOURCE_UTILITY_MATCHES matches are returned; if truncated, `truncated` is true.",
+                schema = """{"type":"object","properties":{$uriProp,"query":{"type":"string","minLength":1}},"required":["uri","query"],"additionalProperties":false}""",
+            ) { _, req ->
+                val uri = stringArg(req, "uri") ?: return@syncTool err("uri required")
+                val query = rawStringArg(req, "query") ?: return@syncTool err("query required")
+                val (text, code) = resolveRegisteredResourcePlainText(uri)
+                if (text == null) {
+                    return@syncTool err(code ?: "read_failed")
+                }
+                val (matches, qerr) = McpResourceTextOps.findAllLiteral(text, query)
+                if (qerr != null) {
+                    return@syncTool err(qerr)
+                }
+                val total = matches.size
+                val truncated = total > MAX_RESOURCE_UTILITY_MATCHES
+                val limited = if (truncated) matches.take(MAX_RESOURCE_UTILITY_MATCHES) else matches
+                okText(resourceSearchResultJson(uri, limited, total, truncated))
+            },
+            syncTool(
+                jsonMapper,
+                name = McpResourceUtilityToolNames.SEARCH_REGEX,
+                title = "Search with regex in an MCP resource",
+                description = "Runs Kotlin/Java regex.findAll on the resource body with MULTILINE enabled so `^` and `$` match line boundaries. " +
+                    "Optional dotMatchesAll maps to RegexOption.DOT_MATCHES_ALL. " +
+                    "Each match includes 0-based start/end character indices (end exclusive) and 1-based line/column for both ends. " +
+                    "At most $MAX_RESOURCE_UTILITY_MATCHES matches are returned; if truncated, `truncated` is true.",
+                schema = """{"type":"object","properties":{$uriProp,"pattern":{"type":"string","minLength":1},"dotMatchesAll":{"type":"boolean"}},"required":["uri","pattern"],"additionalProperties":false}""",
+            ) { _, req ->
+                val uri = stringArg(req, "uri") ?: return@syncTool err("uri required")
+                val pattern = rawStringArg(req, "pattern") ?: return@syncTool err("pattern required")
+                val dotAll = boolArg(req, "dotMatchesAll") == true
+                val (text, code) = resolveRegisteredResourcePlainText(uri)
+                if (text == null) {
+                    return@syncTool err(code ?: "read_failed")
+                }
+                val (matches, perr) = McpResourceTextOps.findAllRegex(text, pattern, dotAll)
+                if (perr != null) {
+                    return@syncTool err(perr)
+                }
+                val total = matches.size
+                val truncated = total > MAX_RESOURCE_UTILITY_MATCHES
+                val limited = if (truncated) matches.take(MAX_RESOURCE_UTILITY_MATCHES) else matches
+                okText(resourceSearchResultJson(uri, limited, total, truncated))
+            },
         )
+    }
+
+    private fun resourceSearchResultJson(
+        uri: String,
+        matches: List<McpTextMatchSpan>,
+        totalMatchCount: Int,
+        truncated: Boolean,
+    ): String {
+        val arr = matches.joinToString(prefix = "[", postfix = "]", separator = ",") { m ->
+            """{"startCharacterIndex":${m.startIndex},"endCharacterIndexExclusive":${m.endIndexExclusive},"startLine1":${m.startLine1},"startColumn1":${m.startColumn1},"endLine1":${m.endLine1},"endColumn1":${m.endColumn1},"match":${jsonString(m.match)}}"""
+        }
+        return """{"ok":true,"uri":${jsonString(uri)},"matchCount":$totalMatchCount,"truncated":$truncated,"matches":$arr}"""
     }
 
     private fun syncTool(

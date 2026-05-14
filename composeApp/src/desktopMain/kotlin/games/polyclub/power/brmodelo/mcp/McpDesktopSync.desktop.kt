@@ -39,6 +39,8 @@ internal actual object McpDesktopSync {
         saveTabAt: suspend (Int, Boolean) -> Boolean,
         onOpenModelFileAtPath: (String) -> String?,
         onOpenXmlAsUnsavedTab: (String, String) -> String?,
+        onReplaceModelXmlAtTab: (Int, String) -> String?,
+        onPatchModelXmlAtTab: (Int, String, String, Boolean) -> String?,
         onServerRunningChanged: (Boolean) -> Unit,
     ) {
         runtime.updateBindings(
@@ -51,6 +53,8 @@ internal actual object McpDesktopSync {
                 onSaveTab = { idx, saveAs -> runBlocking { saveTabAt(idx, saveAs) } },
                 onOpenModelFileAtPath = onOpenModelFileAtPath,
                 onOpenXmlAsUnsavedTab = onOpenXmlAsUnsavedTab,
+                onReplaceModelXmlAtTab = onReplaceModelXmlAtTab,
+                onPatchModelXmlAtTab = onPatchModelXmlAtTab,
                 onNotifyUser = { msg ->
                     scope.launch { snackbarHostState.showSnackbar(msg) }
                 },
