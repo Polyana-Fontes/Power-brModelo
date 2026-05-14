@@ -21,6 +21,10 @@ package games.polyclub.power.brmodelo.mcp
 import androidx.compose.material3.SnackbarHostState
 import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolKind
 import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolOverrides
+import games.polyclub.power.brmodelo.domain.ConceptualSearchHit
+import games.polyclub.power.brmodelo.domain.ConceptualSearchOutcome
+import games.polyclub.power.brmodelo.domain.ConceptualSearchTextScope
+import games.polyclub.power.brmodelo.domain.ConceptualSearchTypeFilters
 import games.polyclub.power.brmodelo.ui.EditorTabSession
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -50,6 +54,13 @@ internal actual object McpDesktopSync {
             Int,
             ConceptualProceduralToolOverrides,
         ) -> McpProceduralToolApplyOutcome,
+        onConceptualSearchFind: (
+            Int,
+            String,
+            ConceptualSearchTypeFilters,
+            ConceptualSearchTextScope,
+        ) -> ConceptualSearchOutcome,
+        onConceptualSearchApplyHit: (Int, ConceptualSearchHit) -> String?,
         onServerRunningChanged: (Boolean) -> Unit,
     ) {
         runtime.updateBindings(
@@ -65,6 +76,8 @@ internal actual object McpDesktopSync {
                 onReplaceModelXmlAtTab = onReplaceModelXmlAtTab,
                 onPatchModelXmlAtTab = onPatchModelXmlAtTab,
                 onPlaceProceduralConceptualToolAtTab = onPlaceProceduralConceptualToolAtTab,
+                onConceptualSearchFind = onConceptualSearchFind,
+                onConceptualSearchApplyHit = onConceptualSearchApplyHit,
                 onNotifyUser = { msg ->
                     scope.launch { snackbarHostState.showSnackbar(msg) }
                 },

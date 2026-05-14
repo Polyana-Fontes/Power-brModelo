@@ -60,6 +60,7 @@ import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.canOrganizeAttributesMenuSelection
 import games.polyclub.power.brmodelo.domain.canvasSelectionSelectAllElements
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
+import games.polyclub.power.brmodelo.domain.ElementPosition
 import games.polyclub.power.brmodelo.domain.deleteCanvasSelection
 import games.polyclub.power.brmodelo.ui.ConceptualCanvasTool
 import games.polyclub.power.brmodelo.ui.canvas.applyCanvasKeyboardArrow
@@ -107,6 +108,9 @@ internal fun MainCanvasPanel(
     onSelectionBandUiChange: (SelectionBandUiState?) -> Unit = {},
     onOrganizeAttributes: () -> Unit = {},
     onCanvasViewStateChange: (SchemaCanvasViewState) -> Unit = {},
+    requestCenterOnModelBounds: ElementPosition? = null,
+    onRequestCenterOnModelBoundsConsumed: () -> Unit = {},
+    onRequestOpenConceptualFind: () -> Unit = {},
     onCopyRequest: () -> Unit = {},
     onCutRequest: () -> Unit = {},
     onPasteRequest: () -> Unit = {},
@@ -194,6 +198,13 @@ internal fun MainCanvasPanel(
                             return@onPreviewKeyEvent true
                         }
                         if (sch != null &&
+                            (event.isCtrlPressed || event.isMetaPressed) &&
+                            event.key == Key.F
+                        ) {
+                            onRequestOpenConceptualFind()
+                            return@onPreviewKeyEvent true
+                        }
+                        if (sch != null &&
                             event.isCtrlPressed &&
                             event.key == Key.O
                         ) {
@@ -268,6 +279,8 @@ internal fun MainCanvasPanel(
                     toolCursorModifier = toolCursorModifier,
                     canvasFocusRequester = focusRequester,
                     onViewStateChange = onCanvasViewStateChange,
+                    requestCenterOnModelBounds = requestCenterOnModelBounds,
+                    onRequestCenterOnModelBoundsConsumed = onRequestCenterOnModelBoundsConsumed,
                     modifier = Modifier.fillMaxSize(),
                 )
             }

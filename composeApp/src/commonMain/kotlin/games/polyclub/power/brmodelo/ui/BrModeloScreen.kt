@@ -42,6 +42,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
+import games.polyclub.power.brmodelo.domain.ElementPosition
 import games.polyclub.power.brmodelo.ui.AttributeToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.BulkDeleteObjectsToolRibbonBinding
@@ -124,6 +125,11 @@ internal fun BrModeloScreen(
     onPasteRequest: () -> Unit = {},
     onUndoRequest: () -> Unit = {},
     onRedoRequest: () -> Unit = {},
+    requestCenterOnModelBounds: ElementPosition? = null,
+    onRequestCenterOnModelBoundsConsumed: () -> Unit = {},
+    requestedInspectorTab: InspectorTab? = null,
+    onInspectorTabRequestConsumed: () -> Unit = {},
+    onRequestOpenConceptualFind: () -> Unit = {},
     snackbarHostState: SnackbarHostState,
     ribbonMcp: RibbonMcpUi? = null,
 ) {
@@ -205,6 +211,11 @@ internal fun BrModeloScreen(
                 onPasteRequest = onPasteRequest,
                 onUndoRequest = onUndoRequest,
                 onRedoRequest = onRedoRequest,
+                requestCenterOnModelBounds = requestCenterOnModelBounds,
+                onRequestCenterOnModelBoundsConsumed = onRequestCenterOnModelBoundsConsumed,
+                requestedInspectorTab = requestedInspectorTab,
+                onInspectorTabRequestConsumed = onInspectorTabRequestConsumed,
+                onRequestOpenConceptualFind = onRequestOpenConceptualFind,
             )
         }
 

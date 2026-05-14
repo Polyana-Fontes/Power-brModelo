@@ -21,6 +21,10 @@ package games.polyclub.power.brmodelo.mcp
 import androidx.compose.material3.SnackbarHostState
 import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolKind
 import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolOverrides
+import games.polyclub.power.brmodelo.domain.ConceptualSearchHit
+import games.polyclub.power.brmodelo.domain.ConceptualSearchOutcome
+import games.polyclub.power.brmodelo.domain.ConceptualSearchTextScope
+import games.polyclub.power.brmodelo.domain.ConceptualSearchTypeFilters
 import games.polyclub.power.brmodelo.ui.EditorTabSession
 import kotlinx.coroutines.CoroutineScope
 
@@ -51,6 +55,13 @@ internal expect object McpDesktopSync {
             Int,
             ConceptualProceduralToolOverrides,
         ) -> McpProceduralToolApplyOutcome,
+        onConceptualSearchFind: (
+            Int,
+            String,
+            ConceptualSearchTypeFilters,
+            ConceptualSearchTextScope,
+        ) -> ConceptualSearchOutcome,
+        onConceptualSearchApplyHit: (Int, ConceptualSearchHit) -> String?,
         onServerRunningChanged: (Boolean) -> Unit,
     )
 

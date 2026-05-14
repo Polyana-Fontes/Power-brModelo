@@ -21,6 +21,10 @@ package games.polyclub.power.brmodelo.mcp
 import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolKind
 import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolOverrides
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
+import games.polyclub.power.brmodelo.domain.ConceptualSearchHit
+import games.polyclub.power.brmodelo.domain.ConceptualSearchOutcome
+import games.polyclub.power.brmodelo.domain.ConceptualSearchTextScope
+import games.polyclub.power.brmodelo.domain.ConceptualSearchTypeFilters
 import games.polyclub.power.brmodelo.ui.EditorTabSession
 
 /**
@@ -69,6 +73,20 @@ internal class McpUiBindings(
         topLeftY: Int,
         overrides: ConceptualProceduralToolOverrides,
     ) -> McpProceduralToolApplyOutcome,
+    /**
+     * Runs the same conceptual search as the **Localizar** dialog on [tabIndex] (must be invoked on the UI thread).
+     */
+    val onConceptualSearchFind: (
+        tabIndex: Int,
+        query: String,
+        typeFilters: ConceptualSearchTypeFilters,
+        textScope: ConceptualSearchTextScope,
+    ) -> ConceptualSearchOutcome,
+    /**
+     * Selects the canvas target, optional hidden-attribute path, inspector tab, and canvas pan focus for one hit.
+     * Returns null on success or a short error code.
+     */
+    val onConceptualSearchApplyHit: (tabIndex: Int, hit: ConceptualSearchHit) -> String?,
     val onNotifyUser: (String) -> Unit,
     val onServerRunningChanged: (Boolean) -> Unit,
 )

@@ -40,6 +40,10 @@ internal object McpServerInstructions {
         append("Procedural canvas placement tools use the prefix \"tools")
         append(McpProceduralToolsToolNames.TOOLS_SEPARATOR)
         append("\". ")
+        append("Conceptual search tools use the prefix \"")
+        append(McpSearchToolNames.SEARCH_GROUP)
+        append(McpSearchToolNames.SEARCH_SEPARATOR)
+        append("\" (same behaviour as the editor **Localizar** UI). ")
         append("Use only letters, digits, and underscores in tool names where the client is strict.\n\n")
 
         append("## MCP resources (resources/list + resources/read)\n\n")
@@ -104,5 +108,16 @@ internal object McpServerInstructions {
         append(", ")
         append(McpProceduralToolsToolNames.PLACE_ASSOCIATIVE_ENTITY)
         append(". Each call returns JSON for the new element (id, bounds, names, style).\n")
+
+        append("\n### Conceptual search (")
+        append(McpSearchToolNames.SEARCH_GROUP)
+        append(McpSearchToolNames.SEARCH_SEPARATOR)
+        append("…)\n")
+        append("Find in-memory diagram text with the same rules as **Localizar** (accent-insensitive substring, optional type filters, dictionary/observations flags, 400-hit cap): ")
+        append(McpSearchToolNames.FIND)
+        append(". Blank `query` lists every candidate in the selected type flags (same 400-hit cap; `matchedIn` may be empty). ")
+        append("Apply one hit to focus the editor (selection, inspector tab, hidden-attribute path, canvas pan): ")
+        append(McpSearchToolNames.APPLY_HIT)
+        append(". Pass the `hit` object echoed from a prior find call; include tabIndex or a live tab resource URI.\n")
     }
 }

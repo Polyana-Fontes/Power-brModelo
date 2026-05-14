@@ -21,6 +21,12 @@ package games.polyclub.power.brmodelo.mcp
 import games.polyclub.power.brmodelo.BuildInfo
 import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolKind
 import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolOverrides
+import games.polyclub.power.brmodelo.domain.ConceptualSchema
+import games.polyclub.power.brmodelo.domain.ConceptualSearchHit
+import games.polyclub.power.brmodelo.domain.ConceptualSearchOutcome
+import games.polyclub.power.brmodelo.domain.ConceptualSearchTextScope
+import games.polyclub.power.brmodelo.domain.ConceptualSearchTypeFilters
+import games.polyclub.power.brmodelo.domain.ElementPosition
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaXmlSerializer
 import io.modelcontextprotocol.json.McpJsonDefaults
 import io.modelcontextprotocol.server.McpServer
@@ -686,7 +692,205 @@ internal actual class McpRuntime {
                 }
                 okText("""{"ok":true,"tabIndex":$idx,"replaceAll":$replaceAll}""")
             },
-        ) + buildResourceUtilityTools(jsonMapper) + buildProceduralTools(jsonMapper)
+        ) + buildConceptualSearchTools(jsonMapper) + buildResourceUtilityTools(jsonMapper) + buildProceduralTools(jsonMapper)
+    }
+
+    private fun buildConceptualSearchTools(
+        jsonMapper: io.modelcontextprotocol.json.McpJsonMapper,
+    ): List<McpServerFeatures.SyncToolSpecification> {
+        val tabUri = """"tabIndex":{"type":"integer","minimum":0},"uri":{"type":"string","minLength":1}"""
+        val findSchema = """{"type":"object","properties":{$tabUri,"query":{"type":"string","description":"Substring; omit or use empty string to list all items in the selected include* categories (400-hit cap)."},"includeEntities":{"type":"boolean"},"includeRelationships":{"type":"boolean"},"includeAssociativeEntities":{"type":"boolean"},"includeSpecializations":{"type":"boolean"},"includeCanvasAttributes":{"type":"boolean"},"includeHiddenAttributes":{"type":"boolean"},"includeCardinalityLabels":{"type":"boolean"},"observationBox":{"type":"boolean","description":"Include Annotation (observation box) elements"},"searchDictionary":{"type":"boolean"},"searchObservations":{"type":"boolean"}},"additionalProperties":false}"""
+        val applySchema = """{"type":"object","properties":{$tabUri,"hit":{"type":"object","description":"Echo one hit object from search__find (kind + ids + optional geometry).","additionalProperties":true}},"required":["hit"],"additionalProperties":false}"""
+        return listOf(
+            syncTool(
+                jsonMapper,
+                name = McpSearchToolNames.FIND,
+                title = "Search conceptual schema",
+                description = "Substring search (accent- and case-insensitive) over the same targets as the editor **Localizar** dialog; " +
+                    "omit or leave `query` empty to list every candidate in the selected type flags (useful e.g. all entities). " +
+                    "At most 400 hits are returned; when truncated, `truncated` is true and `matchCount` is the full count before the cap. " +
+                    "Omit all include* booleans (or set none true) to include every category. " +
+                    "Use `observationBox` for Annotation elements (distinct from element observations text). " +
+                    McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
+                schema = findSchema,
+            ) { _, req ->
+                val idx = tabIndexFromTabOrUriArgs(req) ?: return@syncTool err("tabIndex_or_uri_required")
+                val query = rawStringArg(req, "query") ?: ""
+                val typeFilters = conceptualSearchTypeFiltersFromToolArgs(req)
+                val textScope = conceptualSearchTextScopeFromToolArgs(req)
+                val outcome = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt ConceptualSearchOutcome.Err("bindings_unavailable")
+                    val snap = b.current()
+                    if (idx !in snap.sessions.indices) return@runOnEdt ConceptualSearchOutcome.Err("invalid_tab_index")
+                    b.onConceptualSearchFind(idx, query.trim(), typeFilters, textScope)
+                }
+                okText(conceptualSearchFindResultJson(outcome))
+            },
+            syncTool(
+                jsonMapper,
+                name = McpSearchToolNames.APPLY_HIT,
+                title = "Apply conceptual search hit",
+                description = "Selects the hit target on the canvas, opens the matching inspector tab (Selection vs hidden attributes), " +
+                    "reveals the hidden-attribute branch when applicable, and pans the canvas to the hit bounds. " +
+                    "Pass `tabIndex` or a live model resource URI; then pass the `hit` object from a prior search__find response. " +
+                    McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
+                schema = applySchema,
+            ) { _, req ->
+                val idx = tabIndexFromTabOrUriArgs(req) ?: return@syncTool err("tabIndex_or_uri_required")
+                @Suppress("UNCHECKED_CAST")
+                val hitMap = req.arguments()["hit"] as? Map<String, Any?> ?: return@syncTool err("hit_required")
+                val errMsg = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt "bindings_unavailable"
+                    val snap = b.current()
+                    if (idx !in snap.sessions.indices) return@runOnEdt "invalid_tab_index"
+                    val schema = snap.sessions[idx].schema
+                    val hit = parseConceptualSearchHitFromClient(schema, hitMap) ?: return@runOnEdt "invalid_hit_payload"
+                    b.onSelectTab(idx)
+                    b.onConceptualSearchApplyHit(idx, hit)
+                }
+                if (errMsg != null) {
+                    return@syncTool err(errMsg)
+                }
+                okText("""{"ok":true,"tabIndex":$idx}""")
+            },
+        )
+    }
+
+    private fun conceptualSearchTypeFiltersFromToolArgs(req: McpSchema.CallToolRequest): ConceptualSearchTypeFilters =
+        ConceptualSearchTypeFilters(
+            includeEntities = boolArg(req, "includeEntities") == true,
+            includeRelationships = boolArg(req, "includeRelationships") == true,
+            includeAssociativeEntities = boolArg(req, "includeAssociativeEntities") == true,
+            includeSpecializations = boolArg(req, "includeSpecializations") == true,
+            includeCanvasAttributes = boolArg(req, "includeCanvasAttributes") == true,
+            includeHiddenAttributes = boolArg(req, "includeHiddenAttributes") == true,
+            includeCardinalityLabels = boolArg(req, "includeCardinalityLabels") == true,
+            includeObservationBoxes = boolArg(req, "observationBox") == true ||
+                boolArg(req, "includeObservationBoxes") == true,
+        )
+
+    private fun conceptualSearchTextScopeFromToolArgs(req: McpSchema.CallToolRequest): ConceptualSearchTextScope =
+        ConceptualSearchTextScope(
+            searchDictionary = boolArg(req, "searchDictionary") != false,
+            searchObservations = boolArg(req, "searchObservations") != false,
+        )
+
+    private fun conceptualSearchFindResultJson(outcome: ConceptualSearchOutcome): String =
+        when (outcome) {
+            is ConceptualSearchOutcome.Err ->
+                """{"ok":false,"error":${jsonString(outcome.code)}}"""
+            is ConceptualSearchOutcome.Ok -> {
+                val r = outcome.result
+                val hitsJson = r.hits.joinToString(",") { conceptualSearchHitToJson(it) }
+                """{"ok":true,"truncated":${r.truncated},"matchCount":${r.totalMatched},"returnedCount":${r.hits.size},"hits":[$hitsJson]}"""
+            }
+        }
+
+    private fun conceptualSearchHitToJson(hit: ConceptualSearchHit): String =
+        when (hit) {
+            is ConceptualSearchHit.ElementHit -> {
+                val p = hit.position
+                val pos = """{"x":${p.x},"y":${p.y},"width":${p.width},"height":${p.height}}"""
+                val matched = hit.matchedIn.joinToString(",") { jsonString(it) }
+                """{"kind":"element","elementId":${hit.elementId},"elementKindKey":${jsonString(hit.elementKindKey)},"title":${jsonString(hit.title)},"matchedIn":[$matched],"position":$pos}"""
+            }
+            is ConceptualSearchHit.CardinalityHit -> {
+                val matched = hit.matchedIn.joinToString(",") { jsonString(it) }
+                val posJson = hit.position?.let { p ->
+                    """{"x":${p.x},"y":${p.y},"width":${p.width},"height":${p.height}}"""
+                } ?: "null"
+                """{"kind":"cardinality","connectionId":${hit.connectionId},"title":${jsonString(hit.title)},"matchedIn":[$matched],"position":$posJson}"""
+            }
+            is ConceptualSearchHit.HiddenHit -> {
+                val path = hit.path.joinToString(",")
+                val matched = hit.matchedIn.joinToString(",") { jsonString(it) }
+                """{"kind":"hidden","ownerElementId":${hit.ownerElementId},"path":[$path],"displayName":${jsonString(hit.displayName)},"matchedIn":[$matched]}"""
+            }
+        }
+
+    private fun parseConceptualSearchHitFromClient(
+        schema: ConceptualSchema,
+        hitMap: Map<String, Any?>,
+    ): ConceptualSearchHit? {
+        val kind = (hitMap["kind"] as? String)?.lowercase()?.trim() ?: return null
+        return when (kind) {
+            "element" -> {
+                val id = intFromMcpAny(hitMap["elementId"]) ?: return null
+                val el = schema.elements[id] ?: return null
+                val pos = elementPositionFromMcpAny(hitMap["position"]) ?: el.position
+                val title = (hitMap["title"] as? String) ?: el.name
+                val kindKey = (hitMap["elementKindKey"] as? String) ?: "entity"
+                val matched = stringListFromMcpAny(hitMap["matchedIn"])
+                ConceptualSearchHit.ElementHit(
+                    elementId = id,
+                    elementKindKey = kindKey,
+                    title = title,
+                    matchedIn = matched,
+                    position = pos,
+                )
+            }
+            "cardinality" -> {
+                val cid = intFromMcpAny(hitMap["connectionId"]) ?: return null
+                val title = (hitMap["title"] as? String) ?: ""
+                val matched = stringListFromMcpAny(hitMap["matchedIn"])
+                val pos = elementPositionFromMcpAny(hitMap["position"])
+                ConceptualSearchHit.CardinalityHit(
+                    connectionId = cid,
+                    title = title,
+                    matchedIn = matched,
+                    position = pos,
+                )
+            }
+            "hidden" -> {
+                val owner = intFromMcpAny(hitMap["ownerElementId"]) ?: return null
+                if (schema.elements[owner] == null) return null
+                val path = intListFromMcpAny(hitMap["path"])
+                val display = (hitMap["displayName"] as? String) ?: ""
+                val matched = stringListFromMcpAny(hitMap["matchedIn"])
+                ConceptualSearchHit.HiddenHit(
+                    ownerElementId = owner,
+                    path = path,
+                    displayName = display,
+                    matchedIn = matched,
+                )
+            }
+            else -> null
+        }
+    }
+
+    private fun intFromMcpAny(raw: Any?): Int? =
+        when (raw) {
+            null -> null
+            is Int -> raw
+            is Long -> raw.toInt()
+            is Double -> raw.toInt()
+            is Number -> raw.toInt()
+            else -> raw.toString().toIntOrNull()
+        }
+
+    private fun intListFromMcpAny(raw: Any?): List<Int> {
+        if (raw !is List<*>) return emptyList()
+        return raw.mapNotNull { intFromMcpAny(it) }
+    }
+
+    private fun stringListFromMcpAny(raw: Any?): List<String> {
+        if (raw !is List<*>) return emptyList()
+        return raw.mapNotNull { elem ->
+            when (elem) {
+                is String -> elem
+                else -> elem?.toString()
+            }
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun elementPositionFromMcpAny(raw: Any?): ElementPosition? {
+        val m = raw as? Map<String, Any?> ?: return null
+        val x = intFromMcpAny(m["x"]) ?: return null
+        val y = intFromMcpAny(m["y"]) ?: return null
+        val w = intFromMcpAny(m["width"]) ?: return null
+        val h = intFromMcpAny(m["height"]) ?: return null
+        return ElementPosition(x, y, w, h)
     }
 
     private fun buildResourceUtilityTools(

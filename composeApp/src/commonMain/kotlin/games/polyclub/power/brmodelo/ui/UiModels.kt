@@ -34,6 +34,12 @@ internal enum class RibbonTab {
     Opcoes
 }
 
+/** Inspector sidebar tabs (Seleção vs Atributos ocultos). */
+internal enum class InspectorTab {
+    Selecao,
+    AtrOcultos,
+}
+
 /** Ribbon **Operações** dropdown actions (conceptual schema tab). */
 internal enum class ConceptualRibbonOperation {
     OrganizeAttributes,
@@ -171,6 +177,8 @@ internal data class OperationsMenuRibbonBinding(
     val onUndo: () -> Unit,
     val redoEnabled: Boolean,
     val onRedo: () -> Unit,
+    val conceptualFindEnabled: Boolean,
+    val onOpenConceptualFind: () -> Unit,
 )
 
 internal data class ClipboardRibbonBinding(

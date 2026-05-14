@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
+import games.polyclub.power.brmodelo.domain.ElementPosition
 import games.polyclub.power.brmodelo.ui.canvas.SchemaCanvasViewState
 
 @Composable
@@ -59,6 +60,11 @@ internal fun WorkspaceArea(
     onHiddenAttributeRevealPathChange: (List<Int>?) -> Unit = {},
     onRevealHiddenAttributeInModel: () -> Unit = {},
     onCanvasViewStateChange: (SchemaCanvasViewState) -> Unit = {},
+    requestCenterOnModelBounds: ElementPosition? = null,
+    onRequestCenterOnModelBoundsConsumed: () -> Unit = {},
+    requestedInspectorTab: InspectorTab? = null,
+    onInspectorTabRequestConsumed: () -> Unit = {},
+    onRequestOpenConceptualFind: () -> Unit = {},
     onCopyRequest: () -> Unit = {},
     onCutRequest: () -> Unit = {},
     onPasteRequest: () -> Unit = {},
@@ -89,6 +95,9 @@ internal fun WorkspaceArea(
             onSelectionBandUiChange = onSelectionBandUiChange,
             onOrganizeAttributes = onOrganizeAttributes,
             onCanvasViewStateChange = onCanvasViewStateChange,
+            requestCenterOnModelBounds = requestCenterOnModelBounds,
+            onRequestCenterOnModelBoundsConsumed = onRequestCenterOnModelBoundsConsumed,
+            onRequestOpenConceptualFind = onRequestOpenConceptualFind,
             onCopyRequest = onCopyRequest,
             onCutRequest = onCutRequest,
             onPasteRequest = onPasteRequest,
@@ -110,6 +119,8 @@ internal fun WorkspaceArea(
             hiddenAttributeRevealPath = hiddenAttributeRevealPath,
             onHiddenAttributeRevealPathChange = onHiddenAttributeRevealPathChange,
             onRevealHiddenAttributeInModel = onRevealHiddenAttributeInModel,
+            requestedInspectorTab = requestedInspectorTab,
+            onInspectorTabRequestConsumed = onInspectorTabRequestConsumed,
         )
     }
 }

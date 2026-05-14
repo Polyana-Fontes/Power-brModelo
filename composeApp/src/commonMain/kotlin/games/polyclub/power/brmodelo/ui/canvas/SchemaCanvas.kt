@@ -35,6 +35,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -172,6 +173,8 @@ private val SELECTION_BAND_STROKE = Color(0xFF0060C0)
  *   fed from AWT (Shift only).
  * @param onViewStateChange Optional hook for layout, pan, and hover pointer (view coordinates) —
  *   used to anchor clipboard paste in model space.
+ * @param requestCenterOnModelBounds When non-null, recentres the viewport on these model-space bounds
+ *   (after layout size is known); then [onRequestCenterOnModelBoundsConsumed] runs so the parent can clear the request.
  */
 @Composable
 internal fun SchemaCanvas(
@@ -192,6 +195,8 @@ internal fun SchemaCanvas(
     toolCursorModifier: Modifier = Modifier,
     canvasFocusRequester: FocusRequester? = null,
     onViewStateChange: ((SchemaCanvasViewState) -> Unit)? = null,
+    requestCenterOnModelBounds: ElementPosition? = null,
+    onRequestCenterOnModelBoundsConsumed: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var panOffset by remember { mutableStateOf(Offset(8f, 8f)) }
@@ -224,6 +229,19 @@ internal fun SchemaCanvas(
     val currentEditorTabSessionId by rememberUpdatedState(editorTabSessionId)
     val currentKeyboardRemapVerticalScrollPan by rememberUpdatedState(keyboardRemapVerticalScrollPanToHorizontal)
     val onViewStateChangeCb by rememberUpdatedState(onViewStateChange)
+    val onCenterBoundsConsumed by rememberUpdatedState(onRequestCenterOnModelBoundsConsumed)
+
+    LaunchedEffect(requestCenterOnModelBounds, layoutSize.width, layoutSize.height) {
+        val bounds = requestCenterOnModelBounds ?: return@LaunchedEffect
+        val w = layoutSize.width
+        val h = layoutSize.height
+        if (w <= 0f || h <= 0f) return@LaunchedEffect
+        val b = bounds.coercedToMinimumDimensions()
+        val cx = b.x + b.width * 0.5f
+        val cy = b.y + b.height * 0.5f
+        panOffset = Offset(w * 0.5f - cx, h * 0.5f - cy)
+        onCenterBoundsConsumed()
+    }
 
     /** Pushes pointer/layout to the parent immediately (avoids one-frame lag vs [SideEffect] only). */
     fun pushClipboardViewStateToParent(pointerLocal: Offset?, over: Boolean) {

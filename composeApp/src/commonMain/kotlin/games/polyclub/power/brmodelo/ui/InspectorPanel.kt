@@ -182,8 +182,6 @@ private val INSPECTOR_DROPDOWN_CARET_STYLE = TextStyle(
     color = Color(0xFF606070),
 )
 
-private enum class InspectorTab { Selecao, AtrOcultos }
-
 /** Escapes transient canvas previews back to the last committed schema ([SchemaHistory.current]). */
 private val LocalRevertSchemaPreview = staticCompositionLocalOf<() -> Unit> { { } }
 
@@ -255,11 +253,19 @@ internal fun InspectorPanel(
     hiddenAttributeRevealPath: List<Int>? = null,
     onHiddenAttributeRevealPathChange: (List<Int>?) -> Unit = {},
     onRevealHiddenAttributeInModel: () -> Unit = {},
+    requestedInspectorTab: InspectorTab? = null,
+    onInspectorTabRequestConsumed: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var activeTab by remember { mutableStateOf(InspectorTab.Selecao) }
     // Field key currently focused in the grid — drives the hint text at the bottom.
     var focusedKey by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(requestedInspectorTab) {
+        val tab = requestedInspectorTab ?: return@LaunchedEffect
+        activeTab = tab
+        onInspectorTabRequestConsumed()
+    }
 
     CompositionLocalProvider(LocalRevertSchemaPreview provides onRevertSchemaPreview) {
         Column(

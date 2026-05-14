@@ -56,6 +56,7 @@ import games.polyclub.power.brmodelo.generated.resources.gerar_logico_l
 import games.polyclub.power.brmodelo.generated.resources.operacoes_l
 import games.polyclub.power.brmodelo.generated.resources.redo_l
 import games.polyclub.power.brmodelo.generated.resources.undo_l
+import games.polyclub.power.brmodelo.generated.resources.visualizar_l
 
 /** Standard group: all buttons in a single row, group title below. */
 @Composable
@@ -166,6 +167,12 @@ internal fun RibbonOperacoesGroup(
                 label = "Refazer",
                 enabled = binding?.redoEnabled == true,
                 onClick = { binding?.onRedo?.invoke() },
+            )
+            RibbonLargeGlyphHistoryButton(
+                icon = Res.drawable.visualizar_l,
+                label = "Localizar",
+                enabled = binding?.conceptualFindEnabled == true,
+                onClick = { binding?.onOpenConceptualFind?.invoke() },
             )
             RibbonButton(
                 MenuEntry(

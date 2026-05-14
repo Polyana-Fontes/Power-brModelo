@@ -88,6 +88,9 @@ import games.polyclub.power.brmodelo.domain.canPromoteToAssociativeEntityMenu
 import games.polyclub.power.brmodelo.domain.canSelectAttributeTreeMenu
 import games.polyclub.power.brmodelo.domain.expandCanvasSelectionWithAttributeTrees
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
+import games.polyclub.power.brmodelo.domain.ConceptualSearchOutcome
+import games.polyclub.power.brmodelo.domain.searchConceptualModel
+import games.polyclub.power.brmodelo.domain.ElementPosition
 import games.polyclub.power.brmodelo.domain.SchemaElement
 import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolVariant
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaBrmParser
@@ -99,6 +102,10 @@ import games.polyclub.power.brmodelo.ui.AttributeToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.ClipboardRibbonBinding
 import games.polyclub.power.brmodelo.ui.clipboard.BrModeloConceptualClipboardStore
+import games.polyclub.power.brmodelo.ui.ConceptualSearchDialog
+import games.polyclub.power.brmodelo.ui.ConceptualSearchNavigateAction
+import games.polyclub.power.brmodelo.ui.conceptualSearchNavigateAction
+import games.polyclub.power.brmodelo.ui.conceptualSearchNavigateAction
 import games.polyclub.power.brmodelo.ui.clipboard.brModeloClipboardSetPlainText
 import games.polyclub.power.brmodelo.ui.clipboard.encodeImageBitmapToPngBytes
 import games.polyclub.power.brmodelo.ui.canvas.SchemaCanvasViewState
@@ -111,6 +118,7 @@ import games.polyclub.power.brmodelo.ui.CloseTabUnsavedDialog
 import games.polyclub.power.brmodelo.ui.ConceptualCanvasTool
 import games.polyclub.power.brmodelo.ui.EditorTabSession
 import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
+import games.polyclub.power.brmodelo.ui.InspectorTab
 import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.OperationsMenuRibbonBinding
@@ -152,6 +160,10 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
     var conceptualCanvasTool by remember { mutableStateOf<ConceptualCanvasTool>(ConceptualCanvasTool.None) }
     var bulkDeleteUi by remember { mutableStateOf<BulkDeleteUiState?>(null) }
     var selectionBandUi by remember { mutableStateOf<SelectionBandUiState?>(null) }
+
+    var canvasCenterOnBoundsRequest by remember { mutableStateOf<ElementPosition?>(null) }
+    var inspectorTabRequest by remember { mutableStateOf<InspectorTab?>(null) }
+    var conceptualSearchDialogOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(conceptualCanvasTool) {
         if (conceptualCanvasTool !is ConceptualCanvasTool.BulkDeleteObjects) {
@@ -662,6 +674,23 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         },
     )
 
+    fun applyConceptualSearchNavigateOnTab(tabIndex: Int, action: ConceptualSearchNavigateAction) {
+        val tab = tabSessions.getOrNull(tabIndex) ?: return
+        replaceTabAt(
+            tabIndex,
+            tab.copy(
+                selection = action.selection,
+                hiddenAttributeRevealPath = action.hiddenAttributeRevealPath,
+            ),
+        )
+        canvasCenterOnBoundsRequest = action.centerOnBounds
+        inspectorTabRequest = action.inspectorTab
+    }
+
+    fun applyConceptualSearchNavigateAction(action: ConceptualSearchNavigateAction) {
+        applyConceptualSearchNavigateOnTab(selectedTabIndex, action)
+    }
+
     val organizeAttrsEnabled = canOrganizeAttributesMenuSelection(sel.schema, sel.selection)
     val onOrganizeAttributes: () -> Unit = organize@{
         val tab = tabSessions.getOrNull(selectedTabIndex) ?: return@organize
@@ -807,6 +836,8 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                 )
             }
         },
+        conceptualFindEnabled = true,
+        onOpenConceptualFind = { conceptualSearchDialogOpen = true },
     )
 
     SideEffect {
@@ -926,6 +957,18 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                         }
                     }
                 },
+                onConceptualSearchFind = mcpFind@{ tabIdx, query, filters, scopeText ->
+                    val tab = tabSessions.getOrNull(tabIdx)
+                        ?: return@mcpFind ConceptualSearchOutcome.Err("invalid_tab_index")
+                    tab.schema.searchConceptualModel(query, filters, scopeText)
+                },
+                onConceptualSearchApplyHit = mcpApplyHit@{ tabIdx, hit ->
+                    val tab = tabSessions.getOrNull(tabIdx) ?: return@mcpApplyHit "invalid_tab_index"
+                    val action = conceptualSearchNavigateAction(tab.schema, hit, clipboardPreviewTextMeasurer)
+                        ?: return@mcpApplyHit "unknown_hit"
+                    applyConceptualSearchNavigateOnTab(tabIdx, action)
+                    null
+                },
                 onServerRunningChanged = { running -> mcpServerRunning = running },
             )
         } else {
@@ -1042,9 +1085,25 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                     onRedoRequest = {
                         if (operationsMenuBinding.redoEnabled) operationsMenuBinding.onRedo()
                     },
+                    requestCenterOnModelBounds = canvasCenterOnBoundsRequest,
+                    onRequestCenterOnModelBoundsConsumed = { canvasCenterOnBoundsRequest = null },
+                    requestedInspectorTab = inspectorTabRequest,
+                    onInspectorTabRequestConsumed = { inspectorTabRequest = null },
+                    onRequestOpenConceptualFind = { conceptualSearchDialogOpen = true },
                     snackbarHostState = snackbarHostState,
                     ribbonMcp = ribbonMcp,
                 )
+
+                if (conceptualSearchDialogOpen) {
+                    ConceptualSearchDialog(
+                        schema = sel.schema,
+                        onDismiss = { conceptualSearchDialogOpen = false },
+                        onNavigate = { action ->
+                            applyConceptualSearchNavigateAction(action)
+                            conceptualSearchDialogOpen = false
+                        },
+                    )
+                }
 
                 bulkDataDictionaryRows?.let { dictRows ->
                     BulkDataDictionaryDialog(
