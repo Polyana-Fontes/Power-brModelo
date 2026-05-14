@@ -37,6 +37,9 @@ internal object McpServerInstructions {
         append("Tab tool names use the prefix \"tabs")
         append(McpTabToolNames.TAB_TOOL_SEPARATOR)
         append("\" (category + suffix). ")
+        append("Procedural canvas placement tools use the prefix \"tools")
+        append(McpProceduralToolsToolNames.TOOLS_SEPARATOR)
+        append("\". ")
         append("Use only letters, digits, and underscores in tool names where the client is strict.\n\n")
 
         append("## MCP resources (resources/list + resources/read)\n\n")
@@ -88,5 +91,18 @@ internal object McpServerInstructions {
         append(" (literal), ")
         append(McpResourceUtilityToolNames.SEARCH_REGEX)
         append(". Search results include character indices and 1-based line/column for each match.\n")
+
+        append("\n### Procedural canvas tools (")
+        append(McpProceduralToolsToolNames.TOOLS_GROUP)
+        append(McpProceduralToolsToolNames.TOOLS_SEPARATOR)
+        append("…)\n")
+        append("Place entities, relationships, and associative entities step-by-step with the same domain rules as the ribbon tools, ")
+        append("without changing the user's currently selected canvas tool: ")
+        append(McpProceduralToolsToolNames.PLACE_ENTITY)
+        append(", ")
+        append(McpProceduralToolsToolNames.PLACE_RELATIONSHIP)
+        append(", ")
+        append(McpProceduralToolsToolNames.PLACE_ASSOCIATIVE_ENTITY)
+        append(". Each call returns JSON for the new element (id, bounds, names, style).\n")
     }
 }

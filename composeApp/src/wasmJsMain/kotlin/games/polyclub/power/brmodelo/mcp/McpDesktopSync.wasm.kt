@@ -19,6 +19,8 @@
 package games.polyclub.power.brmodelo.mcp
 
 import androidx.compose.material3.SnackbarHostState
+import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolKind
+import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolOverrides
 import games.polyclub.power.brmodelo.ui.EditorTabSession
 import kotlinx.coroutines.CoroutineScope
 
@@ -39,6 +41,13 @@ internal actual object McpDesktopSync {
         onOpenXmlAsUnsavedTab: (String, String) -> String?,
         onReplaceModelXmlAtTab: (Int, String) -> String?,
         onPatchModelXmlAtTab: (Int, String, String, Boolean) -> String?,
+        onPlaceProceduralConceptualToolAtTab: (
+            Int,
+            ConceptualProceduralToolKind,
+            Int,
+            Int,
+            ConceptualProceduralToolOverrides,
+        ) -> McpProceduralToolApplyOutcome,
         onServerRunningChanged: (Boolean) -> Unit,
     ) {
         runtime.updateBindings(null)

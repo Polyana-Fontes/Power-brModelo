@@ -19,6 +19,8 @@
 package games.polyclub.power.brmodelo.mcp
 
 import games.polyclub.power.brmodelo.BuildInfo
+import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolKind
+import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolOverrides
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaXmlSerializer
 import io.modelcontextprotocol.json.McpJsonDefaults
 import io.modelcontextprotocol.server.McpServer
@@ -684,7 +686,7 @@ internal actual class McpRuntime {
                 }
                 okText("""{"ok":true,"tabIndex":$idx,"replaceAll":$replaceAll}""")
             },
-        ) + buildResourceUtilityTools(jsonMapper)
+        ) + buildResourceUtilityTools(jsonMapper) + buildProceduralTools(jsonMapper)
     }
 
     private fun buildResourceUtilityTools(
@@ -807,6 +809,164 @@ internal actual class McpRuntime {
                 okText(resourceSearchResultJson(uri, limited, total, truncated))
             },
         )
+    }
+
+    private fun buildProceduralTools(
+        jsonMapper: io.modelcontextprotocol.json.McpJsonMapper,
+    ): List<McpServerFeatures.SyncToolSpecification> {
+        val tabUri = """"tabIndex":{"type":"integer","minimum":0},"uri":{"type":"string","minLength":1}"""
+        val xy = """"x":{"type":"integer"},"y":{"type":"integer"}"""
+        val textFields = """"name":{"type":"string"},"observations":{"type":"string"},"dictionary":{"type":"string"}"""
+        val labelStyle =
+            """"labelColorArgb":{"type":"integer"},"labelBold":{"type":"boolean"},"labelItalic":{"type":"boolean"}"""
+        val relArrow = """"arrowDirectionCode":{"type":"integer","minimum":0,"maximum":8},"showName":{"type":"boolean"}"""
+        val assocInner =
+            """"relationshipName":{"type":"string"},"relationshipObservations":{"type":"string"},"relationshipDictionary":{"type":"string"}"""
+        return listOf(
+            syncTool(
+                jsonMapper,
+                name = McpProceduralToolsToolNames.PLACE_ENTITY,
+                title = "Place conceptual entity (procedural)",
+                description = "Inserts a plain entity at (x,y) using the same allocation rules as the Entity canvas tool, " +
+                    "then optionally overrides name, notes, dictionary, weak flag, and label style. " +
+                    "Does **not** switch the user's active ribbon/canvas tool. " +
+                    "Returns the placed element as JSON (id, geometry, names, style). " +
+                    McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
+                schema = """{"type":"object","properties":{$tabUri,$xy,$textFields,"isWeak":{"type":"boolean"},$labelStyle},"additionalProperties":false}""",
+            ) { _, req ->
+                val idx = tabIndexFromTabOrUriArgs(req) ?: return@syncTool err("tabIndex_or_uri_required")
+                val x = intArg(req, "x") ?: 64
+                val y = intArg(req, "y") ?: 64
+                val overrides = proceduralOverridesForEntity(req)
+                val outcome = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt McpProceduralToolApplyOutcome.err("bindings_unavailable")
+                    b.onPlaceProceduralConceptualToolAtTab(idx, ConceptualProceduralToolKind.ENTITY, x, y, overrides)
+                }
+                proceduralToolOutcomeToResult(outcome)
+            },
+            syncTool(
+                jsonMapper,
+                name = McpProceduralToolsToolNames.PLACE_RELATIONSHIP,
+                title = "Place conceptual relationship (procedural)",
+                description = "Inserts a relationship diamond at (x,y) with the same defaults as the Relationship canvas tool, " +
+                    "then optionally overrides name, notes, dictionary, arrow direction (0–8, see domain ArrowDirection), and showName. " +
+                    "Does **not** switch the user's active ribbon/canvas tool. " +
+                    "Returns the placed element as JSON. " +
+                    McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
+                schema = """{"type":"object","properties":{$tabUri,$xy,$textFields,$relArrow},"additionalProperties":false}""",
+            ) { _, req ->
+                val idx = tabIndexFromTabOrUriArgs(req) ?: return@syncTool err("tabIndex_or_uri_required")
+                val x = intArg(req, "x") ?: 64
+                val y = intArg(req, "y") ?: 64
+                val overrides = proceduralOverridesForRelationship(req)
+                val outcome = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt McpProceduralToolApplyOutcome.err("bindings_unavailable")
+                    b.onPlaceProceduralConceptualToolAtTab(idx, ConceptualProceduralToolKind.RELATIONSHIP, x, y, overrides)
+                }
+                proceduralToolOutcomeToResult(outcome)
+            },
+            syncTool(
+                jsonMapper,
+                name = McpProceduralToolsToolNames.PLACE_ASSOCIATIVE_ENTITY,
+                title = "Place conceptual associative entity (procedural)",
+                description = "Inserts an associative entity at (x,y) with auto-generated outer and inner relationship names, " +
+                    "then optionally overrides outer/inner names, notes, dictionaries, and inner arrow direction (0–8). " +
+                    "Does **not** switch the user's active ribbon/canvas tool. " +
+                    "Returns the placed element as JSON. " +
+                    McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
+                schema = """{"type":"object","properties":{$tabUri,$xy,$textFields,$assocInner,$labelStyle,"arrowDirectionCode":{"type":"integer","minimum":0,"maximum":8}},"additionalProperties":false}""",
+            ) { _, req ->
+                val idx = tabIndexFromTabOrUriArgs(req) ?: return@syncTool err("tabIndex_or_uri_required")
+                val x = intArg(req, "x") ?: 64
+                val y = intArg(req, "y") ?: 64
+                val overrides = proceduralOverridesForAssociative(req)
+                val outcome = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt McpProceduralToolApplyOutcome.err("bindings_unavailable")
+                    b.onPlaceProceduralConceptualToolAtTab(
+                        idx,
+                        ConceptualProceduralToolKind.ASSOCIATIVE_ENTITY,
+                        x,
+                        y,
+                        overrides,
+                    )
+                }
+                proceduralToolOutcomeToResult(outcome)
+            },
+        )
+    }
+
+    private fun proceduralOverridesForEntity(req: McpSchema.CallToolRequest): ConceptualProceduralToolOverrides =
+        ConceptualProceduralToolOverrides(
+            name = optionalKeyedTrimmedString(req, "name"),
+            observations = optionalKeyedRawString(req, "observations"),
+            dictionary = optionalKeyedRawString(req, "dictionary"),
+            isWeak = optionalBoolArg(req, "isWeak"),
+            labelColorArgb = optionalIntArg(req, "labelColorArgb"),
+            labelBold = optionalBoolArg(req, "labelBold"),
+            labelItalic = optionalBoolArg(req, "labelItalic"),
+        )
+
+    private fun proceduralOverridesForRelationship(req: McpSchema.CallToolRequest): ConceptualProceduralToolOverrides =
+        ConceptualProceduralToolOverrides(
+            name = optionalKeyedTrimmedString(req, "name"),
+            observations = optionalKeyedRawString(req, "observations"),
+            dictionary = optionalKeyedRawString(req, "dictionary"),
+            labelColorArgb = optionalIntArg(req, "labelColorArgb"),
+            labelBold = optionalBoolArg(req, "labelBold"),
+            labelItalic = optionalBoolArg(req, "labelItalic"),
+            arrowDirectionCode = optionalIntArg(req, "arrowDirectionCode"),
+            showName = optionalBoolArg(req, "showName"),
+        )
+
+    private fun proceduralOverridesForAssociative(req: McpSchema.CallToolRequest): ConceptualProceduralToolOverrides =
+        ConceptualProceduralToolOverrides(
+            name = optionalKeyedTrimmedString(req, "name"),
+            observations = optionalKeyedRawString(req, "observations"),
+            dictionary = optionalKeyedRawString(req, "dictionary"),
+            relationshipName = optionalKeyedTrimmedString(req, "relationshipName"),
+            relationshipObservations = optionalKeyedRawString(req, "relationshipObservations"),
+            relationshipDictionary = optionalKeyedRawString(req, "relationshipDictionary"),
+            labelColorArgb = optionalIntArg(req, "labelColorArgb"),
+            labelBold = optionalBoolArg(req, "labelBold"),
+            labelItalic = optionalBoolArg(req, "labelItalic"),
+            arrowDirectionCode = optionalIntArg(req, "arrowDirectionCode"),
+        )
+
+    private fun proceduralToolOutcomeToResult(outcome: McpProceduralToolApplyOutcome): McpSchema.CallToolResult {
+        val errMsg = outcome.error
+        if (errMsg != null) {
+            return err(errMsg)
+        }
+        val ej = outcome.elementJson ?: return err("internal_no_element_json")
+        return okText("""{"ok":true,"tabIndex":${outcome.tabIndex},"element":$ej}""")
+    }
+
+    private fun optionalKeyedTrimmedString(req: McpSchema.CallToolRequest, key: String): String? {
+        if (!req.arguments().containsKey(key)) return null
+        val raw = req.arguments()[key] ?: return ""
+        return when (raw) {
+            is String -> raw
+            else -> raw.toString()
+        }.trim()
+    }
+
+    private fun optionalKeyedRawString(req: McpSchema.CallToolRequest, key: String): String? {
+        if (!req.arguments().containsKey(key)) return null
+        val raw = req.arguments()[key] ?: return ""
+        return when (raw) {
+            is String -> raw
+            else -> raw.toString()
+        }
+    }
+
+    private fun optionalIntArg(req: McpSchema.CallToolRequest, key: String): Int? {
+        if (!req.arguments().containsKey(key)) return null
+        return intArg(req, key)
+    }
+
+    private fun optionalBoolArg(req: McpSchema.CallToolRequest, key: String): Boolean? {
+        if (!req.arguments().containsKey(key)) return null
+        return boolArg(req, key)
     }
 
     private fun resourceSearchResultJson(

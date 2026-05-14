@@ -18,6 +18,8 @@
 
 package games.polyclub.power.brmodelo.mcp
 
+import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolKind
+import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolOverrides
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.ui.EditorTabSession
 
@@ -56,6 +58,17 @@ internal class McpUiBindings(
      * When [replaceAll] is false, [oldString] must appear exactly once in the serialized XML.
      */
     val onPatchModelXmlAtTab: (tabIndex: Int, oldString: String, newString: String, replaceAll: Boolean) -> String?,
+    /**
+     * Inserts an entity, relationship, or associative entity using the same domain placement rules as the
+     * canvas tools, without changing the user's active ribbon/canvas tool selection.
+     */
+    val onPlaceProceduralConceptualToolAtTab: (
+        tabIndex: Int,
+        kind: ConceptualProceduralToolKind,
+        topLeftX: Int,
+        topLeftY: Int,
+        overrides: ConceptualProceduralToolOverrides,
+    ) -> McpProceduralToolApplyOutcome,
     val onNotifyUser: (String) -> Unit,
     val onServerRunningChanged: (Boolean) -> Unit,
 )

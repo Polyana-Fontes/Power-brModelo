@@ -49,8 +49,12 @@ import games.polyclub.power.brmodelo.domain.deleteCanvasSelection
 import games.polyclub.power.brmodelo.domain.elementIdsForClipboard
 import games.polyclub.power.brmodelo.domain.extractClipboardFragment
 import games.polyclub.power.brmodelo.domain.ConceptualPasteContext
+import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolPlacementResult
 import games.polyclub.power.brmodelo.domain.pasteConceptualClipboard
+import games.polyclub.power.brmodelo.domain.placeProceduralConceptualTool
+import games.polyclub.power.brmodelo.mcp.McpConceptualToolElementResponseJson
 import games.polyclub.power.brmodelo.mcp.McpDesktopSync
+import games.polyclub.power.brmodelo.mcp.McpProceduralToolApplyOutcome
 import games.polyclub.power.brmodelo.mcp.McpModelXmlPatch
 import games.polyclub.power.brmodelo.mcp.McpRuntime
 import games.polyclub.power.brmodelo.mcp.McpSettingsDialog
@@ -901,6 +905,26 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                     )
                     pushCommitOnTabAt(tabIdx, merged)
                     null
+                },
+                onPlaceProceduralConceptualToolAtTab = mcpPlaceTool@{ tabIdx, kind, x, y, overrides ->
+                    if (tabIdx !in tabSessions.indices) {
+                        return@mcpPlaceTool McpProceduralToolApplyOutcome.err("invalid_tab_index")
+                    }
+                    val tab = tabSessions[tabIdx]
+                    when (val r = tab.schema.placeProceduralConceptualTool(kind, x, y, overrides)) {
+                        is ConceptualProceduralToolPlacementResult.Err ->
+                            McpProceduralToolApplyOutcome.err(r.code)
+                        is ConceptualProceduralToolPlacementResult.Ok -> {
+                            val normalized = r.schema.withNormalizedAttributeMultiValuedCounts()
+                            val placed = normalized.elements[r.element.id]
+                                ?: return@mcpPlaceTool McpProceduralToolApplyOutcome.err("internal_missing_placed_element")
+                            pushCommitOnTabAt(tabIdx, normalized)
+                            McpProceduralToolApplyOutcome.ok(
+                                tabIdx,
+                                McpConceptualToolElementResponseJson.elementSummary(placed),
+                            )
+                        }
+                    }
                 },
                 onServerRunningChanged = { running -> mcpServerRunning = running },
             )
