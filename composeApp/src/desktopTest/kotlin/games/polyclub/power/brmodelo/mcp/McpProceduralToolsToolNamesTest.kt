@@ -36,5 +36,7 @@ class McpProceduralToolsToolNamesTest {
         assertEquals("tools__place_entity", McpProceduralToolsToolNames.PLACE_ENTITY)
         assertEquals("tools__place_relationship", McpProceduralToolsToolNames.PLACE_RELATIONSHIP)
         assertEquals("tools__place_associative_entity", McpProceduralToolsToolNames.PLACE_ASSOCIATIVE_ENTITY)
+        assertEquals("tools__apply_specialization_basic", McpProceduralToolsToolNames.APPLY_SPECIALIZATION_BASIC)
+        assertEquals("tools__apply_specialization_tree", McpProceduralToolsToolNames.APPLY_SPECIALIZATION_TREE)
     }
 }

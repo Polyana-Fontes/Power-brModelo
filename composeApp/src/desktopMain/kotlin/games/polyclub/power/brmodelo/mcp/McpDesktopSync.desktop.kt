@@ -21,6 +21,7 @@ package games.polyclub.power.brmodelo.mcp
 import androidx.compose.material3.SnackbarHostState
 import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolKind
 import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolOverrides
+import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolVariant
 import games.polyclub.power.brmodelo.domain.ConceptualSearchHit
 import games.polyclub.power.brmodelo.domain.ConceptualSearchOutcome
 import games.polyclub.power.brmodelo.domain.ConceptualSearchTextScope
@@ -54,6 +55,11 @@ internal actual object McpDesktopSync {
             Int,
             ConceptualProceduralToolOverrides,
         ) -> McpProceduralToolApplyOutcome,
+        onApplyConceptualSpecializationAtTab: (
+            Int,
+            Int,
+            ConceptualSpecializationToolVariant,
+        ) -> McpProceduralToolApplyOutcome,
         onConceptualSearchFind: (
             Int,
             String,
@@ -76,6 +82,7 @@ internal actual object McpDesktopSync {
                 onReplaceModelXmlAtTab = onReplaceModelXmlAtTab,
                 onPatchModelXmlAtTab = onPatchModelXmlAtTab,
                 onPlaceProceduralConceptualToolAtTab = onPlaceProceduralConceptualToolAtTab,
+                onApplyConceptualSpecializationAtTab = onApplyConceptualSpecializationAtTab,
                 onConceptualSearchFind = onConceptualSearchFind,
                 onConceptualSearchApplyHit = onConceptualSearchApplyHit,
                 onNotifyUser = { msg ->

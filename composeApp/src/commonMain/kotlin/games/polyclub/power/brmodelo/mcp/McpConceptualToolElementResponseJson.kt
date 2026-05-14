@@ -42,6 +42,9 @@ internal object McpConceptualToolElementResponseJson {
             is SchemaElement.AssociativeEntity -> {
                 """{$base,"elementKind":"associativeEntity","relationshipName":${jsonString(element.relationshipName)},"relationshipObservations":${jsonString(element.relationshipObservations)},"relationshipDictionary":${jsonString(element.relationshipDictionary)},"arrowDirectionCode":${element.arrowDirection.code}}"""
             }
+            is SchemaElement.Specialization -> {
+                """{$base,"elementKind":"specialization","baseEntityId":${element.baseEntityId},"specializationTypeCode":${element.type.code},"isPartial":${element.isPartial}}"""
+            }
             else -> """{$base,"elementKind":"other"}"""
         }
     }

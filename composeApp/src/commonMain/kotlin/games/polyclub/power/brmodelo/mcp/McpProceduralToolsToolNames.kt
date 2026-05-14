@@ -31,4 +31,12 @@ internal object McpProceduralToolsToolNames {
     val PLACE_ENTITY = tool("place_entity")
     val PLACE_RELATIONSHIP = tool("place_relationship")
     val PLACE_ASSOCIATIVE_ENTITY = tool("place_associative_entity")
+
+    /** Same as ribbon specialization tool (triangle only, optional). */
+    val APPLY_SPECIALIZATION_BASIC = tool("apply_specialization_basic")
+
+    /**
+     * Specialization branch with automatic child entity; pass `exclusive` (true = restricted / ribbon A, false = optional / ribbon B).
+     */
+    val APPLY_SPECIALIZATION_TREE = tool("apply_specialization_tree")
 }

@@ -92,7 +92,9 @@ import games.polyclub.power.brmodelo.domain.ConceptualSearchOutcome
 import games.polyclub.power.brmodelo.domain.searchConceptualModel
 import games.polyclub.power.brmodelo.domain.ElementPosition
 import games.polyclub.power.brmodelo.domain.SchemaElement
+import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolResult
 import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolVariant
+import games.polyclub.power.brmodelo.domain.applyConceptualSpecializationTool
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaBrmParser
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaXmlParser
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaXmlSerializer
@@ -949,6 +951,26 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                             val normalized = r.schema.withNormalizedAttributeMultiValuedCounts()
                             val placed = normalized.elements[r.element.id]
                                 ?: return@mcpPlaceTool McpProceduralToolApplyOutcome.err("internal_missing_placed_element")
+                            pushCommitOnTabAt(tabIdx, normalized)
+                            McpProceduralToolApplyOutcome.ok(
+                                tabIdx,
+                                McpConceptualToolElementResponseJson.elementSummary(placed),
+                            )
+                        }
+                    }
+                },
+                onApplyConceptualSpecializationAtTab = mcpSpec@{ tabIdx, baseEntityId, variant ->
+                    if (tabIdx !in tabSessions.indices) {
+                        return@mcpSpec McpProceduralToolApplyOutcome.err("invalid_tab_index")
+                    }
+                    val tab = tabSessions[tabIdx]
+                    when (val r = applyConceptualSpecializationTool(tab.schema, baseEntityId, variant)) {
+                        is ConceptualSpecializationToolResult.Error ->
+                            McpProceduralToolApplyOutcome.err(r.message)
+                        is ConceptualSpecializationToolResult.Ok -> {
+                            val normalized = r.schema.withNormalizedAttributeMultiValuedCounts()
+                            val placed = normalized.elements[r.newSpecializationId]
+                                ?: return@mcpSpec McpProceduralToolApplyOutcome.err("internal_missing_specialization")
                             pushCommitOnTabAt(tabIdx, normalized)
                             McpProceduralToolApplyOutcome.ok(
                                 tabIdx,

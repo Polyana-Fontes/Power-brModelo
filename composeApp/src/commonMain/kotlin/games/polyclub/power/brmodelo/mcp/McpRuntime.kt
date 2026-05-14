@@ -20,6 +20,7 @@ package games.polyclub.power.brmodelo.mcp
 
 import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolKind
 import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolOverrides
+import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolVariant
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.domain.ConceptualSearchHit
 import games.polyclub.power.brmodelo.domain.ConceptualSearchOutcome
@@ -72,6 +73,15 @@ internal class McpUiBindings(
         topLeftX: Int,
         topLeftY: Int,
         overrides: ConceptualProceduralToolOverrides,
+    ) -> McpProceduralToolApplyOutcome,
+    /**
+     * Applies one conceptual specialization ribbon variant on [baseEntityId] (must be invoked on the UI thread).
+     * Same domain rules as clicking the specialization tool on that entity; does not change the active canvas tool.
+     */
+    val onApplyConceptualSpecializationAtTab: (
+        tabIndex: Int,
+        baseEntityId: Int,
+        variant: ConceptualSpecializationToolVariant,
     ) -> McpProceduralToolApplyOutcome,
     /**
      * Runs the same conceptual search as the **Localizar** dialog on [tabIndex] (must be invoked on the UI thread).

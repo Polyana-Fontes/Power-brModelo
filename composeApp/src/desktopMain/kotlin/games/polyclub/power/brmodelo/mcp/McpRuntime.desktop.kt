@@ -26,6 +26,7 @@ import games.polyclub.power.brmodelo.domain.ConceptualSearchHit
 import games.polyclub.power.brmodelo.domain.ConceptualSearchOutcome
 import games.polyclub.power.brmodelo.domain.ConceptualSearchTextScope
 import games.polyclub.power.brmodelo.domain.ConceptualSearchTypeFilters
+import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolVariant
 import games.polyclub.power.brmodelo.domain.ElementPosition
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaXmlSerializer
 import io.modelcontextprotocol.json.McpJsonDefaults
@@ -1026,6 +1027,11 @@ internal actual class McpRuntime {
         val relArrow = """"arrowDirectionCode":{"type":"integer","minimum":0,"maximum":8},"showName":{"type":"boolean"}"""
         val assocInner =
             """"relationshipName":{"type":"string"},"relationshipObservations":{"type":"string"},"relationshipDictionary":{"type":"string"}"""
+        val baseEntityIdProp = """"baseEntityId":{"type":"integer","minimum":0}"""
+        val specializationBasicSchema =
+            """{"type":"object","properties":{$tabUri,$baseEntityIdProp},"required":["baseEntityId"],"additionalProperties":false}"""
+        val specializationChildSchema =
+            """{"type":"object","properties":{$tabUri,$baseEntityIdProp,"exclusive":{"type":"boolean"}},"required":["baseEntityId","exclusive"],"additionalProperties":false}"""
         return listOf(
             syncTool(
                 jsonMapper,
@@ -1096,7 +1102,52 @@ internal actual class McpRuntime {
                 }
                 proceduralToolOutcomeToResult(outcome)
             },
+            syncTool(
+                jsonMapper,
+                name = McpProceduralToolsToolNames.APPLY_SPECIALIZATION_BASIC,
+                title = "Apply basic conceptual specialization on entity",
+                description = "Creates the optional specialization triangle under the given entity (same rules as the basic Especialização ribbon tool). " +
+                    "Does **not** switch the user's active canvas tool. " +
+                    "Returns JSON for the new specialization element. " +
+                    McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
+                schema = specializationBasicSchema,
+            ) { _, req ->
+                applySpecializationToolFromRequest(req, ConceptualSpecializationToolVariant.Basic)
+            },
+            syncTool(
+                jsonMapper,
+                name = McpProceduralToolsToolNames.APPLY_SPECIALIZATION_TREE,
+                title = "Apply conceptual specialization tree (with child entity)",
+                description = "Creates a specialization node and a connected child entity (small tree). Set `exclusive` to true for restricted specialization (ribbon A / EspRestrita), " +
+                    "or false for optional specialization (ribbon B / EspOpicional). " +
+                    "Does **not** switch the user's active canvas tool. " +
+                    "Returns JSON for the new specialization element. " +
+                    McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
+                schema = specializationChildSchema,
+            ) { _, req ->
+                val exclusive = boolArg(req, "exclusive")
+                    ?: return@syncTool err("exclusive_required")
+                val variant = if (exclusive) {
+                    ConceptualSpecializationToolVariant.ExclusiveWithEntityCreation
+                } else {
+                    ConceptualSpecializationToolVariant.NonExclusiveWithEntityCreation
+                }
+                applySpecializationToolFromRequest(req, variant)
+            },
         )
+    }
+
+    private fun applySpecializationToolFromRequest(
+        req: McpSchema.CallToolRequest,
+        variant: ConceptualSpecializationToolVariant,
+    ): McpSchema.CallToolResult {
+        val idx = tabIndexFromTabOrUriArgs(req) ?: return err("tabIndex_or_uri_required")
+        val baseId = intArg(req, "baseEntityId") ?: return err("baseEntityId_required")
+        val outcome = runOnEdt {
+            val b = bindingsRef.get() ?: return@runOnEdt McpProceduralToolApplyOutcome.err("bindings_unavailable")
+            b.onApplyConceptualSpecializationAtTab(idx, baseId, variant)
+        }
+        return proceduralToolOutcomeToResult(outcome)
     }
 
     private fun proceduralOverridesForEntity(req: McpSchema.CallToolRequest): ConceptualProceduralToolOverrides =
