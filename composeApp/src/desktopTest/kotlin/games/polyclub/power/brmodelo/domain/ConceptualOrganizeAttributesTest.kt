@@ -355,5 +355,8 @@ class ConceptualOrganizeAttributesTest {
         // Assert: W=100, n=3 → tam=25; sort by other Left: rel(40), A1(105), A2(125) → X = 125, 150, 175.
         assertEquals(150, (out.elements[3] as SchemaElement.Attribute).position.x)
         assertEquals(175, (out.elements[4] as SchemaElement.Attribute).position.x)
+        val y1 = (out.elements[3] as SchemaElement.Attribute).position.y
+        val y2 = (out.elements[4] as SchemaElement.Attribute).position.y
+        assertTrue(y1 > y2, "leftmost bottom attribute (smaller X) must sit lower on screen")
     }
 }

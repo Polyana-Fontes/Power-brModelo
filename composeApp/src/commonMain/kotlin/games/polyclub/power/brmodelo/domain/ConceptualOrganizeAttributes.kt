@@ -278,6 +278,30 @@ private fun ownerEdgeSharesNonAttributeOnPonto(
 }
 
 /**
+ * When Divida assigns [X] along the top (2) or bottom (4) edge, stack gaps (`Totais[p]` in mer.pas)
+ * must follow the **same left→right order** as the renderer's Divida sort (`OrdenadorTop` by `Left`):
+ * leftmost attribute gets the largest step below/above the entity so lines stay straight and the
+ * staircase matches the original Pascal layout (e.g. Hospede: PCD left & lowest, telefone right & highest).
+ *
+ * [pascalCode] is 2 (top) or 4 (bottom). Returns multipliers `n, n-1, …, 1` for `gv + distancia * m`.
+ */
+private fun verticalStackMultipliersAlongHorizontalEdgeOrganize(
+    linked: List<SchemaElement.Attribute>,
+    ownerPos: ElementPosition,
+    attributeIdFilter: Set<Int>?,
+    pascalCode: Int,
+): Map<Int, Int>? {
+    val onEdge = linked.filter { a ->
+        conceptualAttributeAttachPonto(ownerPos, a.position) == pascalCode &&
+            (attributeIdFilter == null || a.id in attributeIdFilter)
+    }
+    if (onEdge.isEmpty()) return null
+    val sorted = onEdge.sortedWith(compareBy<SchemaElement.Attribute> { it.position.x }.thenBy { it.id })
+    val n = sorted.size
+    return sorted.mapIndexed { idx, a -> a.id to (n - idx) }.toMap()
+}
+
+/**
  * Ordered list of canvas attributes linked to [ownerId] via [Connection] (attribute → owner),
  * in the same order as [ConceptualSchema.connections] (mirrors Pascal `FLigacoes` walk on the owner).
  */
@@ -442,7 +466,9 @@ private fun compositeBarAlreadyRelayoutedByOwnerTasks(
  * For [SchemaElement.Entity] and [SchemaElement.AssociativeEntity], when a canvas edge (`ponto`
  * 1–4) also carries **non-attribute** links (relationship, specialization, another entity, …),
  * attachment coordinates along that edge follow the same Divida pass as the renderer (same
- * `ponto`, same sort, same `tam`), mirroring Pascal reading `PT` from `TLigacao`. Edges with
+ * `ponto`, same sort, same `tam`), mirroring Pascal reading `PT` from `TLigacao`. For top/bottom
+ * edges, vertical stacking (`Totais` gaps) follows the same left→right order as Divida so the
+ * “staircase” matches the original tool when relationship legs share that edge. Edges with
  * **attributes only** keep the legacy `Width/(n+1)` / `Height/(n+1)` spacing in [linked] connection
  * order, matching `TBase.OrganizeAtributos` without reshuffling by `Top`/`Left`.
  *
@@ -490,6 +516,17 @@ private fun repositionDirectAttributesOfOwner(
     val divP2 = if (edgeDiv2) dividaAlongCoordinateByConnectionForOrganize(schema, ownerId, 2) else emptyMap()
     val divP3 = if (edgeDiv3) dividaAlongCoordinateByConnectionForOrganize(schema, ownerId, 3) else emptyMap()
     val divP4 = if (edgeDiv4) dividaAlongCoordinateByConnectionForOrganize(schema, ownerId, 4) else emptyMap()
+
+    val topStackMult = if (edgeDiv2) {
+        verticalStackMultipliersAlongHorizontalEdgeOrganize(linked, ownerPos, attributeIdFilter, pascalCode = 2)
+    } else {
+        null
+    }
+    val bottomStackMult = if (edgeDiv4) {
+        verticalStackMultipliersAlongHorizontalEdgeOrganize(linked, ownerPos, attributeIdFilter, pascalCode = 4)
+    } else {
+        null
+    }
 
     var c1 = 0
     var c3 = 0
@@ -547,8 +584,14 @@ private fun repositionDirectAttributesOfOwner(
                         ownerPos.x + tam * c2h
                     }
                 }
-                val y = ownerPos.y - (gv + distancia * tb2)
-                tb2--
+                val y = if (edgeDiv2 && topStackMult != null) {
+                    val m = topStackMult.getValue(a.id)
+                    ownerPos.y - (gv + distancia * m)
+                } else {
+                    val yi = ownerPos.y - (gv + distancia * tb2)
+                    tb2--
+                    yi
+                }
                 ElementPosition(px, y, ap.width, ap.height)
             }
             4 -> {
@@ -561,8 +604,14 @@ private fun repositionDirectAttributesOfOwner(
                         ownerPos.x + tam * c4h
                     }
                 }
-                val y = ownerPos.y + ownerPos.height + (gv + distancia * tb4)
-                tb4--
+                val y = if (edgeDiv4 && bottomStackMult != null) {
+                    val m = bottomStackMult.getValue(a.id)
+                    ownerPos.y + ownerPos.height + (gv + distancia * m)
+                } else {
+                    val yi = ownerPos.y + ownerPos.height + (gv + distancia * tb4)
+                    tb4--
+                    yi
+                }
                 ElementPosition(px, y, ap.width, ap.height)
             }
             else -> continue
