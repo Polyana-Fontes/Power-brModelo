@@ -1359,7 +1359,7 @@ private fun processLinkObjectsTap(
             when (val r = validateAndBuildConceptualLink(schema, toolState.first, pick)) {
                 is ConceptualLinkValidationResult.Ok -> {
                     val beforeConnIds = schema.connections.map { it.id }.toSet()
-                    var committed = r.schema
+                    var committed = r.schema.withFloatingCardinalityLayoutForgotten()
                     for (conn in committed.connections.filter { it.id !in beforeConnIds }) {
                         val enriched =
                             enrichConnectionWithInitialCardinalityPosition(committed, conn, textMeasurer)
@@ -1369,6 +1369,7 @@ private fun processLinkObjectsTap(
                             },
                         )
                     }
+                    committed = committed.withRecalculatedFloatingCardinalityPositions(textMeasurer = textMeasurer)
                     onSchemaCommit(committed)
                     onSelectionChange(CanvasSelection.None)
                     onToolChange(ConceptualCanvasTool.LinkObjects.AwaitingFirst)
@@ -1398,7 +1399,7 @@ private fun processAutoSelfRelationshipTap(
     when (val r = validateAndBuildConceptualLink(schema, pick, pick, schemaPoint)) {
         is ConceptualLinkValidationResult.Ok -> {
             val beforeConnIds = schema.connections.map { it.id }.toSet()
-            var committed = r.schema
+            var committed = r.schema.withFloatingCardinalityLayoutForgotten()
             for (conn in committed.connections.filter { it.id !in beforeConnIds }) {
                 val enriched =
                     enrichConnectionWithInitialCardinalityPosition(committed, conn, textMeasurer)
@@ -1408,6 +1409,7 @@ private fun processAutoSelfRelationshipTap(
                     },
                 )
             }
+            committed = committed.withRecalculatedFloatingCardinalityPositions(textMeasurer = textMeasurer)
             onSchemaCommit(committed)
             val newSelfRel = committed.selfRelationships.singleOrNull { it.id !in schema.elements }
             if (newSelfRel != null) {

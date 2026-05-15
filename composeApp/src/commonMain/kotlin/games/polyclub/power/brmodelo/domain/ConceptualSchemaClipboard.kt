@@ -396,8 +396,9 @@ private fun ConceptualSchema.withDedupedConceptualSchemaElementNames(renameOnlyI
                 el.copy(name = nn)
             }
             is SchemaElement.Attribute -> {
+                val ownerId = el.ownerId
                 val nn = disambiguateName(el.name) { cand ->
-                    s.attributes.any { it.name == cand && it.id != id }
+                    s.attributes.any { it.ownerId == ownerId && it.name == cand && it.id != id }
                 }
                 el.copy(
                     name = nn,

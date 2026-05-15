@@ -179,6 +179,20 @@ class McpResourceUrisTest {
     }
 
     @Test
+    fun `tabIndexForModelResourceUri legacy model 0 is list index not session id`() {
+        // Arrange — legacy `brmodelo://model/{n}` without suffix is the n-th tab in the window, not `EditorTabSession.id`
+        val sessions = listOf(EditorTabSession.blank(100L), EditorTabSession.blank(200L))
+
+        // Act
+        val byLegacy = tabIndexForModelResourceUri("brmodelo://model/0", sessions)
+        val bySessionXml = tabIndexForModelResourceUri("brmodelo://model/200.xml", sessions)
+
+        // Assert
+        assertEquals(0, byLegacy)
+        assertEquals(1, bySessionXml)
+    }
+
+    @Test
     fun `mcpCreatedTabIndexAfterOpen picks new session index when appended`() {
         // Arrange
         val before = listOf(EditorTabSession.blank(1L))

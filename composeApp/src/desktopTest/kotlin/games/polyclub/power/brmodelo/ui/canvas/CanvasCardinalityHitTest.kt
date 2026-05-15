@@ -36,6 +36,7 @@ import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 private fun headlessTextMeasurer(): TextMeasurer {
@@ -185,5 +186,47 @@ class CanvasCardinalityHitTest {
         val pos = next.connections.single().cardinalityPosition!!
         assertEquals(160, pos.x)
         assertEquals(85, pos.y)
+    }
+
+    @Test
+    fun withRecalculatedFloatingCardinalityPositions_overwritesStaleFloatingCardinalityBox() {
+        // Arrange — two legs from one relationship; then corrupt the first leg's stored label (simulates stale geometry)
+        val tm = headlessTextMeasurer()
+        val rel = SchemaElement.Relationship(3, "R", ElementPosition(200, 40, 90, 55))
+        val e1 = SchemaElement.Entity(1, "A", ElementPosition(120, 200, 90, 55))
+        val e2 = SchemaElement.Entity(2, "B", ElementPosition(280, 200, 90, 55))
+        val base = ConceptualSchema(elements = mapOf(1 to e1, 2 to e2, 3 to rel), nextId = 50)
+
+        val ok1 = assertIs<ConceptualLinkValidationResult.Ok>(
+            validateAndBuildConceptualLink(base, ConceptualLinkPick(3), ConceptualLinkPick(1)),
+        )
+        val ids0 = base.connections.map { it.id }.toSet()
+        var s = ok1.schema
+        val nc1 = s.connections.single { it.id !in ids0 }
+        val c1e = enrichConnectionWithInitialCardinalityPosition(s, nc1, tm)
+        s = s.copy(connections = s.connections.map { if (it.id == nc1.id) c1e else it })
+
+        val ok2 = assertIs<ConceptualLinkValidationResult.Ok>(
+            validateAndBuildConceptualLink(s, ConceptualLinkPick(3), ConceptualLinkPick(2)),
+        )
+        val ids1 = s.connections.map { it.id }.toSet()
+        s = ok2.schema
+        val nc2 = s.connections.single { it.id !in ids1 }
+        val c2e = enrichConnectionWithInitialCardinalityPosition(s, nc2, tm)
+        s = s.copy(connections = s.connections.map { if (it.id == nc2.id) c2e else it })
+
+        val c1 = s.connections.first { it.elementIdB == 1 }
+        val good = checkNotNull(c1.cardinalityPosition)
+        val corrupted = good.copy(x = good.x + 500)
+        s = s.copy(connections = s.connections.map { if (it.id == c1.id) c1.copy(cardinalityPosition = corrupted) else it })
+
+        // Act
+        val sRecalc = s.withRecalculatedFloatingCardinalityPositions(textMeasurer = tm)
+        val c1After = sRecalc.connections.first { it.elementIdB == 1 }
+
+        // Assert
+        val expected = materializeCardinalityPositionForFixed(sRecalc, c1After, tm)!!
+        assertEquals(expected, c1After.cardinalityPosition)
+        assertNotEquals(corrupted, c1After.cardinalityPosition)
     }
 }

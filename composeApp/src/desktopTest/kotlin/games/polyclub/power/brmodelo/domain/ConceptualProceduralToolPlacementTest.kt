@@ -70,6 +70,50 @@ class ConceptualProceduralToolPlacementTest {
     }
 
     @Test
+    fun `allowDuplicateCanvasLabels permits duplicate entity display name`() {
+        // Arrange
+        val (s0, id0) = ConceptualSchema().placeConceptualItem(ConceptualPlacementKind.PlainEntity, 0, 0)
+        val ent0 = s0.elements[id0] as SchemaElement.Entity
+        val s1 = s0.withElement(ent0.copy(name = "Cliente"))
+
+        // Act
+        val r = s1.placeProceduralConceptualTool(
+            ConceptualProceduralToolKind.ENTITY,
+            100,
+            100,
+            overrides = ConceptualProceduralToolOverrides(name = "Cliente", allowDuplicateCanvasLabels = true),
+        )
+
+        // Assert
+        val ok = assertIs<ConceptualProceduralToolPlacementResult.Ok>(r)
+        assertEquals("Cliente", (ok.element as SchemaElement.Entity).name)
+    }
+
+    @Test
+    fun `allowDuplicateCanvasLabels permits duplicate inner relationship on associative`() {
+        // Arrange
+        val (s0, rid) = ConceptualSchema().placeConceptualItem(ConceptualPlacementKind.Relationship, 0, 0)
+        val rel = s0.elements[rid] as SchemaElement.Relationship
+        val s1 = s0.withElement(rel.copy(name = "Reserva"))
+
+        // Act
+        val r = s1.placeProceduralConceptualTool(
+            ConceptualProceduralToolKind.ASSOCIATIVE_ENTITY,
+            50,
+            50,
+            overrides = ConceptualProceduralToolOverrides(
+                relationshipName = "Reserva",
+                allowDuplicateCanvasLabels = true,
+            ),
+        )
+
+        // Assert
+        val ok = assertIs<ConceptualProceduralToolPlacementResult.Ok>(r)
+        val ae = ok.element as SchemaElement.AssociativeEntity
+        assertEquals("Reserva", ae.relationshipName)
+    }
+
+    @Test
     fun `invalid arrow code returns error`() {
         // Arrange
         val empty = ConceptualSchema()

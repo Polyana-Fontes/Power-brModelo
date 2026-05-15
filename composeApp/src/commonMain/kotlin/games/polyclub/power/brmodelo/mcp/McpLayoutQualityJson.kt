@@ -20,6 +20,8 @@ package games.polyclub.power.brmodelo.mcp
 
 import games.polyclub.power.brmodelo.domain.CONCEPTUAL_LAYOUT_TIGHT_CLEARANCE_MAX_PX
 import games.polyclub.power.brmodelo.domain.ConceptualLayoutQualityReport
+import games.polyclub.power.brmodelo.domain.ConceptualSchema
+import games.polyclub.power.brmodelo.domain.conceptualLayoutAgentSignals
 
 internal object McpLayoutQualityJson {
 
@@ -41,7 +43,10 @@ internal object McpLayoutQualityJson {
         return escaped
     }
 
-    fun layoutQualityObjectJson(report: ConceptualLayoutQualityReport): String {
+    fun layoutQualityObjectJson(report: ConceptualLayoutQualityReport, schema: ConceptualSchema? = null): String {
+        val signals = conceptualLayoutAgentSignals(report, schema)
+        val affectedJson = signals.affectedElementIds.joinToString(separator = ",")
+        val agentHintJson = signals.agentHint?.let { jsonString(it) } ?: "null"
         val overlaps = report.overlaps.joinToString(separator = ",") { p ->
             """{"elementIdA":${p.elementIdA},"elementIdB":${p.elementIdB}}"""
         }
@@ -59,6 +64,9 @@ internal object McpLayoutQualityJson {
             append(""""approximateConnectionRoutingNote":${jsonString(note)},""")
             append(""""tightClearanceThresholdPx":$CONCEPTUAL_LAYOUT_TIGHT_CLEARANCE_MAX_PX,""")
             append(""""hasAnyIssue":${report.hasAnyIssue},""")
+            append(""""hasBlockingOverlap":${signals.hasBlockingOverlap},""")
+            append(""""affectedElementIds":[$affectedJson],""")
+            append(""""agentHint":$agentHintJson,""")
             append(""""overlaps":[$overlaps],""")
             append(""""tightClearances":[$tight],""")
             append(""""lineCrossings":[$crossings]""")
@@ -70,9 +78,13 @@ internal object McpLayoutQualityJson {
      * Inserts a `layoutQuality` field immediately before the closing brace of the root JSON object.
      * Handles nested objects/arrays by tracking brace depth outside of string literals.
      */
-    fun mergeLayoutQualityIntoJsonObjectBody(body: String, report: ConceptualLayoutQualityReport): String {
+    fun mergeLayoutQualityIntoJsonObjectBody(
+        body: String,
+        report: ConceptualLayoutQualityReport,
+        schema: ConceptualSchema? = null,
+    ): String {
         val insertAt = indexOfRootClosingBrace(body)
-        val inner = layoutQualityObjectJson(report)
+        val inner = layoutQualityObjectJson(report, schema)
         return buildString {
             append(body, 0, insertAt)
             append(',')
@@ -118,6 +130,7 @@ internal object McpLayoutQualityJson {
         resourceUri: String,
         elementIdsScope: Set<Int>?,
         report: ConceptualLayoutQualityReport,
+        schema: ConceptualSchema? = null,
     ): String {
         val scopeJson = when {
             elementIdsScope == null -> "null"
@@ -126,7 +139,7 @@ internal object McpLayoutQualityJson {
         }
         return buildString {
             append("""{"ok":true,"resourceUri":${jsonString(resourceUri)},"elementIdsScope":$scopeJson,"layoutQuality":""")
-            append(layoutQualityObjectJson(report))
+            append(layoutQualityObjectJson(report, schema))
             append('}')
         }
     }

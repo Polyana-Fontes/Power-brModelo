@@ -50,6 +50,7 @@ internal object McpLinkObjectsToolArgs {
             labelItalic = boolFromAny(m["labelItalic"]),
             arrowDirectionCode = intFromAny(m["arrowDirectionCode"]),
             showName = boolFromAny(m["showName"]),
+            allowDuplicateCanvasLabels = boolFromAny(m["allowDuplicateCanvasLabels"]),
         )
         return if (o == ConceptualProceduralToolOverrides()) null else o
     }

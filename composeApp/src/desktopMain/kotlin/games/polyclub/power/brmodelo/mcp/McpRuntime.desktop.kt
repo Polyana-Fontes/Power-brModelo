@@ -19,6 +19,7 @@
 package games.polyclub.power.brmodelo.mcp
 
 import games.polyclub.power.brmodelo.BuildInfo
+import games.polyclub.power.brmodelo.domain.ConceptualLayoutQualityReport
 import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolKind
 import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolOverrides
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
@@ -84,6 +85,8 @@ private data class McpTabSelectionChange(
     val createdResourceUriJpeg: String,
     val selectedResourceUriPng: String,
     val selectedResourceUriJpeg: String,
+    val createdSessionId: Long,
+    val selectedSessionId: Long,
 )
 
 internal actual class McpRuntime {
@@ -285,6 +288,32 @@ internal actual class McpRuntime {
             createdResourceUriJpeg = modelResourceJpgUriForSession(createdId),
             selectedResourceUriPng = modelResourcePngUriForSession(selectedId),
             selectedResourceUriJpeg = modelResourceJpgUriForSession(selectedId),
+            createdSessionId = createdId,
+            selectedSessionId = selectedId,
+        )
+    }
+
+    /**
+     * New blank tab: [createdSessionId] comes from [McpUiBindings.onAddBlankTab]. Do **not** require a second
+     * [McpUiBindings.current] snapshot to list the new id: Compose may not have refreshed the bindings closure
+     * on the same EDT tick, so `after.sessions` could still omit the appended tab even though it exists in the app.
+     */
+    private fun mcpTabSelectionChangeForNewConceptualTab(
+        before: McpTabSnapshot,
+        createdSessionId: Long,
+    ): McpTabSelectionChange? {
+        if (before.sessions.isEmpty()) return null
+        val selIdx = before.selectedIndex.coerceIn(0, before.sessions.lastIndex)
+        val selectedSession = before.sessions[selIdx]
+        return McpTabSelectionChange(
+            createdResourceUri = modelResourceUriForSession(createdSessionId),
+            selectedResourceUri = modelResourceUriForSession(selectedSession.id),
+            createdResourceUriPng = modelResourcePngUriForSession(createdSessionId),
+            createdResourceUriJpeg = modelResourceJpgUriForSession(createdSessionId),
+            selectedResourceUriPng = modelResourcePngUriForSession(selectedSession.id),
+            selectedResourceUriJpeg = modelResourceJpgUriForSession(selectedSession.id),
+            createdSessionId = createdSessionId,
+            selectedSessionId = selectedSession.id,
         )
     }
 
@@ -620,6 +649,7 @@ internal actual class McpRuntime {
                 title = "List open tabs",
                 description = "Returns JSON for each open editor tab (stable session id, title, dirty, filePath, resourceUri for MER XML, " +
                     "resourceUriPng and resourceUriJpeg for raster previews matching **Exportar em PNG/JPEG**) and selectedResourceUri for the focused tab's MER XML. " +
+                    "Root fields `selectedTabIndex` (0-based) and `selectedTabSessionId` identify the tab that is **currently selected in the editor UI**; each row includes `tabIndex` and `isSelected`. " +
                     "Read PNG/JPEG via MCP resources/read (base64 blob). " +
                     "Static DTD and example MER resources are listed only in MCP server instructions (not tab rows).",
                 schema = """{"type":"object","properties":{},"additionalProperties":false}""",
@@ -627,15 +657,22 @@ internal actual class McpRuntime {
                 val json = runOnEdt {
                     val b = bindingsRef.get() ?: return@runOnEdt """{"error":"bindings_unavailable"}"""
                     val snap = b.current()
-                    val rows = snap.sessions.map { tab ->
+                    if (snap.sessions.isEmpty()) {
+                        return@runOnEdt """{"selectedTabIndex":-1,"selectedTabSessionId":null,"selectedResourceUri":null,"tabs":[]}"""
+                    }
+                    val selIdx = snap.selectedIndex.coerceIn(0, snap.sessions.lastIndex)
+                    val selectedSessionId = snap.sessions.getOrNull(selIdx)?.id
+                    val rows = snap.sessions.mapIndexed { tabIndex, tab ->
                         val uri = modelResourceUriForSession(tab.id)
                         val png = modelResourcePngUriForSession(tab.id)
                         val jpg = modelResourceJpgUriForSession(tab.id)
-                        """{"id":${tab.id},"title":${jsonString(tab.displayTitle())},"dirty":${tab.hasUnsavedChanges()},"filePath":${jsonString(tab.schema.filePath)},"resourceUri":${jsonString(uri)},"resourceUriPng":${jsonString(png)},"resourceUriJpeg":${jsonString(jpg)}}"""
+                        val isSel = tabIndex == selIdx
+                        """{"tabIndex":$tabIndex,"isSelected":$isSel,"id":${tab.id},"title":${jsonString(tab.displayTitle())},"dirty":${tab.hasUnsavedChanges()},"filePath":${jsonString(tab.schema.filePath)},"resourceUri":${jsonString(uri)},"resourceUriPng":${jsonString(png)},"resourceUriJpeg":${jsonString(jpg)}}"""
                     }
-                    val selectedUri = snap.sessions.getOrNull(snap.selectedIndex)?.let { modelResourceUriForSession(it.id) }
+                    val selectedUri = snap.sessions.getOrNull(selIdx)?.let { modelResourceUriForSession(it.id) }
                     val selectedJson = selectedUri?.let { jsonString(it) } ?: "null"
-                    """{"selectedResourceUri":$selectedJson,"tabs":[${rows.joinToString(",")}]}"""
+                    val selectedIdJson = selectedSessionId?.toString() ?: "null"
+                    """{"selectedTabIndex":$selIdx,"selectedTabSessionId":$selectedIdJson,"selectedResourceUri":$selectedJson,"tabs":[${rows.joinToString(",")}]}"""
                 }
                 okText(json)
             },
@@ -699,9 +736,10 @@ internal actual class McpRuntime {
                 jsonMapper,
                 name = McpTabToolNames.NEW_CONCEPTUAL_MODEL,
                 title = "New conceptual model tab",
-                description = "Opens a new empty conceptual model tab and selects it. " +
+                description = "Opens a new empty conceptual model tab **without** switching the editor's focused tab (the user's current diagram stays selected in the UI). " +
                     "On success the JSON includes createdResourceUri (.xml), createdResourceUriPng, createdResourceUriJpeg " +
-                    "for the new tab, plus selectedResourceUri, selectedResourceUriPng, and selectedResourceUriJpeg for the tab that is selected after the call. " +
+                    "for the new tab, plus selectedResourceUri, selectedResourceUriPng, and selectedResourceUriJpeg for the tab that **remains** focused after the call (usually the one the user was on). " +
+                    "Use createdResourceUri for subsequent MCP tools targeting the new diagram. " +
                     "Raster URIs match **Exportar em PNG/JPEG**; read them with resources/read. " +
                     "Resource URIs use the stable tab session id so they stay valid if other tabs are closed. " +
                     McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
@@ -710,9 +748,8 @@ internal actual class McpRuntime {
                 val change = runOnEdt {
                     val b = bindingsRef.get() ?: return@runOnEdt null
                     val before = b.current()
-                    b.onAddBlankTab()
-                    val after = b.current()
-                    mcpTabSelectionChangeFromBeforeAfter(before, after)
+                    val createdSessionId = b.onAddBlankTab()
+                    mcpTabSelectionChangeForNewConceptualTab(before, createdSessionId)
                 } ?: return@syncTool err("bindings_unavailable")
                 okText(tabSelectionChangeSuccessJson(change))
             },
@@ -833,7 +870,7 @@ internal actual class McpRuntime {
                     val rUri = jsonString(modelResourceUriForSession(tab.id))
                     val schema = b.current().schemaForTab(idx) ?: return@runOnEdt """{"ok":true,"resourceUri":$rUri}"""
                     val report = analyzeConceptualLayoutQuality(schema, null)
-                    McpLayoutQualityJson.mergeLayoutQualityIntoJsonObjectBody("""{"ok":true,"resourceUri":$rUri}""", report)
+                    McpLayoutQualityJson.mergeLayoutQualityIntoJsonObjectBody("""{"ok":true,"resourceUri":$rUri}""", report, schema)
                 }
                 okText(bodyJson)
             },
@@ -874,6 +911,7 @@ internal actual class McpRuntime {
                     McpLayoutQualityJson.mergeLayoutQualityIntoJsonObjectBody(
                         """{"ok":true,"resourceUri":$rUri,"replaceAll":$replaceAll}""",
                         report,
+                        schema,
                     )
                 }
                 okText(bodyJson)
@@ -918,7 +956,7 @@ internal actual class McpRuntime {
                 description = "Translates canvas elements by `deltaX`/`deltaY` in schema pixels (same space as sidebar position fields). " +
                     "When `moveOwnedCanvasAttributes` is true (default), every on-canvas attribute whose owner is among the moved elements is included automatically, preserving relative placement like dragging the owner on the canvas. " +
                     "Cardinality labels follow the same fixed vs floating rules as canvas drag (floating recomputed from geometry; fixed boxes shift with their link endpoints). " +
-                    "Success JSON merges `layoutQuality` (overlaps, tight clearances, approximate link crossings) scoped to the moved element ids. One undo step. " +
+                    "Success JSON merges `layoutQuality` (overlaps, tight clearances, approximate link crossings, plus `hasBlockingOverlap` / `agentHint`) scoped to the moved element ids. One undo step. " +
                     McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
                 schema = moveCanvasSchema,
             ) { _, req ->
@@ -940,6 +978,7 @@ internal actual class McpRuntime {
                 name = McpOperationToolNames.LAYOUT_QUALITY,
                 title = "Layout overlap and crossing diagnostics",
                 description = "Returns geometric hints for MCP agents: axis-aligned element box overlaps, uncomfortably small edge-to-edge gaps (see tightClearanceThresholdPx), and approximate connection-segment crossings (straight center-to-center segments — compare with tab PNG/JPEG resources or export subset raster for real routing). " +
+                    "The `layoutQuality` object also includes `hasBlockingOverlap`, `affectedElementIds`, and optional `agentHint` (`spacing` / `routing`) for quick automation checks. " +
                     "Pass `resourceUri` from tabs__list_open. Optional elementIds narrows reported issues to pairs/crossings touching those ids; omit or [] scans the whole diagram. " +
                     McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
                 schema = layoutQualitySchema,
@@ -958,6 +997,7 @@ internal actual class McpRuntime {
                         modelResourceUriForSession(snap.sessions[idx].id),
                         scope,
                         report,
+                        schema,
                     )
                 }
                 okText(json)
@@ -1460,6 +1500,8 @@ internal actual class McpRuntime {
         val tabUri = TAB_TOOL_RESOURCE_URI_SCHEMA_PROP
         val xy = """"x":{"type":"integer"},"y":{"type":"integer"}"""
         val textFields = """"name":{"type":"string"},"observations":{"type":"string"},"dictionary":{"type":"string"}"""
+        val allowDuplicateCanvasLabelsProp =
+            """"allowDuplicateCanvasLabels":{"type":"boolean","description":"When true, explicit name overrides may match an existing entity-like or relationship-style label (default false returns name_conflict / relationship_name_conflict)."}"""
         val labelStyle =
             """"labelColorArgb":{"type":"integer"},"labelBold":{"type":"boolean"},"labelItalic":{"type":"boolean"}"""
         val relArrow = """"arrowDirectionCode":{"type":"integer","minimum":0,"maximum":8},"showName":{"type":"boolean"}"""
@@ -1477,7 +1519,7 @@ internal actual class McpRuntime {
         val linkEndPickSchema =
             """{"type":"object","properties":{"elementId":{"type":"integer","minimum":0},"associativeOuterEntitySide":{"type":"boolean","description":"True when the pick is the outer entity rectangle of an associative entity."}},"required":["elementId"],"additionalProperties":false}"""
         val relationshipOverridesSchema =
-            """{"type":"object","properties":{$textFields,$labelStyle,$relArrow},"additionalProperties":false}"""
+            """{"type":"object","properties":{$textFields,$labelStyle,$relArrow,$allowDuplicateCanvasLabelsProp},"additionalProperties":false}"""
         val connectionPatchSchema =
             """{"type":"object","properties":{"cardinalityCode":{"type":"integer","minimum":1,"maximum":4},"showCardinality":{"type":"boolean"},"orientationCode":{"type":"integer","minimum":0,"maximum":3},"cardinalityFixed":{"type":"boolean"},"isWeak":{"type":"boolean"},"cardinalityRole":{"type":"string"},"cardinalityObservations":{"type":"string"},"cardinalityDictionary":{"type":"string"},"cardinalityAutoSize":{"type":"boolean"}},"additionalProperties":false}"""
         val attachSideForAutoSelf =
@@ -1487,8 +1529,10 @@ internal actual class McpRuntime {
             """"associativeOuterEntitySide":{"type":"boolean","description":"True when entityElementId is an associative entity and the pick is its outer rectangle."}"""
         val autoSelfRelationshipSchema =
             """{"type":"object","properties":{$tabUri,$entityElementIdProp,$associativeOuterForAutoSelf,$attachSideForAutoSelf,"relationshipOverrides":$relationshipOverridesSchema,"connection":$connectionPatchSchema,"connectionOverrides":{"type":"array","items":$connectionPatchSchema}},"required":["entityElementId"],"additionalProperties":false}"""
+        val dryRunForLinkObjects =
+            """"dryRun":{"type":"boolean","description":"Optional (default false). When true, validate and return preview JSON (including projected layoutQuality) without committing the tab — no undo entry."}"""
         val linkObjectsSchema =
-            """{"type":"object","properties":{$tabUri,"endA":$linkEndPickSchema,"endB":$linkEndPickSchema,"relationshipOverrides":$relationshipOverridesSchema,"connection":$connectionPatchSchema,"connectionOverrides":{"type":"array","items":$connectionPatchSchema}},"required":["endA","endB"],"additionalProperties":false}"""
+            """{"type":"object","properties":{$tabUri,"endA":$linkEndPickSchema,"endB":$linkEndPickSchema,"relationshipOverrides":$relationshipOverridesSchema,"connection":$connectionPatchSchema,"connectionOverrides":{"type":"array","items":$connectionPatchSchema},$dryRunForLinkObjects},"required":["endA","endB"],"additionalProperties":false}"""
         return listOf(
             syncTool(
                 jsonMapper,
@@ -1496,10 +1540,11 @@ internal actual class McpRuntime {
                 title = "Place conceptual entity (procedural)",
                 description = "Inserts a plain entity at (x,y) using the same allocation rules as the Entity canvas tool, " +
                     "then optionally overrides name, notes, dictionary, weak flag, and label style. " +
+                    "Optional `allowDuplicateCanvasLabels` true allows an explicit `name` to match an existing entity-like label (default false returns `name_conflict`). " +
                     "Does **not** switch the user's active ribbon/canvas tool. " +
                     "Returns the placed element as JSON (id, geometry, names, style). " +
                     McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
-                schema = """{"type":"object","properties":{$tabUri,$xy,$textFields,"isWeak":{"type":"boolean"},$labelStyle},"additionalProperties":false}""",
+                schema = """{"type":"object","properties":{$tabUri,$xy,$textFields,$allowDuplicateCanvasLabelsProp,"isWeak":{"type":"boolean"},$labelStyle},"additionalProperties":false}""",
             ) { _, req ->
                 val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
                 val x = intArg(req, "x") ?: 64
@@ -1517,10 +1562,11 @@ internal actual class McpRuntime {
                 title = "Place conceptual relationship (procedural)",
                 description = "Inserts a relationship diamond at (x,y) with the same defaults as the Relationship canvas tool, " +
                     "then optionally overrides name, notes, dictionary, arrow direction (0–8, see domain ArrowDirection), and showName. " +
+                    "Optional `allowDuplicateCanvasLabels` true allows an explicit `name` to match an existing relationship-style label (default false returns `name_conflict`). " +
                     "Does **not** switch the user's active ribbon/canvas tool. " +
                     "Returns the placed element as JSON. " +
                     McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
-                schema = """{"type":"object","properties":{$tabUri,$xy,$textFields,$relArrow},"additionalProperties":false}""",
+                schema = """{"type":"object","properties":{$tabUri,$xy,$textFields,$allowDuplicateCanvasLabelsProp,$relArrow},"additionalProperties":false}""",
             ) { _, req ->
                 val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
                 val x = intArg(req, "x") ?: 64
@@ -1538,10 +1584,13 @@ internal actual class McpRuntime {
                 title = "Place conceptual associative entity (procedural)",
                 description = "Inserts an associative entity at (x,y) with auto-generated outer and inner relationship names, " +
                     "then optionally overrides outer/inner names, notes, dictionaries, and inner arrow direction (0–8). " +
+                    "The `relationshipName` argument (when overridden) is the **inner** diamond label (Pascal \"realiza\" semantics); " +
+                    "external links from other entities may still route through a **separate** intermediate relationship when the editor/domain requires it — same as human **Ligar Objetos** behaviour. " +
+                    "Optional `allowDuplicateCanvasLabels` true allows explicit outer `name` and/or inner `relationshipName` to match existing canvas labels (default false returns `name_conflict` / `relationship_name_conflict`). " +
                     "Does **not** switch the user's active ribbon/canvas tool. " +
                     "Returns the placed element as JSON. " +
                     McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
-                schema = """{"type":"object","properties":{$tabUri,$xy,$textFields,$assocInner,$labelStyle,"arrowDirectionCode":{"type":"integer","minimum":0,"maximum":8}},"additionalProperties":false}""",
+                schema = """{"type":"object","properties":{$tabUri,$xy,$textFields,$allowDuplicateCanvasLabelsProp,$assocInner,$labelStyle,"arrowDirectionCode":{"type":"integer","minimum":0,"maximum":8}},"additionalProperties":false}""",
             ) { _, req ->
                 val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
                 val x = intArg(req, "x") ?: 64
@@ -1590,12 +1639,16 @@ internal actual class McpRuntime {
                 description = "Completes one conceptual **Ligar Objetos** action in a single call: provide two diagram endpoints (endA/endB) as element picks, " +
                     "mirroring two clicks with the editor link tool. Supported pairs follow the same domain rules as the canvas (entity↔relationship, entity↔entity, specialization↔plain entity, etc.). " +
                     "Linking **two entities** creates a new relationship diamond between them and two legs automatically (same as the ribbon). " +
-                    "Optional `relationshipOverrides` adjusts the new relationship or self-relationship (name, notes, arrow, showName where applicable). " +
+                    "**Entity ↔ outer rectangle of an associative entity** follows the same Pascal/editor rules as clicks: the model may introduce an **intermediate** relationship diamond with an **auto-generated** name — " +
+                    "this path does **not** rename or reuse the associative inner diamond (`relationshipName`); treat `linkPattern`=`entity_associative_outer_bridge` as a hint that an extra diamond may exist and may need renaming in the inspector. " +
+                    "**Inner associative / \"miolo\" participation** (entity ↔ inner diamond of an associative entity, like a human click on the inner relationship): set `\"associativeOuterEntitySide\": false` on that pick's `elementId` for the associative entity (use `true` only for the outer entity rectangle). " +
+                    "Optional `relationshipOverrides` adjusts any **new** relationship or self-relationship the domain creates (name, notes, arrow, showName, `allowDuplicateCanvasLabels` when you intentionally reuse a canvas label); they do **not** retarget legs onto the inner associative diamond when the editor materialized a separate bridge relationship. " +
                     "Optional `connection` (single leg) or `connectionOverrides` (array) adjusts new connection cardinalities and line metadata; " +
                     "when two new legs are created (entity–entity case), send two patches in order **[endA leg, endB leg]** (ascending new connection id matches this order). " +
                     "Specialization↔entity accepts a single `connection` patch; only **plain** entities may connect to a specialization triangle (not associative outers). " +
                     "The editor may promote an optional specialization to restricted when a third subtype link is added — see domain behaviour. " +
-                    "Returns `newConnections`, and `newRelationship` / `newSelfRelationship` JSON when those elements were created. " +
+                    "Returns `newConnections`, `newRelationship` / `newSelfRelationship` JSON when those elements were created, plus `linkPattern` (structural hint for agents). " +
+                    "Optional `dryRun` true validates and returns the same JSON shape plus `wouldCreate` **without** mutating the tab (no undo step); merged `layoutQuality` reflects the **would-be** geometry. " +
                     "Does **not** switch the user's active canvas tool. " +
                     McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
                 schema = linkObjectsSchema,
@@ -1614,9 +1667,10 @@ internal actual class McpRuntime {
                 if (connErr != null) {
                     return@syncTool err(connErr)
                 }
+                val dryRun = boolArg(req, "dryRun") == true
                 val outcome = runOnEdt {
                     val b = bindingsRef.get() ?: return@runOnEdt McpProceduralToolApplyOutcome.err("bindings_unavailable")
-                    b.onLinkConceptualObjectsAtTab(idx, endA, endB, relO, connList, null)
+                    b.onLinkConceptualObjectsAtTab(idx, endA, endB, relO, connList, null, dryRun)
                 }
                 proceduralToolOutcomeToResult(outcome)
             },
@@ -1655,7 +1709,7 @@ internal actual class McpRuntime {
                     val ownerEl = snap.sessions[idx].schema.elements[entityId]
                         ?: return@runOnEdt McpProceduralToolApplyOutcome.err("element_not_found")
                     val click = sideOpt?.let { syntheticClickOnOwnerSideCenter(ownerEl.position, it) }
-                    b.onLinkConceptualObjectsAtTab(idx, pick, pick, relO, connList, click)
+                    b.onLinkConceptualObjectsAtTab(idx, pick, pick, relO, connList, click, false)
                 }
                 proceduralToolOutcomeToResult(outcome)
             },
@@ -2018,6 +2072,7 @@ internal actual class McpRuntime {
             labelColorArgb = optionalIntArg(req, "labelColorArgb"),
             labelBold = optionalBoolArg(req, "labelBold"),
             labelItalic = optionalBoolArg(req, "labelItalic"),
+            allowDuplicateCanvasLabels = optionalBoolArg(req, "allowDuplicateCanvasLabels"),
         )
 
     private fun proceduralOverridesForRelationship(req: McpSchema.CallToolRequest): ConceptualProceduralToolOverrides =
@@ -2030,6 +2085,7 @@ internal actual class McpRuntime {
             labelItalic = optionalBoolArg(req, "labelItalic"),
             arrowDirectionCode = optionalIntArg(req, "arrowDirectionCode"),
             showName = optionalBoolArg(req, "showName"),
+            allowDuplicateCanvasLabels = optionalBoolArg(req, "allowDuplicateCanvasLabels"),
         )
 
     private fun proceduralOverridesForAssociative(req: McpSchema.CallToolRequest): ConceptualProceduralToolOverrides =
@@ -2044,7 +2100,57 @@ internal actual class McpRuntime {
             labelBold = optionalBoolArg(req, "labelBold"),
             labelItalic = optionalBoolArg(req, "labelItalic"),
             arrowDirectionCode = optionalIntArg(req, "arrowDirectionCode"),
+            allowDuplicateCanvasLabels = optionalBoolArg(req, "allowDuplicateCanvasLabels"),
         )
+
+    private data class LayoutQualityMergeBundle(
+        val report: ConceptualLayoutQualityReport,
+        val schema: ConceptualSchema?,
+    )
+
+    private fun layoutQualityMergeBundle(outcome: McpProceduralToolApplyOutcome): LayoutQualityMergeBundle? {
+        val scan = outcome.layoutQualityScan ?: return null
+        scan.reportOverride?.let { ro ->
+            return LayoutQualityMergeBundle(ro, scan.schemaForLayoutQualityJson)
+        }
+        return runOnEdt {
+            val b = bindingsRef.get() ?: return@runOnEdt null
+            val schema = b.current().schemaForTab(scan.tabIndex) ?: return@runOnEdt null
+            LayoutQualityMergeBundle(
+                analyzeConceptualLayoutQuality(schema, scan.touchedElementIds),
+                schema,
+            )
+        }
+    }
+
+    private fun proceduralToolOutcomeToResult(outcome: McpProceduralToolApplyOutcome): McpSchema.CallToolResult {
+        val errMsg = outcome.error
+        if (errMsg != null) {
+            return err(errMsg)
+        }
+        val ej = outcome.elementJson ?: return err("internal_no_element_json")
+        val lqBundle = layoutQualityMergeBundle(outcome)
+        if (outcome.isFullResponseJson) {
+            val text = if (lqBundle != null) {
+                McpLayoutQualityJson.mergeLayoutQualityIntoJsonObjectBody(ej, lqBundle.report, lqBundle.schema)
+            } else {
+                ej
+            }
+            return okText(text)
+        }
+        val resourceUriJson = runOnEdt {
+            val b = bindingsRef.get() ?: return@runOnEdt null
+            val tab = b.current().sessions.getOrNull(outcome.tabIndex) ?: return@runOnEdt null
+            jsonString(modelResourceUriForSession(tab.id))
+        } ?: "null"
+        val text = if (lqBundle != null) {
+            val lq = McpLayoutQualityJson.layoutQualityObjectJson(lqBundle.report, lqBundle.schema)
+            """{"ok":true,"resourceUri":$resourceUriJson,"element":$ej,"layoutQuality":$lq}"""
+        } else {
+            """{"ok":true,"resourceUri":$resourceUriJson,"element":$ej}"""
+        }
+        return okText(text)
+    }
 
     private fun proceduralOverridesForObservation(req: McpSchema.CallToolRequest): ConceptualProceduralToolOverrides =
         ConceptualProceduralToolOverrides(
@@ -2061,41 +2167,6 @@ internal actual class McpRuntime {
             annotationWidth = optionalIntArg(req, "width"),
             annotationHeight = optionalIntArg(req, "height"),
         )
-
-    private fun proceduralToolOutcomeToResult(outcome: McpProceduralToolApplyOutcome): McpSchema.CallToolResult {
-        val errMsg = outcome.error
-        if (errMsg != null) {
-            return err(errMsg)
-        }
-        val ej = outcome.elementJson ?: return err("internal_no_element_json")
-        val report = outcome.layoutQualityScan?.let { scan ->
-            runOnEdt {
-                val b = bindingsRef.get() ?: return@runOnEdt null
-                val schema = b.current().schemaForTab(scan.tabIndex) ?: return@runOnEdt null
-                analyzeConceptualLayoutQuality(schema, scan.touchedElementIds)
-            }
-        }
-        if (outcome.isFullResponseJson) {
-            val text = if (report != null) {
-                McpLayoutQualityJson.mergeLayoutQualityIntoJsonObjectBody(ej, report)
-            } else {
-                ej
-            }
-            return okText(text)
-        }
-        val resourceUriJson = runOnEdt {
-            val b = bindingsRef.get() ?: return@runOnEdt null
-            val tab = b.current().sessions.getOrNull(outcome.tabIndex) ?: return@runOnEdt null
-            jsonString(modelResourceUriForSession(tab.id))
-        } ?: "null"
-        val text = if (report != null) {
-            val lq = McpLayoutQualityJson.layoutQualityObjectJson(report)
-            """{"ok":true,"resourceUri":$resourceUriJson,"element":$ej,"layoutQuality":$lq}"""
-        } else {
-            """{"ok":true,"resourceUri":$resourceUriJson,"element":$ej}"""
-        }
-        return okText(text)
-    }
 
     private fun optionalKeyedTrimmedString(req: McpSchema.CallToolRequest, key: String): String? {
         if (!req.arguments().containsKey(key)) return null
@@ -2206,7 +2277,7 @@ internal actual class McpRuntime {
     ): String {
         return buildString {
                 append(
-                """{"ok":true,"createdResourceUri":${jsonString(change.createdResourceUri)},"selectedResourceUri":${jsonString(change.selectedResourceUri)},"createdResourceUriPng":${jsonString(change.createdResourceUriPng)},"createdResourceUriJpeg":${jsonString(change.createdResourceUriJpeg)},"selectedResourceUriPng":${jsonString(change.selectedResourceUriPng)},"selectedResourceUriJpeg":${jsonString(change.selectedResourceUriJpeg)}""",
+                """{"ok":true,"createdResourceUri":${jsonString(change.createdResourceUri)},"selectedResourceUri":${jsonString(change.selectedResourceUri)},"createdResourceUriPng":${jsonString(change.createdResourceUriPng)},"createdResourceUriJpeg":${jsonString(change.createdResourceUriJpeg)},"selectedResourceUriPng":${jsonString(change.selectedResourceUriPng)},"selectedResourceUriJpeg":${jsonString(change.selectedResourceUriJpeg)},"createdSessionId":${change.createdSessionId},"selectedSessionId":${change.selectedSessionId}""",
             )
             if (extraFieldsJson.isNotEmpty()) {
                 append(',')

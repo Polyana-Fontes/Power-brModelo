@@ -26,6 +26,72 @@ import kotlin.test.assertTrue
 class ConceptualMcpAttributeDomainTest {
 
     @Test
+    fun `apply simple attribute allows same name on different owners`() {
+        // Arrange
+        val e1 = SchemaElement.Entity(1, "A", ElementPosition(0, 0, 100, 60))
+        val e2 = SchemaElement.Entity(2, "B", ElementPosition(200, 0, 100, 60))
+        val existing = SchemaElement.Attribute(
+            id = 3,
+            name = "nome",
+            position = ElementPosition(120, 20, 80, 24),
+            ownerId = 1,
+        )
+        val schema = ConceptualSchema(
+            elements = mapOf(1 to e1, 2 to e2, 3 to existing),
+            connections = listOf(
+                Connection(10, 3, 1, null, showCardinality = false, orientation = LineOrientation.VERTICAL),
+            ),
+            nextId = 20,
+        )
+
+        // Act
+        val r = applyConceptualSimpleAttributeTool(
+            schema,
+            ownerElementId = 2,
+            variant = ConceptualAttributeToolVariant.Basic,
+            attachSide = ConceptualAttributeAttachPonto.RIGHT,
+            overrides = ConceptualSimpleAttributePlacementOverrides(name = "nome"),
+        )
+
+        // Assert
+        val ok = assertIs<ConceptualAttributeToolResult.Ok>(r)
+        val added = ok.schema.elements[ok.newPrimaryAttributeId] as SchemaElement.Attribute
+        assertEquals("nome", added.name)
+        assertEquals(2, added.ownerId)
+    }
+
+    @Test
+    fun `apply simple attribute rejects duplicate name on same owner`() {
+        // Arrange
+        val e1 = SchemaElement.Entity(1, "A", ElementPosition(0, 0, 100, 60))
+        val existing = SchemaElement.Attribute(
+            id = 3,
+            name = "nome",
+            position = ElementPosition(120, 20, 80, 24),
+            ownerId = 1,
+        )
+        val schema = ConceptualSchema(
+            elements = mapOf(1 to e1, 3 to existing),
+            connections = listOf(
+                Connection(10, 3, 1, null, showCardinality = false, orientation = LineOrientation.VERTICAL),
+            ),
+            nextId = 20,
+        )
+
+        // Act
+        val r = applyConceptualSimpleAttributeTool(
+            schema,
+            ownerElementId = 1,
+            variant = ConceptualAttributeToolVariant.Basic,
+            attachSide = ConceptualAttributeAttachPonto.RIGHT,
+            overrides = ConceptualSimpleAttributePlacementOverrides(name = "nome"),
+        )
+
+        // Assert
+        assertIs<ConceptualAttributeToolResult.Error>(r)
+    }
+
+    @Test
     fun `preferred attach side picks edge with fewest attributes`() {
         // Arrange
         val ent = SchemaElement.Entity(

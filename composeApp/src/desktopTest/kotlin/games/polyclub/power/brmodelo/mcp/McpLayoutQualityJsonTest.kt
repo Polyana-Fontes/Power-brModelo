@@ -36,6 +36,8 @@ class McpLayoutQualityJsonTest {
         // Assert
         assertTrue(merged.contains("\"layoutQuality\":"))
         assertTrue(merged.contains("\"hasAnyIssue\":false"))
+        assertTrue(merged.contains("\"hasBlockingOverlap\":false"))
+        assertTrue(merged.contains("\"affectedElementIds\":[]"))
         assertTrue(merged.endsWith("}"))
     }
 }

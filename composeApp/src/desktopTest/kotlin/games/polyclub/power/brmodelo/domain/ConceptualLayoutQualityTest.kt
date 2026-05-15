@@ -130,4 +130,46 @@ class ConceptualLayoutQualityTest {
         // Assert
         assertTrue(report.lineCrossings.any { it.connectionIdA == 10 && it.connectionIdB == 11 })
     }
+
+    @Test
+    fun conceptualLayoutAgentSignals_overlap_setsHintSpacing() {
+        // Arrange
+        val e1 = SchemaElement.Entity(1, "A", ElementPosition(0, 0, 40, 40))
+        val e2 = SchemaElement.Entity(2, "B", ElementPosition(20, 20, 40, 40))
+        val schema = ConceptualSchema(elements = mapOf(1 to e1, 2 to e2), nextId = 3)
+        val report = analyzeConceptualLayoutQuality(schema, null)
+
+        // Act
+        val signals = conceptualLayoutAgentSignals(report, schema)
+
+        // Assert
+        assertTrue(signals.hasBlockingOverlap)
+        assertEquals(listOf(1, 2), signals.affectedElementIds)
+        assertEquals("spacing", signals.agentHint)
+    }
+
+    @Test
+    fun conceptualLayoutAgentSignals_crossing_withoutOverlap_usesRoutingHintAndSchemaEndpoints() {
+        // Arrange
+        val e1 = SchemaElement.Entity(1, "A", ElementPosition(0, 0, 40, 40))
+        val e2 = SchemaElement.Entity(2, "B", ElementPosition(60, 60, 40, 40))
+        val e3 = SchemaElement.Entity(3, "C", ElementPosition(0, 60, 40, 40))
+        val e4 = SchemaElement.Entity(4, "D", ElementPosition(60, 0, 40, 40))
+        val c1 = Connection(id = 10, elementIdA = 1, elementIdB = 2, showCardinality = false)
+        val c2 = Connection(id = 11, elementIdA = 3, elementIdB = 4, showCardinality = false)
+        val schema = ConceptualSchema(
+            elements = mapOf(1 to e1, 2 to e2, 3 to e3, 4 to e4),
+            connections = listOf(c1, c2),
+            nextId = 12,
+        )
+        val report = analyzeConceptualLayoutQuality(schema, null)
+
+        // Act
+        val signals = conceptualLayoutAgentSignals(report, schema)
+
+        // Assert
+        assertFalse(signals.hasBlockingOverlap)
+        assertEquals(listOf(1, 2, 3, 4), signals.affectedElementIds)
+        assertEquals("routing", signals.agentHint)
+    }
 }

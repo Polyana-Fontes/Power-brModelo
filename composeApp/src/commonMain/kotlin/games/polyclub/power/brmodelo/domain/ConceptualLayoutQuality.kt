@@ -127,6 +127,58 @@ data class ConceptualLayoutQualityReport(
         overlaps.isNotEmpty() || tightClearances.isNotEmpty() || lineCrossings.isNotEmpty()
 }
 
+/**
+ * Compact signals for MCP agents, derived from a [ConceptualLayoutQualityReport].
+ *
+ * [affectedElementIds] lists canvas element ids implicated in overlaps, tight clearances, and (when [schema]
+ * is provided) endpoints of crossing connection pairs.
+ */
+data class ConceptualLayoutAgentSignals(
+    val hasBlockingOverlap: Boolean,
+    val affectedElementIds: List<Int>,
+    val agentHint: String?,
+)
+
+fun conceptualLayoutAgentSignals(
+    report: ConceptualLayoutQualityReport,
+    schema: ConceptualSchema?,
+): ConceptualLayoutAgentSignals {
+    val affected = LinkedHashSet<Int>()
+    for (p in report.overlaps) {
+        affected.add(p.elementIdA)
+        affected.add(p.elementIdB)
+    }
+    for (p in report.tightClearances) {
+        affected.add(p.elementIdA)
+        affected.add(p.elementIdB)
+    }
+    if (schema != null) {
+        for (xc in report.lineCrossings) {
+            val c1 = schema.connections.find { it.id == xc.connectionIdA }
+            val c2 = schema.connections.find { it.id == xc.connectionIdB }
+            c1?.let {
+                affected.add(it.elementIdA)
+                affected.add(it.elementIdB)
+            }
+            c2?.let {
+                affected.add(it.elementIdA)
+                affected.add(it.elementIdB)
+            }
+        }
+    }
+    val hasBlockingOverlap = report.overlaps.isNotEmpty()
+    val agentHint = when {
+        report.overlaps.isNotEmpty() || report.tightClearances.isNotEmpty() -> "spacing"
+        report.lineCrossings.isNotEmpty() -> "routing"
+        else -> null
+    }
+    return ConceptualLayoutAgentSignals(
+        hasBlockingOverlap = hasBlockingOverlap,
+        affectedElementIds = affected.sorted(),
+        agentHint = agentHint,
+    )
+}
+
 private fun pairTouchesScope(a: Int, b: Int, scope: Set<Int>?): Boolean =
     scope == null || a in scope || b in scope
 

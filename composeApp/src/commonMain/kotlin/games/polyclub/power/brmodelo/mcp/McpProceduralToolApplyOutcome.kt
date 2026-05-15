@@ -18,14 +18,22 @@
 
 package games.polyclub.power.brmodelo.mcp
 
+import games.polyclub.power.brmodelo.domain.ConceptualLayoutQualityReport
+import games.polyclub.power.brmodelo.domain.ConceptualSchema
+
 /**
  * When set, the MCP runtime merges a `layoutQuality` JSON object into the tool result after success,
  * using the tab schema read on the UI thread. [touchedElementIds] null means the whole diagram is analyzed; otherwise
  * only overlaps, tight clearances, and crossings that involve at least one listed element id are reported.
+ *
+ * For dry-run previews, pass [reportOverride] (and optional [schemaForLayoutQualityJson] for richer
+ * `affectedElementIds` on crossings) instead of re-reading the live tab schema.
  */
 internal data class McpProceduralToolLayoutQualityScan(
     val tabIndex: Int,
     val touchedElementIds: Set<Int>?,
+    val reportOverride: ConceptualLayoutQualityReport? = null,
+    val schemaForLayoutQualityJson: ConceptualSchema? = null,
 )
 
 /**

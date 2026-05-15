@@ -43,6 +43,63 @@ private fun usedAtributoIndices(schema: ConceptualSchema): Set<Int> = buildSet {
     }
 }
 
+private fun ConceptualSchema.canvasAttributeNamesOwnedBy(ownerId: Int): Set<String> =
+    attributes.filter { it.ownerId == ownerId }.map { it.name }.toSet()
+
+private fun ConceptualSchema.hiddenAttributeNamesDeclaredOn(holderId: Int): Set<String> =
+    elements[holderId]?.hiddenAttributes.orEmpty().asSequence().flatMap { it.collectNamesDeep() }.toSet()
+
+internal fun ConceptualSchema.canvasAttributeNameTakenForOwner(name: String, ownerId: Int): Boolean =
+    name in canvasAttributeNamesOwnedBy(ownerId) || name in hiddenAttributeNamesDeclaredOn(ownerId)
+
+internal fun ConceptualSchema.nameCollidesWithExistingAttributeForOwner(name: String, ownerId: Int): Boolean =
+    canvasAttributeNameTakenForOwner(name, ownerId)
+
+private fun usedAtributoIndicesForOwner(schema: ConceptualSchema, ownerId: Int): Set<Int> = buildSet {
+    schema.attributes.filter { it.ownerId == ownerId }.mapNotNullTo(this) { a ->
+        ATRIBUTO_PATTERN.matchEntire(a.name)?.groupValues?.get(1)?.toIntOrNull()
+    }
+    schema.hiddenAttributeNamesDeclaredOn(ownerId).mapNotNullTo(this) { n ->
+        ATRIBUTO_PATTERN.matchEntire(n)?.groupValues?.get(1)?.toIntOrNull()
+    }
+}
+
+private fun ConceptualSchema.nextUnusedAttributeNameForOwner(ownerId: Int): String {
+    var n = 1
+    val usedIdx = usedAtributoIndicesForOwner(this, ownerId)
+    val taken = canvasAttributeNamesOwnedBy(ownerId) + hiddenAttributeNamesDeclaredOn(ownerId)
+    while (n in usedIdx) n++
+    while (true) {
+        val cand = "Atributo$n"
+        if (cand !in taken) return cand
+        n++
+    }
+}
+
+/**
+ * Allocates [count] distinct names `AtributoN` for a **new** composite subtree: the first name must not collide
+ * with canvas/hidden names on [siblingCollisionOwnerId] (entity/relationship/associative / attribute bar id);
+ * subsequent names are kept unique within the allocated batch (children attach to the new composite parent).
+ */
+internal fun ConceptualSchema.allocateConsecutiveAttributeNamesForNewCompositeSubtree(
+    count: Int,
+    siblingCollisionOwnerId: Int,
+): List<String> {
+    require(count > 0)
+    val used = mutableSetOf<String>()
+    used.addAll(canvasAttributeNamesOwnedBy(siblingCollisionOwnerId))
+    used.addAll(hiddenAttributeNamesDeclaredOn(siblingCollisionOwnerId))
+    val out = ArrayList<String>(count)
+    repeat(count) {
+        var k = 1
+        while ("Atributo$k" in used) k++
+        val name = "Atributo$k"
+        used.add(name)
+        out.add(name)
+    }
+    return out
+}
+
 private fun ConceptualSchema.nextUnusedAttributeName(): String {
     var n = 1
     val usedIdx = usedAtributoIndices(this)
@@ -267,7 +324,7 @@ private fun placeChildAttributeOnParent(
     var s = schema
     val (s1, newId) = s.allocateId()
     s = s1
-    val name = s.nextUnusedAttributeName()
+    val name = s.nextUnusedAttributeNameForOwner(parentAttr.id)
     val newAttr = baseNewAttribute(newId, name, pos, parentAttr.id, props)
     s = s.withElement(newAttr)
     s = s.withAttributeOwnerConnection(attributeId = newId, ownerId = parentAttr.id)
@@ -294,7 +351,7 @@ private fun placeCompositeAttributeUnderParentAttribute(
     val parentPos = positionSingleAttributeRect(ownerPos, side, attrW, attrH, clickSchema, stackParent)
     val orientD = isOrientacaoD(side)
     val (child0Pos, child1Pos) = layoutTwoCompositeChildPositions(parentPos, orientD, attrW, attrH)
-    val names = schema.allocateConsecutiveAttributeNames(3)
+    val names = schema.allocateConsecutiveAttributeNamesForNewCompositeSubtree(3, ownerId)
 
     var s = schema
     val (s0, childId0) = s.allocateId()
@@ -347,7 +404,7 @@ private fun placeAttributeOnOwner(
         var s = schema
         val (s1, newId) = s.allocateId()
         s = s1
-        val name = s.nextUnusedAttributeName()
+        val name = s.nextUnusedAttributeNameForOwner(ownerId)
         val newAttr = baseNewAttribute(newId, name, pos, ownerId, props)
         s = s.withElement(newAttr)
         s = s.withAttributeOwnerConnection(attributeId = newId, ownerId = ownerId)
@@ -359,7 +416,7 @@ private fun placeAttributeOnOwner(
     val parentPos = positionSingleAttributeRect(ownerPos, side, attrW, attrH, clickSchema, stackParent)
     val orientD = isOrientacaoD(side)
     val (child0Pos, child1Pos) = layoutTwoCompositeChildPositions(parentPos, orientD, attrW, attrH)
-    val names = schema.allocateConsecutiveAttributeNames(3)
+    val names = schema.allocateConsecutiveAttributeNamesForNewCompositeSubtree(3, ownerId)
 
     var s = schema
     val (s0, childId0) = s.allocateId()
@@ -532,8 +589,9 @@ fun applyConceptualSimpleAttributeTool(
             var s = schema
             val (s1, newId) = s.allocateId()
             s = s1
-            val name = overrides?.name?.trim()?.takeIf { it.isNotEmpty() } ?: s.nextUnusedAttributeName()
-            if (s.nameCollidesWithExistingAttributeOrHidden(name)) {
+            val name = overrides?.name?.trim()?.takeIf { it.isNotEmpty() }
+                ?: s.nextUnusedAttributeNameForOwner(ownerElementId)
+            if (s.nameCollidesWithExistingAttributeForOwner(name, ownerElementId)) {
                 return ConceptualAttributeToolResult.Error("Já existe um atributo com este nome.")
             }
             val newAttr = baseNewAttribute(newId, name, pos, ownerElementId, props).withSimplePlacementOverrides(overrides)
@@ -553,8 +611,9 @@ fun applyConceptualSimpleAttributeTool(
             var s = schema
             val (s1, newId) = s.allocateId()
             s = s1
-            val name = overrides?.name?.trim()?.takeIf { it.isNotEmpty() } ?: s.nextUnusedAttributeName()
-            if (s.nameCollidesWithExistingAttributeOrHidden(name)) {
+            val name = overrides?.name?.trim()?.takeIf { it.isNotEmpty() }
+                ?: s.nextUnusedAttributeNameForOwner(rawOwner.id)
+            if (s.nameCollidesWithExistingAttributeForOwner(name, rawOwner.id)) {
                 return ConceptualAttributeToolResult.Error("Já existe um atributo com este nome.")
             }
             val newAttr = baseNewAttribute(newId, name, pos, rawOwner.id, props).withSimplePlacementOverrides(overrides)

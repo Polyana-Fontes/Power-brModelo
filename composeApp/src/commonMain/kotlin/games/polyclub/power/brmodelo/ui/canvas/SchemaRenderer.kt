@@ -1334,6 +1334,23 @@ internal fun enrichConnectionWithInitialCardinalityPosition(
 }
 
 /**
+ * Clears persisted [Connection.cardinalityPosition] for every **floating** cardinality label so a follow-up
+ * [withRecalculatedFloatingCardinalityPositions] / [enrichConnectionWithInitialCardinalityPosition] pass
+ * recomputes from the current polyline geometry. After a new link, [computeDividedPoints] attachment offsets
+ * for older legs can change; keeping a stale box made labels look wrong until a tiny canvas nudge.
+ */
+internal fun ConceptualSchema.withFloatingCardinalityLayoutForgotten(): ConceptualSchema =
+    copy(
+        connections = connections.map { c ->
+            if (c.showCardinality && c.cardinality != null && !c.cardinalityFixed) {
+                c.copy(cardinalityPosition = null)
+            } else {
+                c
+            }
+        },
+    )
+
+/**
  * Recomputes floating (non-fixed) cardinality label positions from the current element layout.
  * When [onlyIncidentToElementId] is non-null, only connections touching that element are updated.
  */

@@ -54,7 +54,8 @@ internal data class McpTabSnapshot(
 internal class McpUiBindings(
     val current: () -> McpTabSnapshot,
     val onSelectTab: (Int) -> Unit,
-    val onAddBlankTab: () -> Unit,
+    /** Returns the new tab's stable [games.polyclub.power.brmodelo.ui.EditorTabSession.id] (XML/PNG/JPEG URIs use this id). */
+    val onAddBlankTab: () -> Long,
     val onForceCloseTab: (Int) -> Unit,
     val onRequestCloseTab: (Int) -> Unit,
     val onSaveTab: (Int, Boolean) -> Boolean,
@@ -118,6 +119,8 @@ internal class McpUiBindings(
      * Same conceptual rules as the editor **Ligar Objetos** tool (two picks in one call). Must run on the UI thread.
      * When [endA] and [endB] denote the same entity auto-relationship, [autoSelfRelationshipClickSchema] is optional
      * schema-space coordinates (same as canvas); `null` uses the legacy right-side diamond placement.
+     * When [dryRun] is true, validate and return preview JSON (including merged projected `layoutQuality`) without
+     * committing the tab (no undo entry).
      */
     val onLinkConceptualObjectsAtTab: (
         tabIndex: Int,
@@ -126,6 +129,7 @@ internal class McpUiBindings(
         relationshipOverrides: ConceptualProceduralToolOverrides?,
         connectionPatches: List<ConceptualLinkConnectionOverridePatch>?,
         autoSelfRelationshipClickSchema: Offset?,
+        dryRun: Boolean,
     ) -> McpProceduralToolApplyOutcome,
     /** Inspector-aligned model metadata edits (one undo step). */
     val onApplyEditConceptualModelAtTab: (tabIndex: Int, patch: Map<String, Any?>) -> McpProceduralToolApplyOutcome,

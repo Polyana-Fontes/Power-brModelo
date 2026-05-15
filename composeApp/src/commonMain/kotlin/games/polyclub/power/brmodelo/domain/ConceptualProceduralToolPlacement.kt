@@ -59,6 +59,9 @@ data class ConceptualProceduralToolOverrides(
     val annotationAutoSize: Boolean? = null,
     val annotationWidth: Int? = null,
     val annotationHeight: Int? = null,
+
+    /** When true, explicit `name` / `relationshipName` may match an existing canvas label (entity-like or relationship-style). */
+    val allowDuplicateCanvasLabels: Boolean? = null,
 )
 
 sealed class ConceptualProceduralToolPlacementResult {
@@ -117,6 +120,7 @@ fun ConceptualSchema.placeProceduralConceptualTool(
 
     val updated: SchemaElement = when (baseEl) {
         is SchemaElement.Entity -> {
+            val allowDup = overrides.allowDuplicateCanvasLabels == true
             val name = when (val o = overrides.name) {
                 null -> baseEl.name
                 else -> {
@@ -127,7 +131,7 @@ fun ConceptualSchema.placeProceduralConceptualTool(
                     t
                 }
             }
-            if (entityLikeDisplayNameTaken(schemaPlaced, name, id)) {
+            if (!allowDup && entityLikeDisplayNameTaken(schemaPlaced, name, id)) {
                 return ConceptualProceduralToolPlacementResult.Err("name_conflict")
             }
             baseEl.copy(
@@ -139,6 +143,7 @@ fun ConceptualSchema.placeProceduralConceptualTool(
             )
         }
         is SchemaElement.Relationship -> {
+            val allowDup = overrides.allowDuplicateCanvasLabels == true
             val name = when (val o = overrides.name) {
                 null -> baseEl.name
                 else -> {
@@ -149,7 +154,7 @@ fun ConceptualSchema.placeProceduralConceptualTool(
                     t
                 }
             }
-            if (relationshipStyleNameTaken(schemaPlaced, name, id)) {
+            if (!allowDup && relationshipStyleNameTaken(schemaPlaced, name, id)) {
                 return ConceptualProceduralToolPlacementResult.Err("name_conflict")
             }
             baseEl.copy(
@@ -162,6 +167,7 @@ fun ConceptualSchema.placeProceduralConceptualTool(
             )
         }
         is SchemaElement.AssociativeEntity -> {
+            val allowDup = overrides.allowDuplicateCanvasLabels == true
             val outerName = when (val o = overrides.name) {
                 null -> baseEl.name
                 else -> {
@@ -172,7 +178,7 @@ fun ConceptualSchema.placeProceduralConceptualTool(
                     t
                 }
             }
-            if (entityLikeDisplayNameTaken(schemaPlaced, outerName, id)) {
+            if (!allowDup && entityLikeDisplayNameTaken(schemaPlaced, outerName, id)) {
                 return ConceptualProceduralToolPlacementResult.Err("name_conflict")
             }
             val innerName = when (val o = overrides.relationshipName) {
@@ -185,7 +191,7 @@ fun ConceptualSchema.placeProceduralConceptualTool(
                     t
                 }
             }
-            if (relationshipStyleNameTaken(schemaPlaced, innerName, id)) {
+            if (!allowDup && relationshipStyleNameTaken(schemaPlaced, innerName, id)) {
                 return ConceptualProceduralToolPlacementResult.Err("relationship_name_conflict")
             }
             baseEl.copy(

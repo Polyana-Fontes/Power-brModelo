@@ -310,4 +310,42 @@ class ConceptualOrganizeAttributesTest {
         assertEquals(compPos, (out.elements[5] as SchemaElement.Attribute).position)
         assertEquals(sibling.position, (out.elements[2] as SchemaElement.Attribute).position)
     }
+
+    @Test
+    fun `organize nudges left attributes when structural link corridor overlaps default slot`() {
+        // Arrange — relationship to the left so the entity–relationship segment crosses the default LEFT organize column
+        val entity = SchemaElement.Entity(1, "Ent", ElementPosition(300, 170, 120, 70))
+        val rel = SchemaElement.Relationship(2, "Rel", ElementPosition(40, 178, 90, 55))
+        val leftAttr = SchemaElement.Attribute(
+            id = 3,
+            name = "At1",
+            position = ElementPosition(50, 190, 74, 18),
+            ownerId = 1,
+        )
+        val entRel = Connection(
+            id = 20,
+            elementIdA = 1,
+            elementIdB = 2,
+            cardinality = Cardinality.ONE_TO_MANY,
+            showCardinality = true,
+            cardinalityPosition = ElementPosition(160, 200, 36, 20),
+            orientation = LineOrientation.HORIZONTAL,
+        )
+        val attrConn = Connection(21, 3, 1, null, showCardinality = false, orientation = LineOrientation.VERTICAL)
+        val withLinks = ConceptualSchema(
+            elements = mapOf(1 to entity, 2 to rel, 3 to leftAttr),
+            connections = listOf(entRel, attrConn),
+            nextId = 22,
+        )
+        val withoutStructural = withLinks.copy(connections = listOf(attrConn))
+
+        // Act
+        val outWith = organizeAttributesForConceptualOwner(withLinks, 1)
+        val outWithout = organizeAttributesForConceptualOwner(withoutStructural, 1)
+
+        // Assert
+        val xWith = (outWith.elements[3] as SchemaElement.Attribute).position.x
+        val xWithout = (outWithout.elements[3] as SchemaElement.Attribute).position.x
+        assertTrue(xWith < xWithout)
+    }
 }

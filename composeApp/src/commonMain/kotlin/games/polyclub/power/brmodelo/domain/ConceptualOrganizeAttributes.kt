@@ -18,6 +18,7 @@
 
 package games.polyclub.power.brmodelo.domain
 
+import kotlin.math.hypot
 import kotlin.math.max
 
 /**
@@ -69,6 +70,115 @@ private fun canvasSelectionElementIds(selection: CanvasSelection): Set<Int> = wh
     is CanvasSelection.Element -> setOf(selection.id)
     is CanvasSelection.Multiple -> selection.elementIds
     is CanvasSelection.Cardinality -> emptySet()
+}
+
+private fun elCenterX(ep: ElementPosition): Float = ep.x + ep.width / 2f
+
+private fun elCenterY(ep: ElementPosition): Float = ep.y + ep.height / 2f
+
+private fun rectsOverlap(a: ElementPosition, b: ElementPosition): Boolean =
+    a.x < b.x + b.width && a.x + a.width > b.x &&
+        a.y < b.y + b.height && a.y + a.height > b.y
+
+/**
+ * Axis-aligned bounds of segment (ax, ay)–(bx, by) expanded by [halfThicknessPx] perpendicular to the segment.
+ * Used as a coarse MER polyline obstacle for attribute organize.
+ */
+private fun thickenedSegmentBounds(
+    ax: Float,
+    ay: Float,
+    bx: Float,
+    by: Float,
+    halfThicknessPx: Float,
+): ElementPosition {
+    val dx = bx - ax
+    val dy = by - ay
+    val len = hypot(dx.toDouble(), dy.toDouble()).toFloat().coerceAtLeast(1e-3f)
+    val nx = -dy / len * halfThicknessPx
+    val ny = dx / len * halfThicknessPx
+    val xs = floatArrayOf(ax + nx, ax - nx, bx + nx, bx - nx)
+    val ys = floatArrayOf(ay + ny, ay - ny, by + ny, by - ny)
+    val x1 = xs.minOrNull()!!.toInt()
+    val x2 = xs.maxOrNull()!!.toInt()
+    val y1 = ys.minOrNull()!!.toInt()
+    val y2 = ys.maxOrNull()!!.toInt()
+    return ElementPosition(x1, y1, (x2 - x1).coerceAtLeast(1), (y2 - y1).coerceAtLeast(1))
+}
+
+private fun isStructureCanvasElement(el: SchemaElement?): Boolean =
+    when (el) {
+        is SchemaElement.Entity,
+        is SchemaElement.Relationship,
+        is SchemaElement.AssociativeEntity,
+        is SchemaElement.SelfRelationship,
+        -> true
+        else -> false
+    }
+
+/**
+ * Coarse obstacles for links from [ownerId] to other structural MER elements (entity / relationship / …)
+ * plus floating cardinality boxes on those connections, so organized attributes can be nudged off line corridors.
+ */
+private fun structuralLinkObstaclesForOwner(schema: ConceptualSchema, ownerId: Int): List<ElementPosition> {
+    val out = ArrayList<ElementPosition>()
+    val halfThick = 9f
+    val ownerEl = schema.elements[ownerId] ?: return out
+    val op = ownerEl.position
+    for (conn in schema.connections) {
+        if (conn.elementIdA != ownerId && conn.elementIdB != ownerId) continue
+        val idOther = if (conn.elementIdA == ownerId) conn.elementIdB else conn.elementIdA
+        val other = schema.elements[idOther] ?: continue
+        if (!isStructureCanvasElement(other)) continue
+        out.add(
+            thickenedSegmentBounds(
+                elCenterX(op),
+                elCenterY(op),
+                elCenterX(other.position),
+                elCenterY(other.position),
+                halfThick,
+            ),
+        )
+        if (conn.showCardinality && conn.cardinality != null) {
+            val cp = conn.cardinalityPosition
+            if (cp != null && cp.width > 0 && cp.height > 0) {
+                val pad = 6
+                out.add(
+                    ElementPosition(
+                        cp.x - pad,
+                        cp.y - pad,
+                        cp.width + 2 * pad,
+                        cp.height + 2 * pad,
+                    ),
+                )
+            }
+        }
+    }
+    return out
+}
+
+private fun pushAttributeOutOfObstacles(
+    proposed: ElementPosition,
+    obstacles: List<ElementPosition>,
+    sidePascal: Int,
+    maxExtraNudges: Int = 32,
+    stepPx: Int = 12,
+): ElementPosition {
+    if (obstacles.isEmpty() || sidePascal !in 1..4) return proposed
+    var p = proposed
+    repeat(maxExtraNudges) { nudgeIdx ->
+        if (!obstacles.any { o -> rectsOverlap(p, o) }) return p
+        p = when (sidePascal) {
+            1 -> p.copy(x = p.x - stepPx)
+            3 -> p.copy(x = p.x + stepPx)
+            // Top / bottom: shift along X (line corridors stack vertically); nudging Y fights the stack layout.
+            2, 4 -> {
+                val dir = if (nudgeIdx % 2 == 0) -1 else 1
+                p.copy(x = p.x + dir * stepPx)
+            }
+            else -> return p
+        }
+    }
+    return p
 }
 
 private data class OwnerRepositionTask(val ownerId: Int, val attributeIdFilter: Set<Int>?)
@@ -213,6 +323,7 @@ private fun repositionDirectAttributesOfOwner(
     val distancia = max(16, active.maxOf { it.position.height })
     val gh = ConceptualPlacementDefaults.attributeHorizontalGap
     val gv = ConceptualPlacementDefaults.attributeVerticalGapBase
+    val obstacles = structuralLinkObstaclesForOwner(schema, ownerId)
 
     var c1 = 0
     var c3 = 0
@@ -263,7 +374,8 @@ private fun repositionDirectAttributesOfOwner(
             }
             else -> continue
         }
-        s = s.withElement(a.copy(position = newPos))
+        val adjusted = pushAttributeOutOfObstacles(newPos, obstacles, p)
+        s = s.withElement(a.copy(position = adjusted))
     }
     return s
 }

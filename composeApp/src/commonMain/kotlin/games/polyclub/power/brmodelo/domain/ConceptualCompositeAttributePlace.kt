@@ -68,9 +68,18 @@ internal fun layoutNCompositeChildPositions(
     }
 }
 
+private sealed interface CompositeIncomingNameCollisionScope {
+    /** The composite parent attaches to this structural MER element (entity / relationship / associative). */
+    data class StructuralOwner(val ownerId: Int) : CompositeIncomingNameCollisionScope
+
+    /** The composite parent attaches on another attribute's composite bar ([parentAttributeId]). */
+    data class AttributeBarHolder(val parentAttributeId: Int) : CompositeIncomingNameCollisionScope
+}
+
 private fun ConceptualSchema.validateNewCanvasAndHiddenNamesForComposite(
     canvasExplicitNames: List<String>,
     nestedHidden: List<HiddenAttribute>,
+    scope: CompositeIncomingNameCollisionScope,
 ): ConceptualAttributeToolResult.Error? {
     val hiddenFlat = nestedHidden.collectAllDeclaredNamesDepthFirst()
     if (hiddenFlat.any { it.isEmpty() }) {
@@ -80,10 +89,14 @@ private fun ConceptualSchema.validateNewCanvasAndHiddenNamesForComposite(
     if (all.size != all.toSet().size) {
         return ConceptualAttributeToolResult.Error("Duplicate attribute or hidden names in the request.")
     }
-    for (n in all) {
-        if (nameCollidesWithExistingAttributeOrHidden(n)) {
-            return ConceptualAttributeToolResult.Error("Já existe um atributo com este nome.")
-        }
+    val collisionOwner = when (scope) {
+        is CompositeIncomingNameCollisionScope.StructuralOwner -> scope.ownerId
+        is CompositeIncomingNameCollisionScope.AttributeBarHolder -> scope.parentAttributeId
+    }
+    if (canvasExplicitNames.isNotEmpty() &&
+        canvasAttributeNameTakenForOwner(canvasExplicitNames[0], collisionOwner)
+    ) {
+        return ConceptualAttributeToolResult.Error("Já existe um atributo com este nome.")
     }
     return null
 }
@@ -105,14 +118,18 @@ private fun placeCompositeOnBigOwner(
     val orientD = isOrientacaoD(side)
     val n = leafSpecs.size
     val childPositions = layoutNCompositeChildPositions(parentPos, orientD, attrW, attrH, n)
-    val autoNames = schema.allocateConsecutiveAttributeNames(n + 1)
+    val autoNames = schema.allocateConsecutiveAttributeNamesForNewCompositeSubtree(n + 1, ownerId)
     val explicitNames = buildList {
         add(autoNames[0])
         leafSpecs.forEachIndexed { i, spec ->
             add(spec.name?.trim()?.takeIf { it.isNotEmpty() } ?: autoNames[i + 1])
         }
     }
-    schema.validateNewCanvasAndHiddenNamesForComposite(explicitNames, nestedHiddenAttributes)?.let { return it }
+    schema.validateNewCanvasAndHiddenNamesForComposite(
+        explicitNames,
+        nestedHiddenAttributes,
+        CompositeIncomingNameCollisionScope.StructuralOwner(ownerId),
+    )?.let { return it }
     var s = schema
     val childIds = ArrayList<Int>(n)
     repeat(n) {
@@ -168,14 +185,18 @@ private fun placeCompositeOnParentAttribute(
     val orientD = isOrientacaoD(side)
     val n = leafSpecs.size
     val childPositions = layoutNCompositeChildPositions(parentPos, orientD, attrW, attrH, n)
-    val autoNames = schema.allocateConsecutiveAttributeNames(n + 1)
+    val autoNames = schema.allocateConsecutiveAttributeNamesForNewCompositeSubtree(n + 1, parentAttr.id)
     val explicitNames = buildList {
         add(autoNames[0])
         leafSpecs.forEachIndexed { i, spec ->
             add(spec.name?.trim()?.takeIf { it.isNotEmpty() } ?: autoNames[i + 1])
         }
     }
-    schema.validateNewCanvasAndHiddenNamesForComposite(explicitNames, nestedHiddenAttributes)?.let { return it }
+    schema.validateNewCanvasAndHiddenNamesForComposite(
+        explicitNames,
+        nestedHiddenAttributes,
+        CompositeIncomingNameCollisionScope.AttributeBarHolder(parentAttr.id),
+    )?.let { return it }
     var s = schema
     val childIds = ArrayList<Int>(n)
     repeat(n) {

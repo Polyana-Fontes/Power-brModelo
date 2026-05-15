@@ -53,7 +53,9 @@ import games.polyclub.power.brmodelo.domain.collectDictionarySlotsForSelection
 import games.polyclub.power.brmodelo.domain.ConceptualDictionarySlotRow
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.CanvasSelectionRectangleMergeMode
+import games.polyclub.power.brmodelo.domain.analyzeConceptualLayoutQuality
 import games.polyclub.power.brmodelo.domain.canvasElementIdsForLayoutScope
+import games.polyclub.power.brmodelo.domain.classifyMcpLinkObjectsPattern
 import games.polyclub.power.brmodelo.domain.ConceptualBulkDeleteBand
 import games.polyclub.power.brmodelo.domain.canvasSelectionSymmetricPickDelta
 import games.polyclub.power.brmodelo.domain.mergeCanvasRectangleSelection
@@ -150,6 +152,8 @@ import games.polyclub.power.brmodelo.ui.clipboard.encodeImageBitmapToPngBytes
 import games.polyclub.power.brmodelo.ui.canvas.SchemaCanvasViewState
 import games.polyclub.power.brmodelo.ui.canvas.afterCardinalitySyncForElementBoundsChange
 import games.polyclub.power.brmodelo.ui.canvas.enrichConnectionWithInitialCardinalityPosition
+import games.polyclub.power.brmodelo.ui.canvas.withFloatingCardinalityLayoutForgotten
+import games.polyclub.power.brmodelo.ui.canvas.withRecalculatedFloatingCardinalityPositions
 import games.polyclub.power.brmodelo.ui.canvas.withConnectionCardinalityInspectorParity
 import games.polyclub.power.brmodelo.ui.canvas.renderSchemaToImageBitmap
 import games.polyclub.power.brmodelo.ui.canvas.selectionBandGeometricPick
@@ -356,6 +360,16 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         val session = EditorTabSession.blank(nextTabId++)
         tabSessions = tabSessions + session
         selectedTabIndex = tabSessions.lastIndex
+    }
+
+    /**
+     * Appends an empty conceptual tab without changing [selectedTabIndex] (MCP automation so the user's
+     * focused diagram stays visible while agents work on the new tab).
+     */
+    fun addBlankTabWithoutSelecting(): Long {
+        val session = EditorTabSession.blank(nextTabId++)
+        tabSessions = tabSessions + session
+        return session.id
     }
 
     var isDragOverFromPolling by remember { mutableStateOf(false) }
@@ -905,7 +919,7 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                 tabSessions = tabSessions,
                 selectedTabIndex = selectedTabIndex,
                 onSelectTab = { selectedTabIndex = it },
-                onAddBlankTab = { addBlankTab() },
+                onAddBlankTab = { addBlankTabWithoutSelecting() },
                 onForceCloseTab = { forceCloseTab(it) },
                 onRequestCloseTab = { requestCloseTab(it) },
                 saveTabAt = ::saveTabAt,
@@ -1136,7 +1150,7 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                         }
                     }
                 },
-                onLinkConceptualObjectsAtTab = mcpLink@{ tabIdx, endA, endB, relOverrides, connPatches, autoSelfClick ->
+                onLinkConceptualObjectsAtTab = mcpLink@{ tabIdx, endA, endB, relOverrides, connPatches, autoSelfClick, dryRun ->
                     if (tabIdx !in tabSessions.indices) {
                         return@mcpLink McpProceduralToolApplyOutcome.err("invalid_tab_index")
                     }
@@ -1159,7 +1173,7 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                                     McpProceduralToolApplyOutcome.err(patched.code)
                                 is ConceptualLinkObjectsMcpApplyResult.Ok -> {
                                     val oldConnIds = before.connections.map { it.id }.toSet()
-                                    var committed = patched.schema
+                                    var committed = patched.schema.withFloatingCardinalityLayoutForgotten()
                                     for (conn in committed.connections.filter { it.id !in oldConnIds }) {
                                         val enriched =
                                             enrichConnectionWithInitialCardinalityPosition(
@@ -1173,6 +1187,9 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                                             },
                                         )
                                     }
+                                    committed = committed.withRecalculatedFloatingCardinalityPositions(
+                                        textMeasurer = clipboardPreviewTextMeasurer,
+                                    )
                                     val normalized = committed.withNormalizedAttributeMultiValuedCounts()
                                     val newConns =
                                         normalized.connections.filter { it.id !in oldConnIds }.sortedBy { it.id }
@@ -1184,13 +1201,7 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                                     val newSelf = newElemIds.asSequence()
                                         .mapNotNull { id -> normalized.elements[id] as? SchemaElement.SelfRelationship }
                                         .firstOrNull()
-                                    pushCommitOnTabAt(tabIdx, normalized)
-                                    val body = McpConnectionToolResponseJson.linkObjectsToolSuccessJson(
-                                        modelResourceUriForSession(tab.id),
-                                        newConns,
-                                        newRel,
-                                        newSelf,
-                                    )
+                                    val linkPattern = classifyMcpLinkObjectsPattern(before, normalized)
                                     val linkScope = buildSet {
                                         addAll(newElemIds)
                                         newConns.forEach {
@@ -1198,6 +1209,27 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                                             add(it.elementIdB)
                                         }
                                     }
+                                    val body = McpConnectionToolResponseJson.linkObjectsToolSuccessJson(
+                                        modelResourceUriForSession(tab.id),
+                                        newConns,
+                                        newRel,
+                                        newSelf,
+                                        linkPattern = linkPattern,
+                                        dryRun = dryRun,
+                                    )
+                                    if (dryRun) {
+                                        val previewReport = analyzeConceptualLayoutQuality(normalized, linkScope)
+                                        return@mcpLink McpProceduralToolApplyOutcome.okFullJson(
+                                            body,
+                                            McpProceduralToolLayoutQualityScan(
+                                                tabIdx,
+                                                linkScope,
+                                                reportOverride = previewReport,
+                                                schemaForLayoutQualityJson = normalized,
+                                            ),
+                                        )
+                                    }
+                                    pushCommitOnTabAt(tabIdx, normalized)
                                     McpProceduralToolApplyOutcome.okFullJson(
                                         body,
                                         McpProceduralToolLayoutQualityScan(tabIdx, linkScope),

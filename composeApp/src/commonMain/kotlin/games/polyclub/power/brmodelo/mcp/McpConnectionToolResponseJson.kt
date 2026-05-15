@@ -43,11 +43,24 @@ internal object McpConnectionToolResponseJson {
         newConnections: List<Connection>,
         newRelationship: SchemaElement.Relationship?,
         newSelfRelationship: SchemaElement.SelfRelationship?,
+        linkPattern: String,
+        dryRun: Boolean = false,
     ): String {
         val connsJson = newConnections.joinToString(prefix = "[", postfix = "]") { connectionSummary(it) }
         val relJson = newRelationship?.let { """{"element":${McpConceptualToolElementResponseJson.elementSummary(it)}}""" } ?: "null"
         val selfJson = newSelfRelationship?.let { """{"element":${McpConceptualToolElementResponseJson.elementSummary(it)}}""" } ?: "null"
-        return """{"ok":true,"resourceUri":${jsonString(resourceUri)},"newConnections":$connsJson,"newRelationship":$relJson,"newSelfRelationship":$selfJson}"""
+        val newConnIdsJson = newConnections.joinToString(separator = ",") { it.id.toString() }
+        val relIdJson = newRelationship?.id?.toString() ?: "null"
+        val selfIdJson = newSelfRelationship?.id?.toString() ?: "null"
+        return buildString {
+            append("""{"ok":true,"resourceUri":${jsonString(resourceUri)}""")
+            if (dryRun) {
+                append(""","dryRun":true""")
+                append(""","wouldCreate":{"newConnectionIds":[$newConnIdsJson],"newRelationshipElementId":$relIdJson,"newSelfRelationshipElementId":$selfIdJson}""")
+            }
+            append(""","linkPattern":${jsonString(linkPattern)}""")
+            append(""","newConnections":$connsJson,"newRelationship":$relJson,"newSelfRelationship":$selfJson}""")
+        }
     }
 
     private fun jsonString(s: String): String {

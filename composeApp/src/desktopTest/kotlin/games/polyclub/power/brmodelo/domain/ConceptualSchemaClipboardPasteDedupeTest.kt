@@ -21,7 +21,6 @@ package games.polyclub.power.brmodelo.domain
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
-import kotlin.test.assertTrue
 
 class ConceptualSchemaClipboardPasteDedupeTest {
 
@@ -57,11 +56,7 @@ class ConceptualSchemaClipboardPasteDedupeTest {
 
         val pastedAttrs = merged.attributes.filter { it.ownerId == pastedEntityId }.sortedBy { it.name }
         assertEquals(3, pastedAttrs.size)
-        assertTrue(pastedAttrs.none { it.name == "Atributo1" && it.ownerId == pastedEntityId })
-        assertTrue(pastedAttrs.none { it.name == "Atributo2" && it.ownerId == pastedEntityId })
-        assertTrue(pastedAttrs.none { it.name == "Atributo3" && it.ownerId == pastedEntityId })
-        val expectedPastedAttrNames = setOf("Atributo12", "Atributo22", "Atributo32")
-        assertEquals(expectedPastedAttrNames, pastedAttrs.map { it.name }.toSet())
+        assertEquals(setOf("Atributo1", "Atributo2", "Atributo3"), pastedAttrs.map { it.name }.toSet())
 
         val ownerNamePairs = merged.attributes.map { it.ownerId to it.name }
         assertEquals(
@@ -69,5 +64,33 @@ class ConceptualSchemaClipboardPasteDedupeTest {
             ownerNamePairs.distinct().size,
             "No duplicate (owner, attribute name) pairs after paste",
         )
+    }
+
+    @Test
+    fun mergeTranslatedFragment_attributeNamesDedupedPerOwnerNotGlobally() {
+        // Arrange — target entity has "email"; pasted fragment brings another entity whose attribute is also "email"
+        val e1 = SchemaElement.Entity(1, "Cliente", ElementPosition(0, 0, 90, 50))
+        val e1Attr = SchemaElement.Attribute(2, "email", ElementPosition(-80, 10, 70, 18), ownerId = 1)
+        val target = ConceptualSchema(
+            elements = mapOf(1 to e1, 2 to e1Attr),
+            connections = listOf(Connection(1, 2, 1, null, showCardinality = false, orientation = LineOrientation.VERTICAL)),
+            nextId = 3,
+        )
+        val e2 = SchemaElement.Entity(10, "Funcionario", ElementPosition(200, 0, 100, 50))
+        val e2Attr = SchemaElement.Attribute(11, "email", ElementPosition(320, 10, 70, 18), ownerId = 10)
+        val fragment = ConceptualSchema(
+            elements = mapOf(10 to e2, 11 to e2Attr),
+            connections = listOf(Connection(2, 11, 10, null, showCardinality = false, orientation = LineOrientation.VERTICAL)),
+            nextId = 12,
+        )
+        val translated = translateConceptualSchema(fragment, dx = 0, dy = 120)
+
+        // Act
+        val (merged, _) = mergeTranslatedFragment(target, translated)
+
+        // Assert — two different owners may both keep "email"
+        val emails = merged.attributes.filter { it.name == "email" }
+        assertEquals(2, emails.size)
+        assertEquals(2, emails.map { it.ownerId }.distinct().size)
     }
 }

@@ -376,6 +376,10 @@ sealed class ConceptualLinkValidationResult {
  *   both ends are [TBaseEntidade]: temporarily switches to `Tool_Relacionamento`, places a new [TRelacao]
  *   at the midpoint of the two bases' `Left`/`Top`, then calls `Relacione` for each entity (`mer.pas` ~2961–2967,
  *   `Tool_Relacionamento` block ~2297–2317).
+ * - **Entity outer ↔ loose relationship** (mixed entity/relationship picks): may materialize an extra
+ *   intermediate [SchemaElement.Relationship] per existing Pascal rules; MCP `linkPattern` surfaces this for agents.
+ *   A future MCP-only mode that **reuses** the inner diamond of an associative entity (instead of another
+ *   relationship) is **not** implemented — it would require an explicit product decision and a dedicated branch here.
  * - **Specialization + plain entity** (either order): Pascal [Tool_Ligacao] branch in [TModelo.Add] —
  *   [TEspecializacao.Adicione] (`mer.pas` ~2378–2387). Only [SchemaElement.Entity] (Pascal [TEntidade]), not
  *   associative outers.
