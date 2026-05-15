@@ -18,16 +18,51 @@
 
 package games.polyclub.power.brmodelo.mcp
 
+import games.polyclub.power.brmodelo.ui.EditorTabSession
+
 /** MCP resource URI for the informative conceptual MER XML DTD (classpath-backed on desktop JVM). */
 internal fun conceptualMerDtdResourceUri(): String = "brmodelo://schema/conceptual-mer.dtd"
 
-/** MCP resource URI for in-memory conceptual XML: `brmodelo://model/{tabIndex}`. */
-internal fun modelResourceUri(tabIndex: Int): String = "brmodelo://model/$tabIndex"
+/**
+ * MCP resource URI for in-memory conceptual XML: `brmodelo://model/{editorTabSessionId}.xml`.
+ * Uses the stable [EditorTabSession.id] so the URI does not change when other tabs are closed
+ * and list indices shift.
+ */
+internal fun modelResourceUriForSession(editorTabSessionId: Long): String =
+    "brmodelo://model/$editorTabSessionId.xml"
 
-internal fun parseModelResourceTabIndex(uri: String): Int? {
+/**
+ * Resolves a live model resource URI to the current **list index** of that tab, or `null` if unknown.
+ *
+ * Accepts:
+ * - `brmodelo://model/{id}.xml` — matches [EditorTabSession.id] (preferred).
+ * - Legacy `brmodelo://model/{n}` with no suffix — treated as a **tab list index** `n` (older clients).
+ */
+internal fun tabIndexForModelResourceUri(uri: String, sessions: List<EditorTabSession>): Int? {
     val marker = "brmodelo://model/"
     val idx = uri.indexOf(marker)
     if (idx < 0) return null
-    val tail = uri.substring(idx + marker.length).substringBefore('/').substringBefore('?')
-    return tail.toIntOrNull()
+    var tail = uri.substring(idx + marker.length).substringBefore('/').substringBefore('?')
+    if (tail.endsWith(".xml", ignoreCase = true)) {
+        tail = tail.dropLast(4)
+        val sessionId = tail.toLongOrNull() ?: return null
+        val tabIdx = sessions.indexOfFirst { it.id == sessionId }
+        return tabIdx.takeIf { it >= 0 }
+    }
+    val legacyIndex = tail.toIntOrNull() ?: return null
+    return legacyIndex.takeIf { it in sessions.indices }
+}
+
+/**
+ * Index of the tab that received new content: first session whose id did not exist in [before],
+ * or [selectedAfter] when no new session id appears (reuse/replace-in-place).
+ */
+internal fun mcpCreatedTabIndexAfterOpen(
+    before: List<EditorTabSession>,
+    after: List<EditorTabSession>,
+    selectedAfter: Int,
+): Int {
+    val beforeIds = before.map { it.id }.toSet()
+    val newIdx = after.withIndex().firstOrNull { it.value.id !in beforeIds }?.index
+    return newIdx ?: selectedAfter.coerceIn(0, (after.size - 1).coerceAtLeast(0))
 }

@@ -115,3 +115,15 @@ data class HiddenAttribute(
         nestedHiddenAttributes = nestedHiddenAttributes.map { it.deepCopy() },
     )
 }
+
+/** Every non-empty trimmed [HiddenAttribute.name] in the forest, depth-first (children then nested ocultos). */
+fun List<HiddenAttribute>.collectAllDeclaredNamesDepthFirst(): List<String> = buildList {
+    fun walk(h: HiddenAttribute) {
+        add(h.name.trim())
+        for (c in h.children) walk(c)
+        for (n in h.nestedHiddenAttributes) walk(n)
+    }
+    for (r in this@collectAllDeclaredNamesDepthFirst) {
+        walk(r)
+    }
+}

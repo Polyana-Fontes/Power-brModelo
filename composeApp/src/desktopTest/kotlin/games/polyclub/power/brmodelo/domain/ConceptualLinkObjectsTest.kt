@@ -98,6 +98,78 @@ class ConceptualLinkObjectsTest {
     }
 
     @Test
+    fun `apply mcp patches maps connectionOverrides to new legs in ascending id order`() {
+        // Arrange
+        val e1 = SchemaElement.Entity(id = 1, name = "A", position = ElementPosition(0, 0, 100, 80))
+        val e2 = SchemaElement.Entity(id = 2, name = "B", position = ElementPosition(200, 100, 100, 80))
+        val before = ConceptualSchema(elements = mapOf(1 to e1, 2 to e2), nextId = 10)
+        val linked = assertIs<ConceptualLinkValidationResult.Ok>(
+            validateAndBuildConceptualLink(before, ConceptualLinkPick(1), ConceptualLinkPick(2)),
+        ).schema
+        val patches = listOf(
+            ConceptualLinkConnectionOverridePatch(cardinalityCode = 1),
+            ConceptualLinkConnectionOverridePatch(cardinalityCode = 4),
+        )
+
+        // Act
+        val r = applyConceptualLinkObjectsMcpPatches(before, linked, null, patches)
+
+        // Assert
+        val out = assertIs<ConceptualLinkObjectsMcpApplyResult.Ok>(r).schema
+        val newConns = out.connections.filter { c -> before.connections.none { it.id == c.id } }.sortedBy { it.id }
+        assertEquals(2, newConns.size)
+        assertEquals(Cardinality.ONE_TO_ONE, newConns[0].cardinality)
+        assertEquals(Cardinality.ZERO_TO_MANY, newConns[1].cardinality)
+    }
+
+    @Test
+    fun `apply mcp patches rejects connectionOverrides length mismatch`() {
+        // Arrange
+        val e1 = SchemaElement.Entity(id = 1, name = "A", position = ElementPosition(0, 0, 100, 80))
+        val e2 = SchemaElement.Entity(id = 2, name = "B", position = ElementPosition(200, 100, 100, 80))
+        val before = ConceptualSchema(elements = mapOf(1 to e1, 2 to e2), nextId = 10)
+        val linked = assertIs<ConceptualLinkValidationResult.Ok>(
+            validateAndBuildConceptualLink(before, ConceptualLinkPick(1), ConceptualLinkPick(2)),
+        ).schema
+
+        // Act
+        val r = applyConceptualLinkObjectsMcpPatches(
+            before,
+            linked,
+            null,
+            listOf(ConceptualLinkConnectionOverridePatch(cardinalityCode = 1)),
+        )
+
+        // Assert
+        assertIs<ConceptualLinkObjectsMcpApplyResult.Err>(r)
+    }
+
+    @Test
+    fun `apply mcp patches single new connection accepts one override`() {
+        // Arrange
+        val e1 = SchemaElement.Entity(id = 1, name = "A", position = ElementPosition(0, 0, 100, 80))
+        val rel = SchemaElement.Relationship(id = 2, name = "Rel", position = ElementPosition(200, 0, 80, 60))
+        val before = ConceptualSchema(elements = mapOf(1 to e1, 2 to rel), nextId = 10)
+        val linked = assertIs<ConceptualLinkValidationResult.Ok>(
+            validateAndBuildConceptualLink(before, ConceptualLinkPick(1), ConceptualLinkPick(2)),
+        ).schema
+
+        // Act
+        val r = applyConceptualLinkObjectsMcpPatches(
+            before,
+            linked,
+            null,
+            listOf(ConceptualLinkConnectionOverridePatch(cardinalityCode = 3, showCardinality = false)),
+        )
+
+        // Assert
+        val out = assertIs<ConceptualLinkObjectsMcpApplyResult.Ok>(r).schema
+        val newConn = out.connections.single { c -> before.connections.none { it.id == c.id } }
+        assertEquals(Cardinality.ONE_TO_MANY, newConn.cardinality)
+        assertEquals(false, newConn.showCardinality)
+    }
+
+    @Test
     fun `entity to entity skips taken Relacao names`() {
         // Arrange
         val e1 = SchemaElement.Entity(id = 1, name = "A", position = ElementPosition(0, 0, 50, 50))

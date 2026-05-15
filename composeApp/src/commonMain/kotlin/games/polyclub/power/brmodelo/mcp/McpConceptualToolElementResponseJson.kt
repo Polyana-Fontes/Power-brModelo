@@ -39,11 +39,17 @@ internal object McpConceptualToolElementResponseJson {
             is SchemaElement.Relationship -> {
                 """{$base,"elementKind":"relationship","arrowDirectionCode":${element.arrowDirection.code},"showName":${element.showName}}"""
             }
+            is SchemaElement.SelfRelationship -> {
+                """{$base,"elementKind":"selfRelationship","ownerEntityId":${element.ownerEntityId},"arrowDirectionCode":${element.arrowDirection.code}}"""
+            }
             is SchemaElement.AssociativeEntity -> {
                 """{$base,"elementKind":"associativeEntity","relationshipName":${jsonString(element.relationshipName)},"relationshipObservations":${jsonString(element.relationshipObservations)},"relationshipDictionary":${jsonString(element.relationshipDictionary)},"arrowDirectionCode":${element.arrowDirection.code}}"""
             }
             is SchemaElement.Specialization -> {
                 """{$base,"elementKind":"specialization","baseEntityId":${element.baseEntityId},"specializationTypeCode":${element.type.code},"isPartial":${element.isPartial}}"""
+            }
+            is SchemaElement.Attribute -> {
+                """{$base,"elementKind":"attribute","ownerId":${element.ownerId},"isIdentifier":${element.isIdentifier},"isMultiValued":${element.isMultiValued},"isOptional":${element.isOptional},"isComposite":${element.isComposite},"valueType":${jsonString(element.valueType)},"complement":${jsonString(element.complement)},"childAttributeIds":${intListJson(element.childAttributeIds)}}"""
             }
             else -> """{$base,"elementKind":"other"}"""
         }

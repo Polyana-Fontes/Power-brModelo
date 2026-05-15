@@ -24,12 +24,17 @@ package games.polyclub.power.brmodelo.mcp
 internal data class McpProceduralToolApplyOutcome(
     val error: String?,
     val tabIndex: Int = -1,
-    /** JSON object for the placed element (starts with `{`). */
+    /** JSON object for the placed element (starts with `{`), unless [isFullResponseJson] is true. */
     val elementJson: String? = null,
+    /** When true, [elementJson] is the entire tool success JSON body (including `ok` and `tabIndex`). */
+    val isFullResponseJson: Boolean = false,
 ) {
     companion object {
         fun ok(tabIndex: Int, elementJson: String): McpProceduralToolApplyOutcome =
-            McpProceduralToolApplyOutcome(null, tabIndex, elementJson)
+            McpProceduralToolApplyOutcome(null, tabIndex, elementJson, isFullResponseJson = false)
+
+        fun okFullJson(bodyJson: String): McpProceduralToolApplyOutcome =
+            McpProceduralToolApplyOutcome(null, -1, bodyJson, isFullResponseJson = true)
 
         fun err(code: String): McpProceduralToolApplyOutcome =
             McpProceduralToolApplyOutcome(code, -1, null)

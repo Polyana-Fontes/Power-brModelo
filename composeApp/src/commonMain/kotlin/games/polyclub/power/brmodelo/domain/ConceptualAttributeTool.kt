@@ -23,7 +23,7 @@ import kotlin.math.max
 
 private val ATRIBUTO_PATTERN = Regex("^Atributo(\\d+)$")
 
-private fun HiddenAttribute.collectNamesDeep(): Sequence<String> = sequence {
+internal fun HiddenAttribute.collectNamesDeep(): Sequence<String> = sequence {
     yield(name)
     children.forEach { yieldAll(it.collectNamesDeep()) }
     nestedHiddenAttributes.forEach { yieldAll(it.collectNamesDeep()) }
@@ -58,7 +58,7 @@ private fun ConceptualSchema.nextUnusedAttributeName(): String {
 /**
  * Allocates [count] distinct names `AtributoN` using the smallest available integers (Pascal [GeraBaseNome] style).
  */
-private fun ConceptualSchema.allocateConsecutiveAttributeNames(count: Int): List<String> {
+internal fun ConceptualSchema.allocateConsecutiveAttributeNames(count: Int): List<String> {
     require(count > 0)
     val used = (attributes.map { it.name } + allHiddenAttributeNames()).toMutableSet()
     val out = ArrayList<String>(count)
@@ -72,7 +72,7 @@ private fun ConceptualSchema.allocateConsecutiveAttributeNames(count: Int): List
     return out
 }
 
-private fun countAttributesOnSide(
+internal fun countAttributesOnSide(
     schema: ConceptualSchema,
     ownerId: Int,
     side: ConceptualAttributeAttachPonto,
@@ -85,7 +85,7 @@ private fun countAttributesOnSide(
     }
 }
 
-private fun positionSingleAttributeRect(
+internal fun positionSingleAttributeRect(
     owner: ElementPosition,
     side: ConceptualAttributeAttachPonto,
     attrW: Int,
@@ -127,13 +127,13 @@ private fun positionSingleAttributeRect(
 }
 
 /** Pascal `OrientacaoD` when `P = 1` (attribute on the LEFT of the owner) — see [TBase.OrganizeAtributos] / `TBarraDeAtributos.posicione`. */
-private fun isOrientacaoD(side: ConceptualAttributeAttachPonto): Boolean =
+internal fun isOrientacaoD(side: ConceptualAttributeAttachPonto): Boolean =
     side == ConceptualAttributeAttachPonto.LEFT
 
 /**
  * Positions two composite children along the bar (`TBarraDeAtributos.OrganizeAtributos` / `posicione`, mer.pas).
  */
-private fun layoutTwoCompositeChildPositions(
+internal fun layoutTwoCompositeChildPositions(
     parent: ElementPosition,
     orientacaoD: Boolean,
     childW: Int,
@@ -152,7 +152,7 @@ private fun layoutTwoCompositeChildPositions(
     return ElementPosition(childX, y0, childW, childH) to ElementPosition(childX, y1, childW, childH)
 }
 
-private data class AttributeVariantProps(
+internal data class AttributeVariantProps(
     val isIdentifier: Boolean = false,
     val isMultiValued: Boolean = false,
     val isOptional: Boolean = false,
@@ -165,7 +165,7 @@ private data class AttributeVariantProps(
  * Adds a [Connection] from [attributeId] to [ownerId] so the canvas draws the link (same as `<Ligacao>` on `<Atributo>` in XML / brM).
  * Uses [Connection.cardinality] `null` and hidden cardinality label, matching [ConceptualSchemaBrmParser].
  */
-private fun ConceptualSchema.withAttributeOwnerConnection(attributeId: Int, ownerId: Int): ConceptualSchema {
+internal fun ConceptualSchema.withAttributeOwnerConnection(attributeId: Int, ownerId: Int): ConceptualSchema {
     val (s, connId) = allocateId()
     return s.withConnection(
         Connection(
@@ -179,7 +179,7 @@ private fun ConceptualSchema.withAttributeOwnerConnection(attributeId: Int, owne
     )
 }
 
-private fun baseNewAttribute(
+internal fun baseNewAttribute(
     id: Int,
     name: String,
     position: ElementPosition,
@@ -391,7 +391,7 @@ private fun placeAttributeOnOwner(
     return ConceptualAttributeToolResult.Ok(s, parentId, ownerId, side)
 }
 
-private fun propsForSimpleVariant(variant: ConceptualAttributeToolVariant): AttributeVariantProps =
+internal fun propsForSimpleVariant(variant: ConceptualAttributeToolVariant): AttributeVariantProps =
     when (variant) {
         ConceptualAttributeToolVariant.Basic -> AttributeVariantProps()
         ConceptualAttributeToolVariant.Identifier ->
@@ -412,3 +412,161 @@ private fun propsForSimpleVariant(variant: ConceptualAttributeToolVariant): Attr
         ConceptualAttributeToolVariant.Composite ->
             error("Composite handled separately")
     }
+
+/**
+ * Optional field overrides when placing a simple (non-composite) attribute via [applyConceptualSimpleAttributeTool].
+ * Null/absent fields keep the defaults from [ConceptualAttributeToolVariant] and [baseNewAttribute].
+ */
+data class ConceptualSimpleAttributePlacementOverrides(
+    val name: String? = null,
+    val observations: String? = null,
+    val dictionary: String? = null,
+    val valueType: String? = null,
+    val complement: String? = null,
+    val minCardinality: Int? = null,
+    val maxCardinality: Int? = null,
+    val isIdentifier: Boolean? = null,
+    val isOptional: Boolean? = null,
+    val isMultiValued: Boolean? = null,
+)
+
+/**
+ * Picks the attach side with the fewest attributes on [ownerId]; ties break to [ConceptualAttributeAttachPonto.RIGHT]
+ * first, then LEFT, TOP, BOTTOM (same order as [ConceptualAttributeAttachPonto] enum declaration).
+ */
+fun preferredAttachSideForConceptualOwner(
+    schema: ConceptualSchema,
+    ownerId: Int,
+): ConceptualAttributeAttachPonto {
+    val order = listOf(
+        ConceptualAttributeAttachPonto.RIGHT,
+        ConceptualAttributeAttachPonto.LEFT,
+        ConceptualAttributeAttachPonto.TOP,
+        ConceptualAttributeAttachPonto.BOTTOM,
+    )
+    val counts = order.associateWith { countAttributesOnSide(schema, ownerId, it) }
+    val minC = counts.values.minOrNull() ?: 0
+    return order.first { counts[it] == minC }
+}
+
+/** Schema-space click on the midpoint of [owner]'s edge [side] (stable input for [positionSingleAttributeRect]). */
+fun syntheticClickOnOwnerSideCenter(owner: ElementPosition, side: ConceptualAttributeAttachPonto): Offset {
+    val mx = owner.x + owner.width / 2f
+    val my = owner.y + owner.height / 2f
+    val left = owner.x.toFloat()
+    val right = (owner.x + owner.width).toFloat()
+    val top = owner.y.toFloat()
+    val bottom = (owner.y + owner.height).toFloat()
+    return when (side) {
+        ConceptualAttributeAttachPonto.RIGHT -> Offset(right + 1f, my)
+        ConceptualAttributeAttachPonto.LEFT -> Offset(left - 1f, my)
+        ConceptualAttributeAttachPonto.TOP -> Offset(mx, top - 1f)
+        ConceptualAttributeAttachPonto.BOTTOM -> Offset(mx, bottom + 1f)
+    }
+}
+
+internal fun ConceptualSchema.allCanvasAndHiddenAttributeNames(): Set<String> =
+    attributes.map { it.name }.toSet() +
+        elements.values.asSequence()
+            .flatMap { el -> el.hiddenAttributes.asSequence().flatMap { it.collectNamesDeep() } }
+            .toSet()
+
+internal fun ConceptualSchema.nameCollidesWithExistingAttributeOrHidden(name: String): Boolean =
+    name in allCanvasAndHiddenAttributeNames()
+
+private fun SchemaElement.Attribute.withSimplePlacementOverrides(
+    o: ConceptualSimpleAttributePlacementOverrides?,
+): SchemaElement.Attribute {
+    if (o == null) return this
+    var a = this
+    o.name?.let { a = a.copy(name = it) }
+    o.observations?.let { a = a.copy(observations = it) }
+    o.dictionary?.let { a = a.copy(dictionary = it) }
+    o.valueType?.let { a = a.copy(valueType = it) }
+    o.complement?.let { a = a.copy(complement = it) }
+    if (o.minCardinality != null || o.maxCardinality != null) {
+        val c = a.cardinality
+        a = a.copy(
+            cardinality = AttributeCardinality(
+                o.minCardinality ?: c.minCardinality,
+                o.maxCardinality ?: c.maxCardinality,
+            ),
+        )
+    }
+    o.isIdentifier?.let { a = a.copy(isIdentifier = it) }
+    o.isOptional?.let { a = a.copy(isOptional = it) }
+    o.isMultiValued?.let { a = a.copy(isMultiValued = it) }
+    return a
+}
+
+/**
+ * Places a **simple** (non-composite) canvas attribute like the ribbon attribute tool, with an explicit or
+ * auto-resolved attach side. Does **not** run auto-size or per-side organize (callers mirror [SchemaCanvas]).
+ */
+fun applyConceptualSimpleAttributeTool(
+    schema: ConceptualSchema,
+    ownerElementId: Int,
+    variant: ConceptualAttributeToolVariant,
+    attachSide: ConceptualAttributeAttachPonto?,
+    overrides: ConceptualSimpleAttributePlacementOverrides?,
+): ConceptualAttributeToolResult {
+    if (variant == ConceptualAttributeToolVariant.Composite) {
+        return ConceptualAttributeToolResult.Error("Use the composite attribute placement API for composite attributes.")
+    }
+    val rawOwner = schema.elements[ownerElementId] ?: return ConceptualAttributeToolResult.Error(
+        "Clique no objeto que receberá o atributo.",
+    )
+    return when (rawOwner) {
+        is SchemaElement.Entity,
+        is SchemaElement.Relationship,
+        is SchemaElement.AssociativeEntity,
+        -> {
+            val ownerPos = rawOwner.position
+            val side = attachSide ?: preferredAttachSideForConceptualOwner(schema, ownerElementId)
+            val click = syntheticClickOnOwnerSideCenter(ownerPos, side)
+            val attrW = ConceptualPlacementDefaults.attributeWidth
+            val attrH = ConceptualPlacementDefaults.attributeHeight
+            val stack = countAttributesOnSide(schema, ownerElementId, side) + 1
+            val pos = positionSingleAttributeRect(ownerPos, side, attrW, attrH, click, stack)
+            val props = propsForSimpleVariant(variant)
+            var s = schema
+            val (s1, newId) = s.allocateId()
+            s = s1
+            val name = overrides?.name?.trim()?.takeIf { it.isNotEmpty() } ?: s.nextUnusedAttributeName()
+            if (s.nameCollidesWithExistingAttributeOrHidden(name)) {
+                return ConceptualAttributeToolResult.Error("Já existe um atributo com este nome.")
+            }
+            val newAttr = baseNewAttribute(newId, name, pos, ownerElementId, props).withSimplePlacementOverrides(overrides)
+            s = s.withElement(newAttr)
+            s = s.withAttributeOwnerConnection(attributeId = newId, ownerId = ownerElementId)
+            s = s.withNormalizedAttributeMultiValuedCounts()
+            return ConceptualAttributeToolResult.Ok(s, newId, ownerElementId, side)
+        }
+        is SchemaElement.Attribute -> {
+            val side = ConceptualAttributeAttachPonto.RIGHT
+            val click = syntheticClickOnOwnerSideCenter(rawOwner.position, side)
+            val attrW = ConceptualPlacementDefaults.attributeWidth
+            val attrH = ConceptualPlacementDefaults.attributeHeight
+            val stack = countAttributesOnSide(schema, rawOwner.id, side) + 1
+            val pos = positionSingleAttributeRect(rawOwner.position, side, attrW, attrH, click, stack)
+            val props = propsForSimpleVariant(variant)
+            var s = schema
+            val (s1, newId) = s.allocateId()
+            s = s1
+            val name = overrides?.name?.trim()?.takeIf { it.isNotEmpty() } ?: s.nextUnusedAttributeName()
+            if (s.nameCollidesWithExistingAttributeOrHidden(name)) {
+                return ConceptualAttributeToolResult.Error("Já existe um atributo com este nome.")
+            }
+            val newAttr = baseNewAttribute(newId, name, pos, rawOwner.id, props).withSimplePlacementOverrides(overrides)
+            s = s.withElement(newAttr)
+            s = s.withAttributeOwnerConnection(attributeId = newId, ownerId = rawOwner.id)
+            val updatedParent = rawOwner.copy(childAttributeIds = rawOwner.childAttributeIds + newId)
+            s = s.withElement(updatedParent)
+            s = s.withNormalizedAttributeMultiValuedCounts()
+            s = relayoutCompositeSubtree(s, rawOwner.id)
+            return ConceptualAttributeToolResult.Ok(s, newId, rawOwner.id, side)
+        }
+        else ->
+            ConceptualAttributeToolResult.Error("Este objeto não pode possuir atributo.")
+    }
+}

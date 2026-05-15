@@ -19,9 +19,16 @@
 package games.polyclub.power.brmodelo.mcp
 
 import androidx.compose.material3.SnackbarHostState
+import games.polyclub.power.brmodelo.domain.ConceptualAttributeAttachPonto
+import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolVariant
+import games.polyclub.power.brmodelo.domain.ConceptualCompositeLeafSpec
+import games.polyclub.power.brmodelo.domain.ConceptualSimpleAttributePlacementOverrides
+import games.polyclub.power.brmodelo.domain.ConceptualLinkConnectionOverridePatch
+import games.polyclub.power.brmodelo.domain.ConceptualLinkPick
 import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolKind
 import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolOverrides
 import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolVariant
+import games.polyclub.power.brmodelo.domain.HiddenAttribute
 import games.polyclub.power.brmodelo.domain.ConceptualSearchHit
 import games.polyclub.power.brmodelo.domain.ConceptualSearchOutcome
 import games.polyclub.power.brmodelo.domain.ConceptualSearchTextScope
@@ -60,6 +67,32 @@ internal actual object McpDesktopSync {
             Int,
             ConceptualSpecializationToolVariant,
         ) -> McpProceduralToolApplyOutcome,
+        onApplySimpleConceptualAttributeAtTab: (
+            Int,
+            Int,
+            ConceptualAttributeToolVariant,
+            ConceptualAttributeAttachPonto?,
+            ConceptualSimpleAttributePlacementOverrides?,
+        ) -> McpProceduralToolApplyOutcome,
+        onApplyCompositeConceptualAttributeAtTab: (
+            Int,
+            Int,
+            ConceptualAttributeAttachPonto?,
+            List<ConceptualCompositeLeafSpec>,
+            List<HiddenAttribute>,
+        ) -> McpProceduralToolApplyOutcome,
+        onApplyHiddenAttributeForestAtTab: (
+            Int,
+            Int,
+            List<HiddenAttribute>,
+        ) -> McpProceduralToolApplyOutcome,
+        onLinkConceptualObjectsAtTab: (
+            Int,
+            ConceptualLinkPick,
+            ConceptualLinkPick,
+            ConceptualProceduralToolOverrides?,
+            List<ConceptualLinkConnectionOverridePatch>?,
+        ) -> McpProceduralToolApplyOutcome,
         onConceptualSearchFind: (
             Int,
             String,
@@ -83,6 +116,10 @@ internal actual object McpDesktopSync {
                 onPatchModelXmlAtTab = onPatchModelXmlAtTab,
                 onPlaceProceduralConceptualToolAtTab = onPlaceProceduralConceptualToolAtTab,
                 onApplyConceptualSpecializationAtTab = onApplyConceptualSpecializationAtTab,
+                onApplySimpleConceptualAttributeAtTab = onApplySimpleConceptualAttributeAtTab,
+                onApplyCompositeConceptualAttributeAtTab = onApplyCompositeConceptualAttributeAtTab,
+                onApplyHiddenAttributeForestAtTab = onApplyHiddenAttributeForestAtTab,
+                onLinkConceptualObjectsAtTab = onLinkConceptualObjectsAtTab,
                 onConceptualSearchFind = onConceptualSearchFind,
                 onConceptualSearchApplyHit = onConceptualSearchApplyHit,
                 onNotifyUser = { msg ->

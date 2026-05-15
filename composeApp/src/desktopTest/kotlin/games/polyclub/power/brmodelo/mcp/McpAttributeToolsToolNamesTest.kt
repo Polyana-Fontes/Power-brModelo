@@ -22,22 +22,19 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-class McpProceduralToolsToolNamesTest {
+class McpAttributeToolsToolNamesTest {
 
     @Test
-    fun `procedural tool names use tools double underscore suffix pattern`() {
+    fun `attribute tool names use tools double underscore prefix`() {
         // Arrange
-        val sep = McpProceduralToolsToolNames.TOOLS_SEPARATOR
+        val sep = McpAttributeToolsToolNames.ATTRIBUTE_TOOLS_SEPARATOR
 
         // Act & Assert
-        assertEquals("tools", McpProceduralToolsToolNames.TOOLS_GROUP)
+        assertEquals("tools", McpAttributeToolsToolNames.ATTRIBUTE_TOOLS_GROUP)
         assertEquals("__", sep)
-        assertTrue(McpProceduralToolsToolNames.PLACE_ENTITY.startsWith("tools$sep"))
-        assertEquals("tools__place_entity", McpProceduralToolsToolNames.PLACE_ENTITY)
-        assertEquals("tools__place_relationship", McpProceduralToolsToolNames.PLACE_RELATIONSHIP)
-        assertEquals("tools__place_associative_entity", McpProceduralToolsToolNames.PLACE_ASSOCIATIVE_ENTITY)
-        assertEquals("tools__apply_specialization_basic", McpProceduralToolsToolNames.APPLY_SPECIALIZATION_BASIC)
-        assertEquals("tools__apply_specialization_tree", McpProceduralToolsToolNames.APPLY_SPECIALIZATION_TREE)
-        assertEquals("tools__link_objects", McpProceduralToolsToolNames.LINK_OBJECTS)
+        assertTrue(McpAttributeToolsToolNames.APPLY_ATTRIBUTE.startsWith("tools$sep"))
+        assertEquals("tools__apply_attribute", McpAttributeToolsToolNames.APPLY_ATTRIBUTE)
+        assertEquals("tools__apply_composite_attribute", McpAttributeToolsToolNames.APPLY_COMPOSITE_ATTRIBUTE)
+        assertEquals("tools__apply_hidden_attribute", McpAttributeToolsToolNames.APPLY_HIDDEN_ATTRIBUTE)
     }
 }

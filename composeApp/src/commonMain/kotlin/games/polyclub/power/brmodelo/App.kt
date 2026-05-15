@@ -38,8 +38,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.rememberTextMeasurer
-import games.polyclub.power.brmodelo.domain.CanvasSelection
+import games.polyclub.power.brmodelo.domain.applyAppendHiddenAttributeForest
+import games.polyclub.power.brmodelo.domain.applyConceptualCompositeAttributeWithLeafChildren
+import games.polyclub.power.brmodelo.domain.applyConceptualSimpleAttributeTool
+import games.polyclub.power.brmodelo.domain.ConceptualAppendHiddenAttributesResult
+import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolResult
 import games.polyclub.power.brmodelo.domain.applyDictionarySlots
 import games.polyclub.power.brmodelo.domain.buildConceptualClipboardPayload
 import games.polyclub.power.brmodelo.domain.canOpenBulkDataDictionaryForSelection
@@ -52,6 +57,7 @@ import games.polyclub.power.brmodelo.domain.ConceptualPasteContext
 import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolPlacementResult
 import games.polyclub.power.brmodelo.domain.pasteConceptualClipboard
 import games.polyclub.power.brmodelo.domain.placeProceduralConceptualTool
+import games.polyclub.power.brmodelo.mcp.McpConnectionToolResponseJson
 import games.polyclub.power.brmodelo.mcp.McpConceptualToolElementResponseJson
 import games.polyclub.power.brmodelo.mcp.McpDesktopSync
 import games.polyclub.power.brmodelo.mcp.McpProceduralToolApplyOutcome
@@ -87,18 +93,26 @@ import games.polyclub.power.brmodelo.domain.canPromoteAttributeToEntityMenu
 import games.polyclub.power.brmodelo.domain.canPromoteToAssociativeEntityMenu
 import games.polyclub.power.brmodelo.domain.canSelectAttributeTreeMenu
 import games.polyclub.power.brmodelo.domain.expandCanvasSelectionWithAttributeTrees
+import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.domain.ConceptualSearchOutcome
 import games.polyclub.power.brmodelo.domain.searchConceptualModel
+import games.polyclub.power.brmodelo.domain.organizeAttributesOnOwnerSide
+import games.polyclub.power.brmodelo.domain.relayoutCompositeSubtree
 import games.polyclub.power.brmodelo.domain.ElementPosition
 import games.polyclub.power.brmodelo.domain.SchemaElement
 import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolResult
 import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolVariant
+import games.polyclub.power.brmodelo.domain.applyConceptualLinkObjectsMcpPatches
 import games.polyclub.power.brmodelo.domain.applyConceptualSpecializationTool
+import games.polyclub.power.brmodelo.domain.ConceptualLinkObjectsMcpApplyResult
+import games.polyclub.power.brmodelo.domain.ConceptualLinkValidationResult
+import games.polyclub.power.brmodelo.domain.validateAndBuildConceptualLink
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaBrmParser
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaXmlParser
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaXmlSerializer
 import games.polyclub.power.brmodelo.ui.BulkDataDictionaryDialog
+import games.polyclub.power.brmodelo.ui.canvas.withAutoSizedAttributeSubtree
 import games.polyclub.power.brmodelo.ui.BrModeloScreen
 import games.polyclub.power.brmodelo.ui.AttributeToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
@@ -111,6 +125,7 @@ import games.polyclub.power.brmodelo.ui.conceptualSearchNavigateAction
 import games.polyclub.power.brmodelo.ui.clipboard.brModeloClipboardSetPlainText
 import games.polyclub.power.brmodelo.ui.clipboard.encodeImageBitmapToPngBytes
 import games.polyclub.power.brmodelo.ui.canvas.SchemaCanvasViewState
+import games.polyclub.power.brmodelo.ui.canvas.enrichConnectionWithInitialCardinalityPosition
 import games.polyclub.power.brmodelo.ui.canvas.renderSchemaToImageBitmap
 import games.polyclub.power.brmodelo.ui.BulkDeleteObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.RectangleSelectionToolRibbonBinding
@@ -335,6 +350,7 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
 
     val clipboardPreviewTextMeasurer = rememberTextMeasurer()
     val clipboardPreviewDensity = LocalDensity.current
+    val layoutDirection = LocalLayoutDirection.current
 
     suspend fun saveTabAt(index: Int, saveAs: Boolean): Boolean {
         val tab = tabSessions.getOrNull(index) ?: return true
@@ -976,6 +992,159 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                                 tabIdx,
                                 McpConceptualToolElementResponseJson.elementSummary(placed),
                             )
+                        }
+                    }
+                },
+                onApplySimpleConceptualAttributeAtTab = mcpSimpleAttr@{ tabIdx, targetId, variant, attachSide, overrides ->
+                    if (tabIdx !in tabSessions.indices) {
+                        return@mcpSimpleAttr McpProceduralToolApplyOutcome.err("invalid_tab_index")
+                    }
+                    val tab = tabSessions[tabIdx]
+                    when (val r = applyConceptualSimpleAttributeTool(tab.schema, targetId, variant, attachSide, overrides)) {
+                        is ConceptualAttributeToolResult.Error ->
+                            McpProceduralToolApplyOutcome.err(r.message)
+                        is ConceptualAttributeToolResult.Ok -> {
+                            var committed = r.schema.withAutoSizedAttributeSubtree(
+                                r.newPrimaryAttributeId,
+                                clipboardPreviewTextMeasurer,
+                                layoutDirection,
+                            )
+                            val placed = committed.elements[r.newPrimaryAttributeId] as? SchemaElement.Attribute
+                            if (placed?.isComposite == true) {
+                                committed = relayoutCompositeSubtree(committed, placed.id)
+                            }
+                            committed = organizeAttributesOnOwnerSide(
+                                committed,
+                                r.ownerElementId,
+                                r.attachSide,
+                            )
+                            val normalized = committed.withNormalizedAttributeMultiValuedCounts()
+                            val out = normalized.elements[r.newPrimaryAttributeId]
+                                ?: return@mcpSimpleAttr McpProceduralToolApplyOutcome.err("internal_missing_attribute")
+                            pushCommitOnTabAt(tabIdx, normalized)
+                            McpProceduralToolApplyOutcome.ok(
+                                tabIdx,
+                                McpConceptualToolElementResponseJson.elementSummary(out),
+                            )
+                        }
+                    }
+                },
+                onApplyCompositeConceptualAttributeAtTab = mcpCompAttr@{ tabIdx, targetId, attachSide, leafSpecs, nestedHidden ->
+                    if (tabIdx !in tabSessions.indices) {
+                        return@mcpCompAttr McpProceduralToolApplyOutcome.err("invalid_tab_index")
+                    }
+                    val tab = tabSessions[tabIdx]
+                    when (
+                        val r = applyConceptualCompositeAttributeWithLeafChildren(
+                            tab.schema,
+                            targetId,
+                            attachSide,
+                            leafSpecs,
+                            nestedHidden,
+                        )
+                    ) {
+                        is ConceptualAttributeToolResult.Error ->
+                            McpProceduralToolApplyOutcome.err(r.message)
+                        is ConceptualAttributeToolResult.Ok -> {
+                            var committed = r.schema.withAutoSizedAttributeSubtree(
+                                r.newPrimaryAttributeId,
+                                clipboardPreviewTextMeasurer,
+                                layoutDirection,
+                            )
+                            val placed = committed.elements[r.newPrimaryAttributeId] as? SchemaElement.Attribute
+                            if (placed?.isComposite == true) {
+                                committed = relayoutCompositeSubtree(committed, placed.id)
+                            }
+                            committed = organizeAttributesOnOwnerSide(
+                                committed,
+                                r.ownerElementId,
+                                r.attachSide,
+                            )
+                            val normalized = committed.withNormalizedAttributeMultiValuedCounts()
+                            val out = normalized.elements[r.newPrimaryAttributeId]
+                                ?: return@mcpCompAttr McpProceduralToolApplyOutcome.err("internal_missing_attribute")
+                            pushCommitOnTabAt(tabIdx, normalized)
+                            McpProceduralToolApplyOutcome.ok(
+                                tabIdx,
+                                McpConceptualToolElementResponseJson.elementSummary(out),
+                            )
+                        }
+                    }
+                },
+                onApplyHiddenAttributeForestAtTab = mcpHidden@{ tabIdx, holderId, roots ->
+                    if (tabIdx !in tabSessions.indices) {
+                        return@mcpHidden McpProceduralToolApplyOutcome.err("invalid_tab_index")
+                    }
+                    val tab = tabSessions[tabIdx]
+                    when (val r = applyAppendHiddenAttributeForest(tab.schema, holderId, roots)) {
+                        is ConceptualAppendHiddenAttributesResult.Error ->
+                            McpProceduralToolApplyOutcome.err(r.message)
+                        is ConceptualAppendHiddenAttributesResult.Ok -> {
+                            pushCommitOnTabAt(tabIdx, r.schema)
+                            McpProceduralToolApplyOutcome.okFullJson(
+                                """{"ok":true,"tabIndex":$tabIdx,"holderElementId":$holderId,"appendedRootCount":${roots.size}}""",
+                            )
+                        }
+                    }
+                },
+                onLinkConceptualObjectsAtTab = mcpLink@{ tabIdx, endA, endB, relOverrides, connPatches ->
+                    if (tabIdx !in tabSessions.indices) {
+                        return@mcpLink McpProceduralToolApplyOutcome.err("invalid_tab_index")
+                    }
+                    val tab = tabSessions[tabIdx]
+                    val before = tab.schema
+                    when (val link = validateAndBuildConceptualLink(before, endA, endB)) {
+                        is ConceptualLinkValidationResult.Error ->
+                            McpProceduralToolApplyOutcome.err(link.message)
+                        is ConceptualLinkValidationResult.Ok -> {
+                            when (
+                                val patched =
+                                    applyConceptualLinkObjectsMcpPatches(
+                                        before,
+                                        link.schema,
+                                        relOverrides,
+                                        connPatches,
+                                    )
+                            ) {
+                                is ConceptualLinkObjectsMcpApplyResult.Err ->
+                                    McpProceduralToolApplyOutcome.err(patched.code)
+                                is ConceptualLinkObjectsMcpApplyResult.Ok -> {
+                                    val oldConnIds = before.connections.map { it.id }.toSet()
+                                    var committed = patched.schema
+                                    for (conn in committed.connections.filter { it.id !in oldConnIds }) {
+                                        val enriched =
+                                            enrichConnectionWithInitialCardinalityPosition(
+                                                committed,
+                                                conn,
+                                                clipboardPreviewTextMeasurer,
+                                            )
+                                        committed = committed.copy(
+                                            connections = committed.connections.map {
+                                                if (it.id == conn.id) enriched else it
+                                            },
+                                        )
+                                    }
+                                    val normalized = committed.withNormalizedAttributeMultiValuedCounts()
+                                    val newConns =
+                                        normalized.connections.filter { it.id !in oldConnIds }.sortedBy { it.id }
+                                    val newElemIds =
+                                        normalized.elements.keys.filter { it !in before.elements.keys }
+                                    val newRel = newElemIds.asSequence()
+                                        .mapNotNull { id -> normalized.elements[id] as? SchemaElement.Relationship }
+                                        .firstOrNull()
+                                    val newSelf = newElemIds.asSequence()
+                                        .mapNotNull { id -> normalized.elements[id] as? SchemaElement.SelfRelationship }
+                                        .firstOrNull()
+                                    pushCommitOnTabAt(tabIdx, normalized)
+                                    val body = McpConnectionToolResponseJson.linkObjectsToolSuccessJson(
+                                        tabIdx,
+                                        newConns,
+                                        newRel,
+                                        newSelf,
+                                    )
+                                    McpProceduralToolApplyOutcome.okFullJson(body)
+                                }
+                            }
                         }
                     }
                 },

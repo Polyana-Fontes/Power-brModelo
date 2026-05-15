@@ -18,6 +18,7 @@
 
 package games.polyclub.power.brmodelo.mcp
 
+import games.polyclub.power.brmodelo.ui.EditorTabSession
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -25,51 +26,112 @@ import kotlin.test.assertNull
 class McpResourceUrisTest {
 
     @Test
-    fun `modelResourceUri roundtrips through parse`() {
+    fun `modelResourceUriForSession ends with xml suffix`() {
         // Arrange
-        val uri = modelResourceUri(4)
+        val sessionId = 42L
 
         // Act
-        val index = parseModelResourceTabIndex(uri)
+        val uri = modelResourceUriForSession(sessionId)
 
         // Assert
-        assertEquals(4, index)
+        assertEquals("brmodelo://model/42.xml", uri)
     }
 
     @Test
-    fun `parses tab index from canonical uri`() {
+    fun `tabIndexForModelResourceUri resolves session id form`() {
         // Arrange
-        val uri = "brmodelo://model/2"
+        val s0 = EditorTabSession.blank(10L)
+        val s1 = EditorTabSession.blank(20L)
+        val sessions = listOf(s0, s1)
+        val uri = modelResourceUriForSession(20L)
 
         // Act
-        val index = parseModelResourceTabIndex(uri)
+        val index = tabIndexForModelResourceUri(uri, sessions)
 
         // Assert
-        assertEquals(2, index)
+        assertEquals(1, index)
     }
 
     @Test
-    fun `parses tab index ignoring path suffix and query`() {
+    fun `tabIndexForModelResourceUri accepts legacy list index without suffix`() {
         // Arrange
-        val uri = "brmodelo://model/0/extra?x=1"
+        val s0 = EditorTabSession.blank(10L)
+        val s1 = EditorTabSession.blank(20L)
+        val sessions = listOf(s0, s1)
+        val uri = "brmodelo://model/1"
 
         // Act
-        val index = parseModelResourceTabIndex(uri)
+        val index = tabIndexForModelResourceUri(uri, sessions)
+
+        // Assert
+        assertEquals(1, index)
+    }
+
+    @Test
+    fun `tabIndexForModelResourceUri parses path suffix and query before first slash`() {
+        // Arrange
+        val s0 = EditorTabSession.blank(7L)
+        val sessions = listOf(s0)
+        val uri = "brmodelo://model/7.xml/extra?x=1"
+
+        // Act
+        val index = tabIndexForModelResourceUri(uri, sessions)
 
         // Assert
         assertEquals(0, index)
     }
 
     @Test
-    fun `returns null for unrelated uri`() {
+    fun `tabIndexForModelResourceUri returns null for unknown session id`() {
         // Arrange
-        val uri = "file:///tmp/model.xml"
+        val sessions = listOf(EditorTabSession.blank(1L))
+        val uri = modelResourceUriForSession(999L)
 
         // Act
-        val index = parseModelResourceTabIndex(uri)
+        val index = tabIndexForModelResourceUri(uri, sessions)
 
         // Assert
         assertNull(index)
+    }
+
+    @Test
+    fun `returns null for unrelated uri`() {
+        // Arrange
+        val uri = "file:///tmp/model.xml"
+        val sessions = listOf(EditorTabSession.blank(1L))
+
+        // Act
+        val index = tabIndexForModelResourceUri(uri, sessions)
+
+        // Assert
+        assertNull(index)
+    }
+
+    @Test
+    fun `mcpCreatedTabIndexAfterOpen picks new session index when appended`() {
+        // Arrange
+        val before = listOf(EditorTabSession.blank(1L))
+        val after = listOf(EditorTabSession.blank(1L), EditorTabSession.blank(2L))
+
+        // Act
+        val created = mcpCreatedTabIndexAfterOpen(before, after, selectedAfter = 1)
+
+        // Assert
+        assertEquals(1, created)
+    }
+
+    @Test
+    fun `mcpCreatedTabIndexAfterOpen falls back to selected when no new session id`() {
+        // Arrange
+        val tab = EditorTabSession.blank(5L)
+        val before = listOf(tab)
+        val after = listOf(tab)
+
+        // Act
+        val created = mcpCreatedTabIndexAfterOpen(before, after, selectedAfter = 0)
+
+        // Assert
+        assertEquals(0, created)
     }
 
     @Test

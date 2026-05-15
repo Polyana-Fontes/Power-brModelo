@@ -309,3 +309,42 @@ fun applyRevealHiddenAttribute(
         .let { organizeAttributesForConceptualOwner(it, ultimate) }
     return final to newAttrId
 }
+
+sealed class ConceptualAppendHiddenAttributesResult {
+    data class Ok(val schema: ConceptualSchema) : ConceptualAppendHiddenAttributesResult()
+    data class Error(val message: String) : ConceptualAppendHiddenAttributesResult()
+}
+
+/**
+ * Appends one or more [HiddenAttribute] trees to [holderElementId] (same storage as the inspector / XML ocultos).
+ * Allows full recursive composite ocultos; names must be unique across the new forest and against existing
+ * canvas attribute names and all existing hidden-attribute names.
+ */
+fun applyAppendHiddenAttributeForest(
+    schema: ConceptualSchema,
+    holderElementId: Int,
+    newRoots: List<HiddenAttribute>,
+): ConceptualAppendHiddenAttributesResult {
+    if (newRoots.isEmpty()) {
+        return ConceptualAppendHiddenAttributesResult.Error("roots must not be empty")
+    }
+    val holder = schema.elements[holderElementId] ?: return ConceptualAppendHiddenAttributesResult.Error(
+        "invalid_holder_element",
+    )
+    val names = newRoots.collectAllDeclaredNamesDepthFirst()
+    if (names.any { it.isEmpty() }) {
+        return ConceptualAppendHiddenAttributesResult.Error("hidden_attribute_name_required")
+    }
+    if (names.size != names.toSet().size) {
+        return ConceptualAppendHiddenAttributesResult.Error("duplicate_names_in_hidden_forest")
+    }
+    val existing = schema.allCanvasAndHiddenAttributeNames()
+    val clash = names.firstOrNull { it in existing }
+    if (clash != null) {
+        return ConceptualAppendHiddenAttributesResult.Error("hidden_name_collision:$clash")
+    }
+    val current = holder.hiddenAttributeList()
+    val work = schema.withElementHiddenList(holderElementId, current + newRoots)
+        ?: return ConceptualAppendHiddenAttributesResult.Error("holder_does_not_support_hidden_attributes")
+    return ConceptualAppendHiddenAttributesResult.Ok(work.withNormalizedAttributeMultiValuedCounts())
+}

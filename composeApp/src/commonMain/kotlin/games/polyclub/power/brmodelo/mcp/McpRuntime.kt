@@ -20,7 +20,14 @@ package games.polyclub.power.brmodelo.mcp
 
 import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolKind
 import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolOverrides
+import games.polyclub.power.brmodelo.domain.ConceptualLinkConnectionOverridePatch
+import games.polyclub.power.brmodelo.domain.ConceptualLinkPick
 import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolVariant
+import games.polyclub.power.brmodelo.domain.HiddenAttribute
+import games.polyclub.power.brmodelo.domain.ConceptualAttributeAttachPonto
+import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolVariant
+import games.polyclub.power.brmodelo.domain.ConceptualCompositeLeafSpec
+import games.polyclub.power.brmodelo.domain.ConceptualSimpleAttributePlacementOverrides
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.domain.ConceptualSearchHit
 import games.polyclub.power.brmodelo.domain.ConceptualSearchOutcome
@@ -82,6 +89,35 @@ internal class McpUiBindings(
         tabIndex: Int,
         baseEntityId: Int,
         variant: ConceptualSpecializationToolVariant,
+    ) -> McpProceduralToolApplyOutcome,
+    val onApplySimpleConceptualAttributeAtTab: (
+        tabIndex: Int,
+        targetElementId: Int,
+        variant: ConceptualAttributeToolVariant,
+        attachSide: ConceptualAttributeAttachPonto?,
+        overrides: ConceptualSimpleAttributePlacementOverrides?,
+    ) -> McpProceduralToolApplyOutcome,
+    val onApplyCompositeConceptualAttributeAtTab: (
+        tabIndex: Int,
+        targetElementId: Int,
+        attachSide: ConceptualAttributeAttachPonto?,
+        leafSpecs: List<ConceptualCompositeLeafSpec>,
+        nestedHiddenAttributes: List<HiddenAttribute>,
+    ) -> McpProceduralToolApplyOutcome,
+    val onApplyHiddenAttributeForestAtTab: (
+        tabIndex: Int,
+        holderElementId: Int,
+        newRoots: List<HiddenAttribute>,
+    ) -> McpProceduralToolApplyOutcome,
+    /**
+     * Same conceptual rules as the editor **Ligar Objetos** tool (two picks in one call). Must run on the UI thread.
+     */
+    val onLinkConceptualObjectsAtTab: (
+        tabIndex: Int,
+        endA: ConceptualLinkPick,
+        endB: ConceptualLinkPick,
+        relationshipOverrides: ConceptualProceduralToolOverrides?,
+        connectionPatches: List<ConceptualLinkConnectionOverridePatch>?,
     ) -> McpProceduralToolApplyOutcome,
     /**
      * Runs the same conceptual search as the **Localizar** dialog on [tabIndex] (must be invoked on the UI thread).
