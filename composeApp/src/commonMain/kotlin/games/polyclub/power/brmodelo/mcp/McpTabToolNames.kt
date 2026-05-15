@@ -30,15 +30,14 @@ internal object McpTabToolNames {
     private fun tabTool(suffix: String): String = "$TAB_TOOL_CATEGORY$TAB_TOOL_SEPARATOR$suffix"
 
     val LIST_OPEN = tabTool("list_open")
+    /** Selects a tab by live `resourceUri` from [LIST_OPEN] (`.xml`, `.png`, or `.jpeg` suffix for the same tab). */
     val SELECT = tabTool("select")
-    val SELECT_RESOURCE = tabTool("select_resource")
     val CLOSE = tabTool("close")
-    val CLOSE_RESOURCE = tabTool("close_resource")
     val NEW_CONCEPTUAL_MODEL = tabTool("new_conceptual_model")
     val SAVE = tabTool("save")
-    val SAVE_RESOURCE = tabTool("save_resource")
     val OPEN_FILE = tabTool("open_file")
     val OPEN_XML = tabTool("open_xml")
     val REPLACE_MODEL_XML = tabTool("replace_model_xml")
     val PATCH_MODEL_XML = tabTool("patch_model_xml")
+    val FOCUS_WINDOW = tabTool("focus_window")
 }

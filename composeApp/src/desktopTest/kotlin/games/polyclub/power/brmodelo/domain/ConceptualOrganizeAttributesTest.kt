@@ -67,6 +67,53 @@ class ConceptualOrganizeAttributesTest {
     }
 
     @Test
+    fun `menu organize with sides right only matches organizeAttributesOnOwnerSide right`() {
+        // Arrange
+        val ent = SchemaElement.Entity(
+            id = 1,
+            name = "E1",
+            position = ElementPosition(100, 100, 102, 66),
+        )
+        val topAttr = SchemaElement.Attribute(
+            id = 2,
+            name = "Top1",
+            position = ElementPosition(120, 50, 73, 16),
+            ownerId = 1,
+        )
+        val rightAttr = SchemaElement.Attribute(
+            id = 3,
+            name = "Right1",
+            position = ElementPosition(250, 120, 73, 16),
+            ownerId = 1,
+        )
+        val schema = ConceptualSchema(
+            elements = mapOf(1 to ent, 2 to topAttr, 3 to rightAttr),
+            connections = listOf(
+                Connection(1, 2, 1, null, showCardinality = false, orientation = LineOrientation.VERTICAL),
+                Connection(2, 3, 1, null, showCardinality = false, orientation = LineOrientation.VERTICAL),
+            ),
+            nextId = 4,
+        )
+
+        // Act
+        val out = applyOrganizeAttributesMenuAction(
+            schema,
+            CanvasSelection.Element(1),
+            setOf(ConceptualAttributeAttachPonto.RIGHT),
+        )
+        val ref = organizeAttributesOnOwnerSide(schema, 1, ConceptualAttributeAttachPonto.RIGHT)
+
+        // Assert
+        assertNotNull(out)
+        val topAfter = out.elements[2] as SchemaElement.Attribute
+        val rightAfter = out.elements[3] as SchemaElement.Attribute
+        val refTop = ref.elements[2] as SchemaElement.Attribute
+        val refRight = ref.elements[3] as SchemaElement.Attribute
+        assertEquals(refTop.position, topAfter.position)
+        assertEquals(refRight.position, rightAfter.position)
+    }
+
+    @Test
     fun `canOrganize menu false for entity without attributes`() {
         // Arrange
         val ent = SchemaElement.Entity(1, "E", ElementPosition(0, 0, 10, 10))

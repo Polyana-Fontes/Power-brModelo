@@ -25,3 +25,6 @@ internal expect fun registerDesktopMainWindowCloseHandler(handler: (() -> Unit)?
 internal expect fun setBrowserUnloadWarningEnabled(enabled: Boolean)
 
 internal expect fun quitApplicationCompletely()
+
+/** Desktop: brings the main editor window to the front (MCP / user attention). WASM: no-op. */
+internal expect fun requestDesktopMainWindowToFront()

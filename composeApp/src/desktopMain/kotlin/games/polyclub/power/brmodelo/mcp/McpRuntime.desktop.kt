@@ -22,13 +22,24 @@ import games.polyclub.power.brmodelo.BuildInfo
 import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolKind
 import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolOverrides
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
+import games.polyclub.power.brmodelo.domain.analyzeConceptualLayoutQuality
+import games.polyclub.power.brmodelo.domain.ConceptualLinkPick
+import games.polyclub.power.brmodelo.domain.syntheticClickOnOwnerSideCenter
 import games.polyclub.power.brmodelo.domain.ConceptualSearchHit
 import games.polyclub.power.brmodelo.domain.ConceptualSearchOutcome
 import games.polyclub.power.brmodelo.domain.ConceptualSearchTextScope
 import games.polyclub.power.brmodelo.domain.ConceptualSearchTypeFilters
 import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolVariant
 import games.polyclub.power.brmodelo.domain.ElementPosition
+import games.polyclub.power.brmodelo.domain.CanvasSelection
+import games.polyclub.power.brmodelo.domain.ConceptualAttributeAttachPonto
+import games.polyclub.power.brmodelo.domain.CanvasSelectionRectangleMergeMode
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaXmlSerializer
+import games.polyclub.power.brmodelo.domain.tryBuildCanvasSelectionFromMcpPickLists
+import games.polyclub.power.brmodelo.domain.elementIdsForClipboard
+import games.polyclub.power.brmodelo.domain.selectedPickCount
+import games.polyclub.power.brmodelo.domain.toMultiPickSets
+import games.polyclub.power.brmodelo.ui.ConceptualSubsetRasterFormat
 import io.modelcontextprotocol.json.McpJsonDefaults
 import io.modelcontextprotocol.server.McpServer
 import io.modelcontextprotocol.server.McpServerFeatures
@@ -42,6 +53,7 @@ import org.eclipse.jetty.servlet.ServletContextHandler
 import org.eclipse.jetty.servlet.ServletHolder
 import java.net.InetSocketAddress
 import java.nio.charset.StandardCharsets
+import java.util.Base64
 import java.util.concurrent.atomic.AtomicReference
 import java.util.function.BiFunction
 import javax.swing.SwingUtilities
@@ -66,16 +78,22 @@ private fun <T> runOnEdt(block: () -> T): T {
  * Tab snapshot after an MCP tool that may create or switch tabs (created vs selected + stable URIs).
  */
 private data class McpTabSelectionChange(
-    val createdTabIndex: Int,
-    val selectedTabIndex: Int,
     val createdResourceUri: String,
     val selectedResourceUri: String,
+    val createdResourceUriPng: String,
+    val createdResourceUriJpeg: String,
+    val selectedResourceUriPng: String,
+    val selectedResourceUriJpeg: String,
 )
 
 internal actual class McpRuntime {
 
     companion object {
         private const val MAX_RESOURCE_UTILITY_MATCHES = 2000
+
+        /** JSON Schema fragment: required live tab URI (see [McpTabToolNames.LIST_OPEN]). */
+        private const val TAB_TOOL_RESOURCE_URI_SCHEMA_PROP =
+            """"resourceUri":{"type":"string","minLength":1,"description":"Live tab URI from tabs__list_open (resourceUri, resourceUriPng, or resourceUriJpeg for the same tab)."}"""
 
         private const val CONCEPTUAL_MER_DTD_CLASSPATH = "mcp/conceptual-mer.dtd"
 
@@ -258,18 +276,21 @@ internal actual class McpRuntime {
         if (selectedIdx !in after.sessions.indices) return null
         val createdIdx = mcpCreatedTabIndexAfterOpen(before.sessions, after.sessions, selectedIdx)
         if (createdIdx !in after.sessions.indices) return null
+        val createdId = after.sessions[createdIdx].id
+        val selectedId = after.sessions[selectedIdx].id
         return McpTabSelectionChange(
-            createdTabIndex = createdIdx,
-            selectedTabIndex = selectedIdx,
-            createdResourceUri = modelResourceUriForSession(after.sessions[createdIdx].id),
-            selectedResourceUri = modelResourceUriForSession(after.sessions[selectedIdx].id),
+            createdResourceUri = modelResourceUriForSession(createdId),
+            selectedResourceUri = modelResourceUriForSession(selectedId),
+            createdResourceUriPng = modelResourcePngUriForSession(createdId),
+            createdResourceUriJpeg = modelResourceJpgUriForSession(createdId),
+            selectedResourceUriPng = modelResourcePngUriForSession(selectedId),
+            selectedResourceUriJpeg = modelResourceJpgUriForSession(selectedId),
         )
     }
 
     /**
-     * MCP clients (e.g. Cursor) list **concrete** resources via `resources/list`; URI templates alone
-     * are not enough. Registers one `brmodelo://model/{editorTabSessionId}.xml` resource per open tab and refreshes
-     * the list when tabs change.
+     * Registers `brmodelo://model/{sessionId}.xml`, `.png`, and `.jpg` per open tab (PNG/JPEG match **Exportar em PNG/JPEG**)
+     * and refreshes the list when tabs change.
      */
     private fun syncOpenModelTabResources() {
         val server = mcp ?: return
@@ -286,30 +307,78 @@ internal actual class McpRuntime {
         }
         for (index in snapshot.sessions.indices) {
             val tab = snapshot.sessions[index]
-            val uri = modelResourceUriForSession(tab.id)
             val rawTitle = tab.displayTitle()
             val title = if (rawTitle.length > 120) rawTitle.take(117) + "..." else rawTitle
-            val spec = McpServerFeatures.SyncResourceSpecification(
-                McpSchema.Resource.builder()
-                    .uri(uri)
-                    .name("conceptual_model_$index")
-                    .title("Tab $index — $title")
-                    .description(
-                        "Live in-memory conceptual schema for editor tab index $index " +
-                            "(stable resource id: session ${tab.id}; same XML as a saved brModelo export).",
-                    )
-                    .mimeType("application/xml")
-                    .build(),
-                BiFunction { _: McpSyncServerExchange, req: McpSchema.ReadResourceRequest ->
-                    readModelResource(req.uri())
-                },
+            val xmlUri = modelResourceUriForSession(tab.id)
+            val pngUri = modelResourcePngUriForSession(tab.id)
+            val jpgUri = modelResourceJpgUriForSession(tab.id)
+
+            fun register(
+                uri: String,
+                nameSuffix: String,
+                titleSuffix: String,
+                mime: String,
+                description: String,
+            ) {
+                val spec = McpServerFeatures.SyncResourceSpecification(
+                    McpSchema.Resource.builder()
+                        .uri(uri)
+                        .name("conceptual_model_${index}_$nameSuffix")
+                        .title("Tab $index — $title ($titleSuffix)")
+                        .description(description)
+                        .mimeType(mime)
+                        .build(),
+                    BiFunction { _: McpSyncServerExchange, req: McpSchema.ReadResourceRequest ->
+                        readLiveModelTabResource(req.uri())
+                    },
+                )
+                server.addResource(spec)
+            }
+
+            register(
+                uri = xmlUri,
+                nameSuffix = "xml",
+                titleSuffix = "MER XML",
+                mime = "application/xml",
+                description =
+                    "Live in-memory conceptual schema for editor tab index $index " +
+                        "(stable id: session ${tab.id}; same XML as a saved brModelo export).",
             )
-            server.addResource(spec)
+            register(
+                uri = pngUri,
+                nameSuffix = "png",
+                titleSuffix = "PNG preview",
+                mime = "image/png",
+                description =
+                    "Raster preview of tab $index (session ${tab.id}), same rendering as **Exportar em PNG** " +
+                        "(transparent background, cropped to diagram bounds).",
+            )
+            register(
+                uri = jpgUri,
+                nameSuffix = "jpg",
+                titleSuffix = "JPEG preview",
+                mime = "image/jpeg",
+                description =
+                    "Raster preview of tab $index (session ${tab.id}), same rendering as **Exportar em JPEG** " +
+                        "(opaque canvas-gray background, cropped to diagram bounds).",
+            )
         }
         server.notifyResourcesListChanged()
     }
 
-    private fun readModelResource(uri: String): McpSchema.ReadResourceResult {
+    private fun readLiveModelTabResource(uri: String): McpSchema.ReadResourceResult {
+        val parsed = parseLiveModelTabResourceUri(uri)
+        if (parsed == null) {
+            return McpSchema.ReadResourceResult(
+                listOf(
+                    McpSchema.TextResourceContents(
+                        uri,
+                        "text/plain",
+                        "Invalid or unknown model resource URI: $uri",
+                    ),
+                ),
+            )
+        }
         val index = runOnEdt {
             val b = bindingsRef.get() ?: return@runOnEdt null
             tabIndexForModelResourceUri(uri, b.current().sessions)
@@ -323,29 +392,60 @@ internal actual class McpRuntime {
                     ),
                 ),
             )
-        val xml = runOnEdt {
-            val b = bindingsRef.get()
-            val schema = b?.current()?.schemaForTab(index)
-            if (schema == null) {
-                null
-            } else {
-                ConceptualSchemaXmlSerializer.serialize(schema)
+        val surface = parsed.surface
+        if (surface == null || surface == LiveModelTabResourceSurface.Xml) {
+            val xml = runOnEdt {
+                val b = bindingsRef.get()
+                val schema = b?.current()?.schemaForTab(index)
+                if (schema == null) {
+                    null
+                } else {
+                    ConceptualSchemaXmlSerializer.serialize(schema)
+                }
+            }
+            if (xml == null) {
+                return McpSchema.ReadResourceResult(
+                    listOf(
+                        McpSchema.TextResourceContents(
+                            uri,
+                            "text/plain",
+                            "No model for tab index $index.",
+                        ),
+                    ),
+                )
+            }
+            return McpSchema.ReadResourceResult(
+                listOf(McpSchema.TextResourceContents(uri, "application/xml", xml)),
+            )
+        }
+
+        val bytes = runOnEdt {
+            val b = bindingsRef.get() ?: return@runOnEdt null
+            when (surface) {
+                LiveModelTabResourceSurface.Png -> b.onEncodeTabConceptualMenuExportPng(index)
+                LiveModelTabResourceSurface.Jpeg -> b.onEncodeTabConceptualMenuExportJpeg(index)
+                else -> null
             }
         }
-        if (xml == null) {
+        if (bytes == null || bytes.isEmpty()) {
             return McpSchema.ReadResourceResult(
                 listOf(
                     McpSchema.TextResourceContents(
                         uri,
                         "text/plain",
-                        "No model for tab index $index.",
+                        "Failed to encode raster preview for tab index $index.",
                     ),
                 ),
             )
         }
-        return McpSchema.ReadResourceResult(
-            listOf(McpSchema.TextResourceContents(uri, "application/xml", xml)),
-        )
+        val mime = when (surface) {
+            LiveModelTabResourceSurface.Png -> "image/png"
+            LiveModelTabResourceSurface.Jpeg -> "image/jpeg"
+            else -> "application/octet-stream"
+        }
+        val b64 = Base64.getEncoder().encodeToString(bytes)
+        val blob = McpSchema.BlobResourceContents(uri, mime, b64)
+        return McpSchema.ReadResourceResult(listOf(blob))
     }
 
     /**
@@ -361,6 +461,9 @@ internal actual class McpRuntime {
             tabIndexForModelResourceUri(u, b.current().sessions)
         }
         if (tabIdx != null) {
+            if (!isLiveModelTabXmlPlainTextResourceUri(u)) {
+                return null to "binary_tab_resource_use_resources_read"
+            }
             return runOnEdt {
                 val b = bindingsRef.get() ?: return@runOnEdt (null to "bindings_unavailable")
                 val schema = b.current().schemaForTab(tabIdx) ?: return@runOnEdt (null to "no_model_for_tab")
@@ -477,21 +580,36 @@ internal actual class McpRuntime {
         "ok"
     }
 
-    private fun tabIndexFromModelResourceUri(req: McpSchema.CallToolRequest): Int? {
-        val uri = stringArg(req, "uri") ?: return null
+    private fun tabIndexFromResourceUriArg(req: McpSchema.CallToolRequest): Int? {
+        val uri = stringArg(req, "resourceUri") ?: return null
         return runOnEdt {
             val b = bindingsRef.get() ?: return@runOnEdt null
             tabIndexForModelResourceUri(uri, b.current().sessions)
         }
     }
 
-    /** Resolves [tabIndex] if present; otherwise a live tab URI (`brmodelo://model/{sessionId}.xml` or legacy index form). */
-    private fun tabIndexFromTabOrUriArgs(req: McpSchema.CallToolRequest): Int? {
-        val explicit = intArg(req, "tabIndex")
-        if (explicit != null) {
-            return explicit
+    private fun runSelectTabWithOptionalWindowFocus(req: McpSchema.CallToolRequest, tabIndex: Int): McpSchema.CallToolResult {
+        val wantFocus = boolArg(req, "requestWindowFocus") == true
+        val selectedResourceUri = runOnEdt {
+            val b = bindingsRef.get() ?: return@runOnEdt null
+            val snap = b.current()
+            if (tabIndex !in snap.sessions.indices) return@runOnEdt null
+            val prev = snap.selectedIndex
+            b.onSelectTab(tabIndex)
+            if (wantFocus) {
+                b.onRequestAppWindowFocus()
+                b.onShowMcpAgentUserNotice(
+                    McpAgentUserNotice(
+                        activeTabChanged = tabIndex != prev,
+                        windowFocused = true,
+                    ),
+                )
+            }
+            val tab = snap.sessions[tabIndex]
+            modelResourceUriForSession(tab.id)
         }
-        return tabIndexFromModelResourceUri(req)
+        if (selectedResourceUri == null) return err("invalid_tab_index")
+        return okText("""{"ok":true,"selectedResourceUri":${jsonString(selectedResourceUri)},"requestWindowFocus":$wantFocus}""")
     }
 
     private fun buildTools(jsonMapper: io.modelcontextprotocol.json.McpJsonMapper): List<McpServerFeatures.SyncToolSpecification> {
@@ -500,18 +618,24 @@ internal actual class McpRuntime {
                 jsonMapper,
                 name = McpTabToolNames.LIST_OPEN,
                 title = "List open tabs",
-                description = "Returns JSON for each open editor tab (index, id, title, dirty, filePath, resourceUri) and the selected index. " +
+                description = "Returns JSON for each open editor tab (stable session id, title, dirty, filePath, resourceUri for MER XML, " +
+                    "resourceUriPng and resourceUriJpeg for raster previews matching **Exportar em PNG/JPEG**) and selectedResourceUri for the focused tab's MER XML. " +
+                    "Read PNG/JPEG via MCP resources/read (base64 blob). " +
                     "Static DTD and example MER resources are listed only in MCP server instructions (not tab rows).",
                 schema = """{"type":"object","properties":{},"additionalProperties":false}""",
             ) { _, _ ->
                 val json = runOnEdt {
                     val b = bindingsRef.get() ?: return@runOnEdt """{"error":"bindings_unavailable"}"""
                     val snap = b.current()
-                    val rows = snap.sessions.mapIndexed { index, tab ->
+                    val rows = snap.sessions.map { tab ->
                         val uri = modelResourceUriForSession(tab.id)
-                        """{"index":$index,"id":${tab.id},"title":${jsonString(tab.displayTitle())},"dirty":${tab.hasUnsavedChanges()},"filePath":${jsonString(tab.schema.filePath)},"resourceUri":${jsonString(uri)}}"""
+                        val png = modelResourcePngUriForSession(tab.id)
+                        val jpg = modelResourceJpgUriForSession(tab.id)
+                        """{"id":${tab.id},"title":${jsonString(tab.displayTitle())},"dirty":${tab.hasUnsavedChanges()},"filePath":${jsonString(tab.schema.filePath)},"resourceUri":${jsonString(uri)},"resourceUriPng":${jsonString(png)},"resourceUriJpeg":${jsonString(jpg)}}"""
                     }
-                    """{"selectedIndex":${snap.selectedIndex},"tabs":[${rows.joinToString(",")}]}"""
+                    val selectedUri = snap.sessions.getOrNull(snap.selectedIndex)?.let { modelResourceUriForSession(it.id) }
+                    val selectedJson = selectedUri?.let { jsonString(it) } ?: "null"
+                    """{"selectedResourceUri":$selectedJson,"tabs":[${rows.joinToString(",")}]}"""
                 }
                 okText(json)
             },
@@ -519,80 +643,66 @@ internal actual class McpRuntime {
                 jsonMapper,
                 name = McpTabToolNames.SELECT,
                 title = "Select tab",
-                description = "Brings the given tab index to the foreground.",
-                schema = """{"type":"object","properties":{"tabIndex":{"type":"integer","minimum":0}},"required":["tabIndex"],"additionalProperties":false}""",
+                description = "Brings the tab identified by `resourceUri` to the foreground (use any live tab URI from tabs__list_open: " +
+                    "resourceUri, resourceUriPng, or resourceUriJpeg for the same tab). " +
+                    "Optional `requestWindowFocus` (default false) also raises the Power-brModelo window — use only when you want the user to notice the app (see MCP server instructions). " +
+                    "When true, the user sees a short snackbar that an MCP action changed focus/tab. " +
+                    McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
+                schema = """{"type":"object","properties":{$TAB_TOOL_RESOURCE_URI_SCHEMA_PROP,"requestWindowFocus":{"type":"boolean","description":"Bring the editor window to the front after selecting the tab."}},"required":["resourceUri"],"additionalProperties":false}""",
             ) { _, req ->
-                val idx = intArg(req, "tabIndex") ?: return@syncTool err("tabIndex required")
-                val ok = runOnEdt {
-                    val b = bindingsRef.get() ?: return@runOnEdt false
-                    val snap = b.current()
-                    if (idx !in snap.sessions.indices) return@runOnEdt false
-                    b.onSelectTab(idx)
-                    true
-                }
-                if (!ok) return@syncTool err("invalid_tab_index")
-                okText("""{"ok":true,"selectedIndex":$idx}""")
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
+                runSelectTabWithOptionalWindowFocus(req, idx)
             },
             syncTool(
                 jsonMapper,
-                name = McpTabToolNames.SELECT_RESOURCE,
-                title = "Select tab by model resource URI",
-                description = "Selects an open editor tab using only the live model-tab resource URI from list_open. " +
-                    "Does not apply to static example or DTD resources. " +
-                    McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
-                schema = """{"type":"object","properties":{"uri":{"type":"string","minLength":1}},"required":["uri"],"additionalProperties":false}""",
-            ) { _, req ->
-                val idx = tabIndexFromModelResourceUri(req) ?: return@syncTool err("invalid_or_missing_resource_uri")
+                name = McpTabToolNames.FOCUS_WINDOW,
+                title = "Bring editor window to front",
+                description = "Raises the Power-brModelo desktop window and requests focus. " +
+                    "Use sparingly when you want the user to look at the editor (see MCP server instructions). " +
+                    "Shows a short snackbar that an MCP action brought the window forward.",
+                schema = """{"type":"object","properties":{},"additionalProperties":false}""",
+            ) { _, _ ->
                 val ok = runOnEdt {
                     val b = bindingsRef.get() ?: return@runOnEdt false
-                    val snap = b.current()
-                    if (idx !in snap.sessions.indices) return@runOnEdt false
-                    b.onSelectTab(idx)
+                    b.onRequestAppWindowFocus()
+                    b.onShowMcpAgentUserNotice(McpAgentUserNotice(windowFocused = true))
                     true
                 }
-                if (!ok) return@syncTool err("invalid_tab_index")
-                okText("""{"ok":true,"selectedIndex":$idx}""")
+                if (!ok) return@syncTool err("bindings_unavailable")
+                okText("""{"ok":true}""")
             },
             syncTool(
                 jsonMapper,
                 name = McpTabToolNames.CLOSE,
                 title = "Close tab",
-                description = "Closes a tab. When discardUnsavedChanges is true, unsaved edits are dropped immediately. " +
-                    "Otherwise the UI may prompt the user; this tool cannot wait for that dialog.",
-                schema = """{"type":"object","properties":{"tabIndex":{"type":"integer","minimum":0},"discardUnsavedChanges":{"type":"boolean"}},"required":["tabIndex"],"additionalProperties":false}""",
-            ) { _, req ->
-                val idx = intArg(req, "tabIndex") ?: return@syncTool err("tabIndex required")
-                val discard = boolArg(req, "discardUnsavedChanges") == true
-                val message = runCloseTabAtIndex(idx, discard)
-                if (message != "ok") {
-                    return@syncTool err(message)
-                }
-                okText("""{"ok":true,"closedIndex":$idx}""")
-            },
-            syncTool(
-                jsonMapper,
-                name = McpTabToolNames.CLOSE_RESOURCE,
-                title = "Close tab by model resource URI",
-                description = "Same as close but identifies the tab with the live model-tab resource URI from list_open. " +
-                    "Does not apply to static example or DTD resources. " +
+                description = "Closes the tab identified by `resourceUri` (any live tab URI from tabs__list_open). " +
+                    "When discardUnsavedChanges is true, unsaved edits are dropped immediately. " +
+                    "Otherwise the UI may prompt the user; this tool cannot wait for that dialog. " +
                     McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
-                schema = """{"type":"object","properties":{"uri":{"type":"string","minLength":1},"discardUnsavedChanges":{"type":"boolean"}},"required":["uri"],"additionalProperties":false}""",
+                schema = """{"type":"object","properties":{$TAB_TOOL_RESOURCE_URI_SCHEMA_PROP,"discardUnsavedChanges":{"type":"boolean"}},"required":["resourceUri"],"additionalProperties":false}""",
             ) { _, req ->
-                val idx = tabIndexFromModelResourceUri(req) ?: return@syncTool err("invalid_or_missing_resource_uri")
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
+                val closedUri = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt null
+                    val snap = b.current()
+                    val tab = snap.sessions.getOrNull(idx) ?: return@runOnEdt null
+                    modelResourceUriForSession(tab.id)
+                } ?: return@syncTool err("invalid_tab_index")
                 val discard = boolArg(req, "discardUnsavedChanges") == true
                 val message = runCloseTabAtIndex(idx, discard)
                 if (message != "ok") {
                     return@syncTool err(message)
                 }
-                okText("""{"ok":true,"closedIndex":$idx}""")
+                okText("""{"ok":true,"closedResourceUri":${jsonString(closedUri)}}""")
             },
             syncTool(
                 jsonMapper,
                 name = McpTabToolNames.NEW_CONCEPTUAL_MODEL,
                 title = "New conceptual model tab",
                 description = "Opens a new empty conceptual model tab and selects it. " +
-                    "On success the JSON includes createdTabIndex and createdResourceUri for the new tab " +
-                    "(brmodelo://model/{editorTabSessionId}.xml), plus selectedIndex and selectedResourceUri for the tab that is selected after the call. " +
+                    "On success the JSON includes createdResourceUri (.xml), createdResourceUriPng, createdResourceUriJpeg " +
+                    "for the new tab, plus selectedResourceUri, selectedResourceUriPng, and selectedResourceUriJpeg for the tab that is selected after the call. " +
+                    "Raster URIs match **Exportar em PNG/JPEG**; read them with resources/read. " +
                     "Resource URIs use the stable tab session id so they stay valid if other tabs are closed. " +
                     McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
                 schema = """{"type":"object","properties":{},"additionalProperties":false}""",
@@ -610,11 +720,18 @@ internal actual class McpRuntime {
                 jsonMapper,
                 name = McpTabToolNames.SAVE,
                 title = "Save tab",
-                description = "Runs the same save path as the editor (optional Save-As when saveAs is true). " +
+                description = "Runs the same save path as the editor for the tab identified by `resourceUri` (any live tab URI from tabs__list_open). " +
+                    "Optional Save-As when saveAs is true. " +
                     McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
-                schema = """{"type":"object","properties":{"tabIndex":{"type":"integer","minimum":0},"saveAs":{"type":"boolean"}},"required":["tabIndex"],"additionalProperties":false}""",
+                schema = """{"type":"object","properties":{$TAB_TOOL_RESOURCE_URI_SCHEMA_PROP,"saveAs":{"type":"boolean"}},"required":["resourceUri"],"additionalProperties":false}""",
             ) { _, req ->
-                val idx = intArg(req, "tabIndex") ?: return@syncTool err("tabIndex required")
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
+                val savedUri = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt null
+                    val snap = b.current()
+                    val tab = snap.sessions.getOrNull(idx) ?: return@runOnEdt null
+                    modelResourceUriForSession(tab.id)
+                } ?: return@syncTool err("invalid_tab_index")
                 val saveAs = boolArg(req, "saveAs") == true
                 val ok = runOnEdt {
                     val b = bindingsRef.get() ?: return@runOnEdt false
@@ -623,35 +740,15 @@ internal actual class McpRuntime {
                 if (!ok) {
                     return@syncTool err("save_cancelled_or_failed")
                 }
-                okText("""{"ok":true,"savedIndex":$idx,"saveAs":$saveAs}""")
-            },
-            syncTool(
-                jsonMapper,
-                name = McpTabToolNames.SAVE_RESOURCE,
-                title = "Save tab by model resource URI",
-                description = "Same as save but identifies the tab with the live model-tab resource URI returned for that tab in list_open. " +
-                    "Does not apply to static example or DTD resources. " +
-                    McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
-                schema = """{"type":"object","properties":{"uri":{"type":"string","minLength":1},"saveAs":{"type":"boolean"}},"required":["uri"],"additionalProperties":false}""",
-            ) { _, req ->
-                val idx = tabIndexFromModelResourceUri(req) ?: return@syncTool err("invalid_or_missing_tab_resource_uri")
-                val saveAs = boolArg(req, "saveAs") == true
-                val ok = runOnEdt {
-                    val b = bindingsRef.get() ?: return@runOnEdt false
-                    b.onSaveTab(idx, saveAs)
-                }
-                if (!ok) {
-                    return@syncTool err("save_cancelled_or_failed")
-                }
-                okText("""{"ok":true,"savedIndex":$idx,"saveAs":$saveAs}""")
+                okText("""{"ok":true,"savedResourceUri":${jsonString(savedUri)},"saveAs":$saveAs}""")
             },
             syncTool(
                 jsonMapper,
                 name = McpTabToolNames.OPEN_FILE,
                 title = "Open model file",
                 description = "Loads a brModelo XML or .brm file from an absolute path on disk (same as opening from disk in the editor). " +
-                    "On success the JSON includes createdTabIndex/createdResourceUri for the tab that received the model (new or reused) " +
-                    "and selectedIndex/selectedResourceUri for the tab that ends up selected. " +
+                    "On success the JSON includes createdResourceUri, createdResourceUriPng, createdResourceUriJpeg " +
+                    "for the tab that received the model (new or reused) and selectedResourceUri, selectedResourceUriPng, selectedResourceUriJpeg for the tab that ends up selected. " +
                     McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
                 schema = """{"type":"object","properties":{"path":{"type":"string","minLength":1,"description":"Absolute path to a .xml or .brm file"}},"required":["path"],"additionalProperties":false}""",
             ) { _, req ->
@@ -681,7 +778,8 @@ internal actual class McpRuntime {
                 name = McpTabToolNames.OPEN_XML,
                 title = "Open conceptual XML from text",
                 description = "Parses UTF-8 conceptual XML and opens a new dirty tab (basename fileName only, no path; used as the model title). " +
-                    "On success the JSON includes createdTabIndex/createdResourceUri and selectedIndex/selectedResourceUri after the operation. " +
+                    "On success the JSON includes createdResourceUri, createdResourceUriPng, createdResourceUriJpeg " +
+                    "and selectedResourceUri, selectedResourceUriPng, selectedResourceUriJpeg after the operation. " +
                     McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
                 schema = """{"type":"object","properties":{"fileName":{"type":"string","minLength":1,"description":"Basename only, e.g. modelo.xml"},"xml":{"type":"string","description":"Conceptual schema XML (UTF-8)"}},"required":["fileName","xml"],"additionalProperties":false}""",
             ) { _, req ->
@@ -712,12 +810,12 @@ internal actual class McpRuntime {
                 name = McpTabToolNames.REPLACE_MODEL_XML,
                 title = "Replace tab conceptual XML",
                 description = "Parses UTF-8 MER XML and replaces the entire conceptual schema of one open tab in a single undoable step. " +
-                    "Provide tabIndex or a live tab resource URI (see MCP server instructions). " +
+                    "Identify the tab with `resourceUri` from tabs__list_open (resourceUri, resourceUriPng, or resourceUriJpeg; XML body is always required). " +
                     "Preserves the tab's disk path metadata. " +
                     McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
-                schema = """{"type":"object","properties":{"tabIndex":{"type":"integer","minimum":0},"uri":{"type":"string","minLength":1},"xml":{"type":"string","description":"Full MER XML (UTF-8)"}},"required":["xml"],"additionalProperties":false}""",
+                schema = """{"type":"object","properties":{$TAB_TOOL_RESOURCE_URI_SCHEMA_PROP,"xml":{"type":"string","description":"Full MER XML (UTF-8)"}},"required":["resourceUri","xml"],"additionalProperties":false}""",
             ) { _, req ->
-                val idx = tabIndexFromTabOrUriArgs(req) ?: return@syncTool err("tabIndex_or_uri_required")
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
                 val xml = rawStringArg(req, "xml") ?: return@syncTool err("xml required")
                 val errMsg = runOnEdt {
                     val b = bindingsRef.get() ?: return@runOnEdt "bindings_unavailable"
@@ -728,18 +826,27 @@ internal actual class McpRuntime {
                 if (errMsg != null) {
                     return@syncTool err(errMsg)
                 }
-                okText("""{"ok":true,"tabIndex":$idx}""")
+                val bodyJson = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt """{"ok":true}"""
+                    val snap = b.current()
+                    val tab = snap.sessions.getOrNull(idx) ?: return@runOnEdt """{"ok":true}"""
+                    val rUri = jsonString(modelResourceUriForSession(tab.id))
+                    val schema = b.current().schemaForTab(idx) ?: return@runOnEdt """{"ok":true,"resourceUri":$rUri}"""
+                    val report = analyzeConceptualLayoutQuality(schema, null)
+                    McpLayoutQualityJson.mergeLayoutQualityIntoJsonObjectBody("""{"ok":true,"resourceUri":$rUri}""", report)
+                }
+                okText(bodyJson)
             },
             syncTool(
                 jsonMapper,
                 name = McpTabToolNames.PATCH_MODEL_XML,
                 title = "Patch tab conceptual XML (search/replace)",
                 description = "Serializes the tab's current conceptual MER to XML, applies old_string→new_string, re-parses, and commits in one undoable step (Cursor-style single edit when replace_all is false). " +
-                    "Provide tabIndex or a live tab resource URI (see MCP server instructions). " +
+                    "Identify the tab with `resourceUri` from tabs__list_open (`resourceUri`, `resourceUriPng`, or `resourceUriJpeg`). " +
                     McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
-                schema = """{"type":"object","properties":{"tabIndex":{"type":"integer","minimum":0},"uri":{"type":"string","minLength":1},"old_string":{"type":"string","minLength":1},"new_string":{"type":"string"},"replace_all":{"type":"boolean"}},"required":["old_string"],"additionalProperties":false}""",
+                schema = """{"type":"object","properties":{$TAB_TOOL_RESOURCE_URI_SCHEMA_PROP,"old_string":{"type":"string","minLength":1},"new_string":{"type":"string"},"replace_all":{"type":"boolean"}},"required":["resourceUri","old_string"],"additionalProperties":false}""",
             ) { _, req ->
-                val idx = tabIndexFromTabOrUriArgs(req) ?: return@syncTool err("tabIndex_or_uri_required")
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
                 val oldStr = rawStringArg(req, "old_string") ?: return@syncTool err("old_string required")
                 val newStrArg = req.arguments()["new_string"]
                 val newStr = when (newStrArg) {
@@ -757,17 +864,274 @@ internal actual class McpRuntime {
                 if (errMsg != null) {
                     return@syncTool err(errMsg)
                 }
-                okText("""{"ok":true,"tabIndex":$idx,"replaceAll":$replaceAll}""")
+                val bodyJson = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt """{"ok":true,"replaceAll":$replaceAll}"""
+                    val snap = b.current()
+                    val tab = snap.sessions.getOrNull(idx) ?: return@runOnEdt """{"ok":true,"replaceAll":$replaceAll}"""
+                    val rUri = jsonString(modelResourceUriForSession(tab.id))
+                    val schema = b.current().schemaForTab(idx) ?: return@runOnEdt """{"ok":true,"resourceUri":$rUri,"replaceAll":$replaceAll}"""
+                    val report = analyzeConceptualLayoutQuality(schema, null)
+                    McpLayoutQualityJson.mergeLayoutQualityIntoJsonObjectBody(
+                        """{"ok":true,"resourceUri":$rUri,"replaceAll":$replaceAll}""",
+                        report,
+                    )
+                }
+                okText(bodyJson)
             },
-        ) + buildConceptualSearchTools(jsonMapper) + buildResourceUtilityTools(jsonMapper) + buildProceduralTools(jsonMapper) + buildAttributeTools(jsonMapper)
+        ) + buildOperationTools(jsonMapper) + buildExportTools(jsonMapper) + buildConceptualSearchTools(jsonMapper) + buildResourceUtilityTools(jsonMapper) + buildProceduralTools(jsonMapper) + buildAttributeTools(jsonMapper)
     }
+
+    private fun buildOperationTools(
+        jsonMapper: io.modelcontextprotocol.json.McpJsonMapper,
+    ): List<McpServerFeatures.SyncToolSpecification> {
+        val tabUri = TAB_TOOL_RESOURCE_URI_SCHEMA_PROP
+        val organizeSchema =
+            """{"type":"object","properties":{$tabUri,"sides":{"type":"array","items":{"type":"string","enum":["left","top","right","bottom"]},"description":"Optional: reorganize only these attach sides of each affected owner (in left→top→right→bottom order). Omit the property or pass [] to match **Operações → Organizar Atributos** (all sides)."}},"required":["resourceUri"],"additionalProperties":false}"""
+        val layoutQualitySchema =
+            """{"type":"object","properties":{$tabUri,"elementIds":{"type":"array","items":{"type":"integer"},"description":"Optional: only report overlaps, tight clearances, and line crossings that involve at least one of these canvas element ids. Omit or [] to scan the entire tab diagram."}},"required":["resourceUri"],"additionalProperties":false}"""
+        val moveCanvasSchema =
+            """{"type":"object","properties":{$tabUri,"elementIds":{"type":"array","items":{"type":"integer","minimum":0},"minItems":1,"description":"Canvas element ids to translate together."},"deltaX":{"type":"integer","description":"Horizontal translation in schema pixels (negative = left)."},"deltaY":{"type":"integer","description":"Vertical translation in schema pixels (negative = up)."},"moveOwnedCanvasAttributes":{"type":"boolean","description":"When true (default), also move every on-canvas attribute whose owner is among the moved elements (closure), preserving relative placement like dragging the owner."}},"required":["resourceUri","elementIds","deltaX","deltaY"],"additionalProperties":false}"""
+        return listOf(
+            syncTool(
+                jsonMapper,
+                name = McpOperationToolNames.ORGANIZE_ATTRIBUTES,
+                title = "Organize attributes (Operations menu)",
+                description = "Runs the same **Operações → Organizar Atributos** layout pass as the desktop editor on the tab's current canvas selection (multi-select aware). " +
+                    "Optional `sides` lists which owner edges to reorganize (`left`, `top`, `right`, `bottom`); omit or `[]` reorganizes every side like the menu. " +
+                    "One undo step. Pass `resourceUri` from tabs__list_open. " +
+                    McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
+                schema = organizeSchema,
+            ) { _, req ->
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
+                val (sides, sidesErr) = parseOrganizeAttributeSidesFromRequest(req)
+                if (sidesErr != null) return@syncTool err(sidesErr)
+                val outcome = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt McpProceduralToolApplyOutcome.err("bindings_unavailable")
+                    b.onApplyOrganizeAttributesMenuAtTab(idx, sides)
+                }
+                proceduralToolOutcomeToResult(outcome)
+            },
+            syncTool(
+                jsonMapper,
+                name = McpOperationToolNames.MOVE_CANVAS_ELEMENTS,
+                title = "Move canvas elements (cardinality-aware)",
+                description = "Translates canvas elements by `deltaX`/`deltaY` in schema pixels (same space as sidebar position fields). " +
+                    "When `moveOwnedCanvasAttributes` is true (default), every on-canvas attribute whose owner is among the moved elements is included automatically, preserving relative placement like dragging the owner on the canvas. " +
+                    "Cardinality labels follow the same fixed vs floating rules as canvas drag (floating recomputed from geometry; fixed boxes shift with their link endpoints). " +
+                    "Success JSON merges `layoutQuality` (overlaps, tight clearances, approximate link crossings) scoped to the moved element ids. One undo step. " +
+                    McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
+                schema = moveCanvasSchema,
+            ) { _, req ->
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
+                val elementIds = intListFromMcpAny(req.arguments()["elementIds"])
+                if (elementIds == null) return@syncTool err("elementIds_invalid")
+                if (elementIds.isEmpty()) return@syncTool err("elementIds_empty")
+                val deltaX = intArg(req, "deltaX") ?: return@syncTool err("deltaX_required")
+                val deltaY = intArg(req, "deltaY") ?: return@syncTool err("deltaY_required")
+                val moveOwned = boolArg(req, "moveOwnedCanvasAttributes") != false
+                val outcome = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt McpProceduralToolApplyOutcome.err("bindings_unavailable")
+                    b.onApplyMoveCanvasElementsAtTab(idx, elementIds, deltaX, deltaY, moveOwned)
+                }
+                proceduralToolOutcomeToResult(outcome)
+            },
+            syncTool(
+                jsonMapper,
+                name = McpOperationToolNames.LAYOUT_QUALITY,
+                title = "Layout overlap and crossing diagnostics",
+                description = "Returns geometric hints for MCP agents: axis-aligned element box overlaps, uncomfortably small edge-to-edge gaps (see tightClearanceThresholdPx), and approximate connection-segment crossings (straight center-to-center segments — compare with tab PNG/JPEG resources or export subset raster for real routing). " +
+                    "Pass `resourceUri` from tabs__list_open. Optional elementIds narrows reported issues to pairs/crossings touching those ids; omit or [] scans the whole diagram. " +
+                    McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
+                schema = layoutQualitySchema,
+            ) { _, req ->
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
+                val scope = layoutQualityElementIdScopeFromRequest(req)
+                val json = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt """{"ok":false,"error":${jsonString("bindings_unavailable")}}"""
+                    val snap = b.current()
+                    if (idx !in snap.sessions.indices) {
+                        return@runOnEdt """{"ok":false,"error":${jsonString("invalid_tab_index")}}"""
+                    }
+                    val schema = snap.sessions[idx].schema
+                    val report = analyzeConceptualLayoutQuality(schema, scope)
+                    McpLayoutQualityJson.layoutQualityInspectToolSuccessJson(
+                        modelResourceUriForSession(snap.sessions[idx].id),
+                        scope,
+                        report,
+                    )
+                }
+                okText(json)
+            },
+        )
+    }
+
+    private fun layoutQualityElementIdScopeFromRequest(req: McpSchema.CallToolRequest): Set<Int>? {
+        if (!req.arguments().containsKey("elementIds")) return null
+        val raw = req.arguments()["elementIds"] ?: return null
+        if (raw !is List<*>) return null
+        val ids = intListFromMcpAny(raw)
+        return ids.toSet().takeIf { it.isNotEmpty() }
+    }
+
+    private fun parseOrganizeAttributeSidesFromRequest(req: McpSchema.CallToolRequest): Pair<Set<ConceptualAttributeAttachPonto>?, String?> {
+        if (!req.arguments().containsKey("sides")) return null to null
+        val raw = req.arguments()["sides"] ?: return null to null
+        if (raw !is List<*>) return null to "sides_must_be_array"
+        if (raw.isEmpty()) return null to null
+        val out = LinkedHashSet<ConceptualAttributeAttachPonto>()
+        for (e in raw) {
+            val s = when (e) {
+                is String -> e.trim().lowercase()
+                else -> e.toString().trim().lowercase()
+            }
+            when (s) {
+                "left" -> out.add(ConceptualAttributeAttachPonto.LEFT)
+                "top" -> out.add(ConceptualAttributeAttachPonto.TOP)
+                "right" -> out.add(ConceptualAttributeAttachPonto.RIGHT)
+                "bottom" -> out.add(ConceptualAttributeAttachPonto.BOTTOM)
+                else -> return null to "sides_invalid_token"
+            }
+        }
+        return out to null
+    }
+
+    private fun buildExportTools(
+        jsonMapper: io.modelcontextprotocol.json.McpJsonMapper,
+    ): List<McpServerFeatures.SyncToolSpecification> {
+        val tabUri = TAB_TOOL_RESOURCE_URI_SCHEMA_PROP
+        val subsetSchema =
+            """{"type":"object","properties":{$tabUri,"elementIds":{"type":"array","items":{"type":"integer"},"minItems":1,"description":"Canvas element ids; attribute trees on selected holders are included automatically (same closure as Ctrl+C on those picks). Connections appear when both endpoints are in the expanded id set."},"format":{"type":"string","enum":["png","jpg","jpeg"],"description":"png = transparent (clipboard-style preview); jpg or jpeg = opaque canvas-gray (menu JPEG export style)."}},"required":["resourceUri","elementIds","format"],"additionalProperties":false}"""
+        val currentSelectionSchema =
+            """{"type":"object","properties":{$tabUri,"imageFormat":{"type":"string","enum":["png","jpg","jpeg"],"description":"Omit for JSON-only. When set, the tool result also includes MCP image content (base64) of the selected subgraph — same expansion as Ctrl+C / """ +
+                McpExportToolNames.SUBSET_RASTER +
+                """."}},"required":["resourceUri"],"additionalProperties":false}"""
+        return listOf(
+            syncTool(
+                jsonMapper,
+                name = McpExportToolNames.SUBSET_RASTER,
+                title = "Export subset diagram as PNG or JPEG",
+                description = "Renders only the given canvas element ids (plus their attribute trees like Ctrl+C) into a tight-cropped raster — the same subgraph as the clipboard image when those objects are selected. " +
+                    "Use format `png` for transparent background (clipboard-style) or `jpg`/`jpeg` for opaque canvas-gray (same as **Exportar em JPEG**). " +
+                    "Identify the tab with `resourceUri` from tabs__list_open. " +
+                    "On success the tool result includes MCP image content (base64) plus JSON metadata (dimensions, expanded ids). " +
+                    McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
+                schema = subsetSchema,
+            ) { _, req ->
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
+                val requested = intListFromMcpAny(req.arguments()["elementIds"])
+                if (requested.isEmpty()) {
+                    return@syncTool err("elementIds_required_or_invalid")
+                }
+                val format = subsetRasterFormatFromToolArg(req) ?: return@syncTool err("format_must_be_png_jpg_or_jpeg")
+                val formatLabel = stringArg(req, "format")?.trim()?.lowercase() ?: "png"
+                val (encoded, errCode) = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt null to "bindings_unavailable"
+                    if (idx !in b.current().sessions.indices) return@runOnEdt null to "invalid_tab_index"
+                    val enc = b.onEncodeConceptualElementSubsetRaster(idx, requested, format)
+                        ?: return@runOnEdt null to "subset_raster_encode_failed"
+                    enc to null
+                }
+                if (errCode != null) {
+                    return@syncTool err(errCode)
+                }
+                val enc = encoded!!
+                val resourceUriJson = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt "null"
+                    val tab = b.current().sessions.getOrNull(idx) ?: return@runOnEdt "null"
+                    jsonString(modelResourceUriForSession(tab.id))
+                }
+                val json =
+                    """{"ok":true,"resourceUri":$resourceUriJson,"format":${jsonString(formatLabel)},"mimeType":${jsonString(enc.mimeType)},"widthPx":${enc.widthPx},"heightPx":${enc.heightPx},"elementIdsRequested":${jsonIntArray(requested)},"elementIdsExpanded":${jsonIntArray(enc.expandedElementIds)}}"""
+                okJsonPlusMcpImage(json, enc.mimeType, enc.bytes)
+            },
+            syncTool(
+                jsonMapper,
+                name = McpExportToolNames.CURRENT_CANVAS_SELECTION,
+                title = "Read current canvas selection",
+                description = "Returns the user's live canvas selection on a tab as JSON (`selectionKind`, `elementIds`, `cardinalityConnectionIds`, `selectedPickCount`, and `rasterSeedElementIds` — the same element-id closure used for Ctrl+C / subset raster, including attribute trees and cardinality endpoints). " +
+                    "Omit `imageFormat` for data-only. When `imageFormat` is `png`, `jpg`, or `jpeg`, the result also includes MCP image content (base64) of that subgraph (transparent PNG vs opaque JPEG styling matches " +
+                    McpExportToolNames.SUBSET_RASTER +
+                    "). " +
+                    "Identify the tab with `resourceUri` from tabs__list_open. " +
+                    McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
+                schema = currentSelectionSchema,
+            ) { _, req ->
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
+                val imageFmtRaw = stringArg(req, "imageFormat")
+                val wantRaster = imageFmtRaw != null
+                val encFormat = when (imageFmtRaw?.lowercase()?.trim()) {
+                    null -> null
+                    "png" -> ConceptualSubsetRasterFormat.PngTransparentBackground
+                    "jpg", "jpeg" -> ConceptualSubsetRasterFormat.JpegOpaqueCanvasGrayBackground
+                    else -> return@syncTool err("imageFormat_must_be_png_jpg_or_jpeg")
+                }
+                val imageFormatJson = imageFmtRaw?.trim()?.lowercase()?.let { jsonString(it) } ?: "null"
+                val (json, imageBytes, imageMime) = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt Triple(null, null, null)
+                    val snap = b.current()
+                    if (idx !in snap.sessions.indices) return@runOnEdt Triple("invalid_tab_index", null, null)
+                    val tab = snap.sessions[idx]
+                    val schema = tab.schema
+                    val sel = tab.selection
+                    val kind = when (sel) {
+                        CanvasSelection.None -> "none"
+                        is CanvasSelection.Element -> "element"
+                        is CanvasSelection.Cardinality -> "cardinality"
+                        is CanvasSelection.Multiple -> "multiple"
+                    }
+                    val (eSet, cSet) = sel.toMultiPickSets()
+                    val eList = eSet.sorted()
+                    val cList = cSet.sorted()
+                    val pickCount = sel.selectedPickCount()
+                    val seeds = elementIdsForClipboard(schema, sel).sorted()
+                    val resourceUriJson = jsonString(modelResourceUriForSession(tab.id))
+                    if (wantRaster && encFormat != null) {
+                        if (seeds.isEmpty()) {
+                            return@runOnEdt Triple("empty_selection", null, null)
+                        }
+                        val enc = b.onEncodeConceptualElementSubsetRaster(idx, seeds, encFormat)
+                            ?: return@runOnEdt Triple("subset_raster_encode_failed", null, null)
+                        val jsonText =
+                            """{"ok":true,"resourceUri":$resourceUriJson,"selectionKind":${jsonString(kind)},"selectedPickCount":$pickCount,"elementIds":${jsonIntArray(eList)},"cardinalityConnectionIds":${jsonIntArray(cList)},"rasterSeedElementIds":${jsonIntArray(seeds)},"imageFormat":$imageFormatJson,"hasRaster":true,"mimeType":${jsonString(enc.mimeType)},"widthPx":${enc.widthPx},"heightPx":${enc.heightPx},"elementIdsExpanded":${jsonIntArray(enc.expandedElementIds)}}"""
+                        return@runOnEdt Triple(jsonText, enc.bytes, enc.mimeType)
+                    }
+                    val jsonText =
+                        """{"ok":true,"resourceUri":$resourceUriJson,"selectionKind":${jsonString(kind)},"selectedPickCount":$pickCount,"elementIds":${jsonIntArray(eList)},"cardinalityConnectionIds":${jsonIntArray(cList)},"rasterSeedElementIds":${jsonIntArray(seeds)},"hasRaster":false}"""
+                    Triple(jsonText, null, null)
+                }
+                when (json) {
+                    null -> return@syncTool err("bindings_unavailable")
+                    "invalid_tab_index" -> return@syncTool err("invalid_tab_index")
+                    "empty_selection" -> return@syncTool err("empty_selection_cannot_render_raster")
+                    "subset_raster_encode_failed" -> return@syncTool err("subset_raster_encode_failed")
+                    else -> {
+                        if (imageBytes != null && imageMime != null) {
+                            return@syncTool okJsonPlusMcpImage(json, imageMime, imageBytes)
+                        }
+                        return@syncTool okText(json)
+                    }
+                }
+            },
+        )
+    }
+
+    private fun subsetRasterFormatFromToolArg(req: McpSchema.CallToolRequest): ConceptualSubsetRasterFormat? {
+        val f = stringArg(req, "format")?.lowercase()?.trim() ?: return null
+        return when (f) {
+            "png" -> ConceptualSubsetRasterFormat.PngTransparentBackground
+            "jpg", "jpeg" -> ConceptualSubsetRasterFormat.JpegOpaqueCanvasGrayBackground
+            else -> null
+        }
+    }
+
+    private fun jsonIntArray(ids: List<Int>): String = ids.joinToString(separator = ",", prefix = "[", postfix = "]")
 
     private fun buildConceptualSearchTools(
         jsonMapper: io.modelcontextprotocol.json.McpJsonMapper,
     ): List<McpServerFeatures.SyncToolSpecification> {
-        val tabUri = """"tabIndex":{"type":"integer","minimum":0},"uri":{"type":"string","minLength":1}"""
-        val findSchema = """{"type":"object","properties":{$tabUri,"query":{"type":"string","description":"Substring; omit or use empty string to list all items in the selected include* categories (400-hit cap)."},"includeEntities":{"type":"boolean"},"includeRelationships":{"type":"boolean"},"includeAssociativeEntities":{"type":"boolean"},"includeSpecializations":{"type":"boolean"},"includeCanvasAttributes":{"type":"boolean"},"includeHiddenAttributes":{"type":"boolean"},"includeCardinalityLabels":{"type":"boolean"},"observationBox":{"type":"boolean","description":"Include Annotation (observation box) elements"},"searchDictionary":{"type":"boolean"},"searchObservations":{"type":"boolean"}},"additionalProperties":false}"""
-        val applySchema = """{"type":"object","properties":{$tabUri,"hit":{"type":"object","description":"Echo one hit object from search__find (kind + ids + optional geometry).","additionalProperties":true}},"required":["hit"],"additionalProperties":false}"""
+        val tabUri = TAB_TOOL_RESOURCE_URI_SCHEMA_PROP
+        val findSchema = """{"type":"object","properties":{$tabUri,"query":{"type":"string","description":"Substring; omit or use empty string to list all items in the selected include* categories (400-hit cap)."},"includeEntities":{"type":"boolean"},"includeRelationships":{"type":"boolean"},"includeAssociativeEntities":{"type":"boolean"},"includeSpecializations":{"type":"boolean"},"includeCanvasAttributes":{"type":"boolean"},"includeHiddenAttributes":{"type":"boolean"},"includeCardinalityLabels":{"type":"boolean"},"observationBox":{"type":"boolean","description":"Include Annotation (observation box) elements"},"searchDictionary":{"type":"boolean"},"searchObservations":{"type":"boolean"}},"required":["resourceUri"],"additionalProperties":false}"""
+        val applySchema = """{"type":"object","properties":{$tabUri,"hit":{"type":"object","description":"Echo one hit object from search__find (kind + ids + optional geometry).","additionalProperties":true}},"required":["resourceUri","hit"],"additionalProperties":false}"""
         return listOf(
             syncTool(
                 jsonMapper,
@@ -778,10 +1142,11 @@ internal actual class McpRuntime {
                     "At most 400 hits are returned; when truncated, `truncated` is true and `matchCount` is the full count before the cap. " +
                     "Omit all include* booleans (or set none true) to include every category. " +
                     "Use `observationBox` for Annotation elements (distinct from element observations text). " +
+                    "Pass `resourceUri` from tabs__list_open (`.xml`, `.png`, or `.jpg` URI suffix resolves to the same tab). " +
                     McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
                 schema = findSchema,
             ) { _, req ->
-                val idx = tabIndexFromTabOrUriArgs(req) ?: return@syncTool err("tabIndex_or_uri_required")
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
                 val query = rawStringArg(req, "query") ?: ""
                 val typeFilters = conceptualSearchTypeFiltersFromToolArgs(req)
                 val textScope = conceptualSearchTextScopeFromToolArgs(req)
@@ -799,11 +1164,12 @@ internal actual class McpRuntime {
                 title = "Apply conceptual search hit",
                 description = "Selects the hit target on the canvas, opens the matching inspector tab (Selection vs hidden attributes), " +
                     "reveals the hidden-attribute branch when applicable, and pans the canvas to the hit bounds. " +
-                    "Pass `tabIndex` or a live model resource URI; then pass the `hit` object from a prior search__find response. " +
+                    "Pass `resourceUri` from tabs__list_open (`resourceUri`, `resourceUriPng`, or `resourceUriJpeg` for the same tab); " +
+                    "then pass the `hit` object from a prior search__find response. " +
                     McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
                 schema = applySchema,
             ) { _, req ->
-                val idx = tabIndexFromTabOrUriArgs(req) ?: return@syncTool err("tabIndex_or_uri_required")
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
                 @Suppress("UNCHECKED_CAST")
                 val hitMap = req.arguments()["hit"] as? Map<String, Any?> ?: return@syncTool err("hit_required")
                 val errMsg = runOnEdt {
@@ -818,7 +1184,12 @@ internal actual class McpRuntime {
                 if (errMsg != null) {
                     return@syncTool err(errMsg)
                 }
-                okText("""{"ok":true,"tabIndex":$idx}""")
+                val resourceUriJson = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt null
+                    val tab = b.current().sessions.getOrNull(idx) ?: return@runOnEdt null
+                    jsonString(modelResourceUriForSession(tab.id))
+                } ?: return@syncTool err("invalid_tab_index")
+                okText("""{"ok":true,"resourceUri":$resourceUriJson}""")
             },
         )
     }
@@ -964,13 +1335,14 @@ internal actual class McpRuntime {
         jsonMapper: io.modelcontextprotocol.json.McpJsonMapper,
     ): List<McpServerFeatures.SyncToolSpecification> {
         val uriProp =
-            """"uri":{"type":"string","minLength":1,"description":"Registered MCP resource URI (live tab, DTD, or classpath example — see server instructions)."}"""
+            """"uri":{"type":"string","minLength":1,"description":"Registered MCP resource URI (live tab XML, DTD, or classpath example — see server instructions). Live tab .png/.jpg previews are binary; use resources/read, not these text tools."}"""
         return listOf(
             syncTool(
                 jsonMapper,
                 name = McpResourceUtilityToolNames.READ_FULL,
                 title = "Read full MCP resource text",
-                description = "Returns the entire UTF-16 text body for a registered resource URI (same content as resources/read). " +
+                description = "Returns the entire UTF-16 text body for a registered resource URI when that URI is plain text (same content as resources/read for tab XML, DTD, and examples). " +
+                    "Does not apply to live tab `.png`/`.jpg` resources — use MCP resources/read for those. " +
                     "Prefer this when you need the exact serialized string without HTTP resource round-trips.",
                 schema = """{"type":"object","properties":{$uriProp},"required":["uri"],"additionalProperties":false}""",
             ) { _, req ->
@@ -1085,12 +1457,16 @@ internal actual class McpRuntime {
     private fun buildProceduralTools(
         jsonMapper: io.modelcontextprotocol.json.McpJsonMapper,
     ): List<McpServerFeatures.SyncToolSpecification> {
-        val tabUri = """"tabIndex":{"type":"integer","minimum":0},"uri":{"type":"string","minLength":1}"""
+        val tabUri = TAB_TOOL_RESOURCE_URI_SCHEMA_PROP
         val xy = """"x":{"type":"integer"},"y":{"type":"integer"}"""
         val textFields = """"name":{"type":"string"},"observations":{"type":"string"},"dictionary":{"type":"string"}"""
         val labelStyle =
             """"labelColorArgb":{"type":"integer"},"labelBold":{"type":"boolean"},"labelItalic":{"type":"boolean"}"""
         val relArrow = """"arrowDirectionCode":{"type":"integer","minimum":0,"maximum":8},"showName":{"type":"boolean"}"""
+        val annotationPlacementProps =
+            """"annotationColorArgb":{"type":"integer"},"annotationTypeCode":{"type":"integer","minimum":0,"maximum":2},"alignmentCode":{"type":"integer","minimum":0,"maximum":2},"autoSize":{"type":"boolean"},"width":{"type":"integer","minimum":5},"height":{"type":"integer","minimum":5}"""
+        val placeObservationSchema =
+            """{"type":"object","properties":{$tabUri,$xy,$textFields,$labelStyle,$annotationPlacementProps},"additionalProperties":false}"""
         val assocInner =
             """"relationshipName":{"type":"string"},"relationshipObservations":{"type":"string"},"relationshipDictionary":{"type":"string"}"""
         val baseEntityIdProp = """"baseEntityId":{"type":"integer","minimum":0}"""
@@ -1104,6 +1480,13 @@ internal actual class McpRuntime {
             """{"type":"object","properties":{$textFields,$labelStyle,$relArrow},"additionalProperties":false}"""
         val connectionPatchSchema =
             """{"type":"object","properties":{"cardinalityCode":{"type":"integer","minimum":1,"maximum":4},"showCardinality":{"type":"boolean"},"orientationCode":{"type":"integer","minimum":0,"maximum":3},"cardinalityFixed":{"type":"boolean"},"isWeak":{"type":"boolean"},"cardinalityRole":{"type":"string"},"cardinalityObservations":{"type":"string"},"cardinalityDictionary":{"type":"string"},"cardinalityAutoSize":{"type":"boolean"}},"additionalProperties":false}"""
+        val attachSideForAutoSelf =
+            """"attachSide":{"type":"string","enum":["left","top","right","bottom","1","2","3","4"],"description":"Which side of the entity receives the self-relationship diamond (same idea as apply_attribute attachSide)."}"""
+        val entityElementIdProp = """"entityElementId":{"type":"integer","minimum":0}"""
+        val associativeOuterForAutoSelf =
+            """"associativeOuterEntitySide":{"type":"boolean","description":"True when entityElementId is an associative entity and the pick is its outer rectangle."}"""
+        val autoSelfRelationshipSchema =
+            """{"type":"object","properties":{$tabUri,$entityElementIdProp,$associativeOuterForAutoSelf,$attachSideForAutoSelf,"relationshipOverrides":$relationshipOverridesSchema,"connection":$connectionPatchSchema,"connectionOverrides":{"type":"array","items":$connectionPatchSchema}},"required":["entityElementId"],"additionalProperties":false}"""
         val linkObjectsSchema =
             """{"type":"object","properties":{$tabUri,"endA":$linkEndPickSchema,"endB":$linkEndPickSchema,"relationshipOverrides":$relationshipOverridesSchema,"connection":$connectionPatchSchema,"connectionOverrides":{"type":"array","items":$connectionPatchSchema}},"required":["endA","endB"],"additionalProperties":false}"""
         return listOf(
@@ -1118,7 +1501,7 @@ internal actual class McpRuntime {
                     McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
                 schema = """{"type":"object","properties":{$tabUri,$xy,$textFields,"isWeak":{"type":"boolean"},$labelStyle},"additionalProperties":false}""",
             ) { _, req ->
-                val idx = tabIndexFromTabOrUriArgs(req) ?: return@syncTool err("tabIndex_or_uri_required")
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
                 val x = intArg(req, "x") ?: 64
                 val y = intArg(req, "y") ?: 64
                 val overrides = proceduralOverridesForEntity(req)
@@ -1139,7 +1522,7 @@ internal actual class McpRuntime {
                     McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
                 schema = """{"type":"object","properties":{$tabUri,$xy,$textFields,$relArrow},"additionalProperties":false}""",
             ) { _, req ->
-                val idx = tabIndexFromTabOrUriArgs(req) ?: return@syncTool err("tabIndex_or_uri_required")
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
                 val x = intArg(req, "x") ?: 64
                 val y = intArg(req, "y") ?: 64
                 val overrides = proceduralOverridesForRelationship(req)
@@ -1160,7 +1543,7 @@ internal actual class McpRuntime {
                     McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
                 schema = """{"type":"object","properties":{$tabUri,$xy,$textFields,$assocInner,$labelStyle,"arrowDirectionCode":{"type":"integer","minimum":0,"maximum":8}},"additionalProperties":false}""",
             ) { _, req ->
-                val idx = tabIndexFromTabOrUriArgs(req) ?: return@syncTool err("tabIndex_or_uri_required")
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
                 val x = intArg(req, "x") ?: 64
                 val y = intArg(req, "y") ?: 64
                 val overrides = proceduralOverridesForAssociative(req)
@@ -1173,6 +1556,30 @@ internal actual class McpRuntime {
                         y,
                         overrides,
                     )
+                }
+                proceduralToolOutcomeToResult(outcome)
+            },
+            syncTool(
+                jsonMapper,
+                name = McpProceduralToolsToolNames.PLACE_OBSERVATION,
+                title = "Place observation box (Observação)",
+                description = "Inserts a canvas observation / annotation box at (x,y) with the same defaults as the ribbon **Observação** tool " +
+                    "(caption, geometry, hint/box style). " +
+                    "Optional fields: `name` (caption), `observations`, `dictionary`, `labelColorArgb` / `labelBold` / `labelItalic` (text style), " +
+                    "`annotationColorArgb` (Windows COLORREF background), `annotationTypeCode` (0 plain, 1 hint, 2 box), `alignmentCode` (0 left, 1 center, 2 right), " +
+                    "`autoSize`, and `width` / `height` (minimum 5 px each) to override the default 150×22 box. " +
+                    "Does **not** switch the user's active ribbon/canvas tool. " +
+                    "Returns the placed element as JSON. " +
+                    McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
+                schema = placeObservationSchema,
+            ) { _, req ->
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
+                val x = intArg(req, "x") ?: 64
+                val y = intArg(req, "y") ?: 64
+                val overrides = proceduralOverridesForObservation(req)
+                val outcome = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt McpProceduralToolApplyOutcome.err("bindings_unavailable")
+                    b.onPlaceProceduralConceptualToolAtTab(idx, ConceptualProceduralToolKind.ANNOTATION, x, y, overrides)
                 }
                 proceduralToolOutcomeToResult(outcome)
             },
@@ -1193,7 +1600,7 @@ internal actual class McpRuntime {
                     McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
                 schema = linkObjectsSchema,
             ) { _, req ->
-                val idx = tabIndexFromTabOrUriArgs(req) ?: return@syncTool err("tabIndex_or_uri_required")
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
                 val args = req.arguments()
                 val endA = McpLinkObjectsToolArgs.parseEndPick(args["endA"])
                     ?: return@syncTool err("endA_invalid")
@@ -1209,7 +1616,46 @@ internal actual class McpRuntime {
                 }
                 val outcome = runOnEdt {
                     val b = bindingsRef.get() ?: return@runOnEdt McpProceduralToolApplyOutcome.err("bindings_unavailable")
-                    b.onLinkConceptualObjectsAtTab(idx, endA, endB, relO, connList)
+                    b.onLinkConceptualObjectsAtTab(idx, endA, endB, relO, connList, null)
+                }
+                proceduralToolOutcomeToResult(outcome)
+            },
+            syncTool(
+                jsonMapper,
+                name = McpProceduralToolsToolNames.AUTO_SELF_RELATIONSHIP,
+                title = "Create entity auto-relationship (Auto Relacionar)",
+                description = "Creates a self-relationship on a plain entity or the outer rectangle of an associative entity, " +
+                    "same rules as the **Auto Relacionar** canvas tool. " +
+                    "Optional `attachSide` (`left`, `top`, `right`, `bottom` or codes 1–4) chooses which side of the owner box receives the diamond, matching attribute-tool edge semantics; omit for the legacy right-side placement. " +
+                    "Optional `relationshipOverrides` and `connection` / `connectionOverrides` (exactly **two** patches, ascending new connection id) adjust the new self-relationship and both cardinality legs at creation time — same fields as **link_objects**. " +
+                    "Returns `newConnections` and `newSelfRelationship` JSON. Does **not** switch the user's active canvas tool. " +
+                    McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
+                schema = autoSelfRelationshipSchema,
+            ) { _, req ->
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
+                val args = req.arguments()
+                val entityId = intArg(req, "entityElementId") ?: return@syncTool err("entityElementId_required")
+                val outer = boolArg(req, "associativeOuterEntitySide") == true
+                val pick = ConceptualLinkPick(elementId = entityId, isAssociativeOuterEntitySide = outer)
+                val sideOpt = McpAttributeToolArgs.parseAttachSide(args["attachSide"])
+                val relO = McpLinkObjectsToolArgs.parseRelationshipOverrides(args["relationshipOverrides"])
+                val (connErr, connList) = McpLinkObjectsToolArgs.parseConnectionOverrides(
+                    args["connectionOverrides"],
+                    args["connection"],
+                )
+                if (connErr != null) {
+                    return@syncTool err(connErr)
+                }
+                val outcome = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt McpProceduralToolApplyOutcome.err("bindings_unavailable")
+                    val snap = b.current()
+                    if (idx !in snap.sessions.indices) {
+                        return@runOnEdt McpProceduralToolApplyOutcome.err("invalid_tab_index")
+                    }
+                    val ownerEl = snap.sessions[idx].schema.elements[entityId]
+                        ?: return@runOnEdt McpProceduralToolApplyOutcome.err("element_not_found")
+                    val click = sideOpt?.let { syntheticClickOnOwnerSideCenter(ownerEl.position, it) }
+                    b.onLinkConceptualObjectsAtTab(idx, pick, pick, relO, connList, click)
                 }
                 proceduralToolOutcomeToResult(outcome)
             },
@@ -1251,7 +1697,7 @@ internal actual class McpRuntime {
     private fun buildAttributeTools(
         jsonMapper: io.modelcontextprotocol.json.McpJsonMapper,
     ): List<McpServerFeatures.SyncToolSpecification> {
-        val tabUri = """"tabIndex":{"type":"integer","minimum":0},"uri":{"type":"string","minLength":1}"""
+        val tabUri = TAB_TOOL_RESOURCE_URI_SCHEMA_PROP
         val targetId = """"targetElementId":{"type":"integer","minimum":0}"""
         val holderId = """"holderElementId":{"type":"integer","minimum":0}"""
         val attachSideProp =
@@ -1284,7 +1730,7 @@ internal actual class McpRuntime {
                     McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
                 schema = simpleSchema,
             ) { _, req ->
-                val idx = tabIndexFromTabOrUriArgs(req) ?: return@syncTool err("tabIndex_or_uri_required")
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
                 val targetIdVal = intArg(req, "targetElementId") ?: return@syncTool err("targetElementId_required")
                 val variant = McpAttributeToolArgs.parseSimpleVariant(req.arguments()["attributeVariant"])
                     ?: return@syncTool err("attributeVariant_invalid")
@@ -1307,7 +1753,7 @@ internal actual class McpRuntime {
                     McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
                 schema = compositeSchema,
             ) { _, req ->
-                val idx = tabIndexFromTabOrUriArgs(req) ?: return@syncTool err("tabIndex_or_uri_required")
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
                 val targetIdVal = intArg(req, "targetElementId") ?: return@syncTool err("targetElementId_required")
                 val rawChildren = req.arguments()["children"]
                 if (rawChildren !is List<*>) {
@@ -1336,7 +1782,7 @@ internal actual class McpRuntime {
                     McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
                 schema = hiddenSchema,
             ) { _, req ->
-                val idx = tabIndexFromTabOrUriArgs(req) ?: return@syncTool err("tabIndex_or_uri_required")
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
                 val holderId = intArg(req, "holderElementId") ?: return@syncTool err("holderElementId_required")
                 val rawRoots = req.arguments()["roots"] ?: return@syncTool err("roots_required")
                 val roots = McpAttributeToolArgs.parseHiddenRoots(rawRoots) ?: return@syncTool err("roots_invalid")
@@ -1346,7 +1792,195 @@ internal actual class McpRuntime {
                 }
                 proceduralToolOutcomeToResult(outcome)
             },
+        ) + buildEditTools(jsonMapper)
+    }
+
+    private fun buildEditTools(
+        jsonMapper: io.modelcontextprotocol.json.McpJsonMapper,
+    ): List<McpServerFeatures.SyncToolSpecification> {
+        return listOf(
+            syncTool(
+                jsonMapper,
+                name = McpEditToolNames.MODEL,
+                title = "Edit conceptual model metadata",
+                description = "Updates model name, author, and/or observations for the tab (same fields as the inspector when nothing is selected on the canvas). " +
+                    "Identify the tab with `resourceUri` from tabs__list_open (`resourceUri`, `resourceUriPng`, or `resourceUriJpeg`). " +
+                    "Each successful call creates one undo step. Unknown patch keys or empty patches return a descriptive error.",
+                schema = McpEditToolJsonSchemas.EDIT_MODEL,
+            ) { _, req ->
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
+                val patchRaw = req.arguments()["patch"] ?: return@syncTool err("patch_required")
+                val patch = parseStringKeyedMap(patchRaw) ?: return@syncTool err("patch_invalid")
+                val outcome = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt McpProceduralToolApplyOutcome.err("bindings_unavailable")
+                    b.onApplyEditConceptualModelAtTab(idx, patch)
+                }
+                proceduralToolOutcomeToResult(outcome)
+            },
+            syncTool(
+                jsonMapper,
+                name = McpEditToolNames.CANVAS_ELEMENT,
+                title = "Edit canvas element properties",
+                description = "Updates properties of a diagram element (entity, relationship, associative entity, attribute, specialization, self-relationship, annotation) " +
+                    "using the same allowlists as the inspector sidebar. Keys that do not apply to the element kind return field_not_applicable_to_element_kind. " +
+                    "Attribute auto-size and composite bar layout follow the same post-processing as the inspector. " +
+                    McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
+                schema = McpEditToolJsonSchemas.EDIT_CANVAS_ELEMENT,
+            ) { _, req ->
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
+                val elementId = intArg(req, "elementId") ?: return@syncTool err("elementId_required")
+                val patchRaw = req.arguments()["patch"] ?: return@syncTool err("patch_required")
+                val patch = parseStringKeyedMap(patchRaw) ?: return@syncTool err("patch_invalid")
+                val outcome = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt McpProceduralToolApplyOutcome.err("bindings_unavailable")
+                    b.onApplyEditCanvasElementAtTab(idx, elementId, patch)
+                }
+                proceduralToolOutcomeToResult(outcome)
+            },
+            syncTool(
+                jsonMapper,
+                name = McpEditToolNames.CONNECTION,
+                title = "Edit connection / cardinality properties",
+                description = "Updates a connection row (cardinality label, orientation, weak participation, associative outer flags, etc.) like the inspector when a cardinality link is selected. " +
+                    "Toggling fixed position, auto-size, or showing cardinality may materialize label bounds using the same layout rules as the UI. " +
+                    McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
+                schema = McpEditToolJsonSchemas.EDIT_CONNECTION,
+            ) { _, req ->
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
+                val connectionId = intArg(req, "connectionId") ?: return@syncTool err("connectionId_required")
+                val patchRaw = req.arguments()["patch"] ?: return@syncTool err("patch_required")
+                val patch = parseStringKeyedMap(patchRaw) ?: return@syncTool err("patch_invalid")
+                val outcome = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt McpProceduralToolApplyOutcome.err("bindings_unavailable")
+                    b.onApplyEditConnectionAtTab(idx, connectionId, patch)
+                }
+                proceduralToolOutcomeToResult(outcome)
+            },
+            syncTool(
+                jsonMapper,
+                name = McpEditToolNames.HIDDEN_ATTRIBUTE,
+                title = "Edit hidden attribute node",
+                description = "Patches one hidden-attribute node identified by holderElementId and a path of merged child indices (children first, then nested ocultos), matching the inspector tree. " +
+                    "The forest must keep unique non-blank names after the edit. " +
+                    McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
+                schema = McpEditToolJsonSchemas.EDIT_HIDDEN_ATTRIBUTE,
+            ) { _, req ->
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
+                val holderId = intArg(req, "holderElementId") ?: return@syncTool err("holderElementId_required")
+                val path = intListArg(req.arguments()["path"]) ?: return@syncTool err("path_invalid")
+                val patchRaw = req.arguments()["patch"] ?: return@syncTool err("patch_required")
+                val patch = parseStringKeyedMap(patchRaw) ?: return@syncTool err("patch_invalid")
+                val outcome = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt McpProceduralToolApplyOutcome.err("bindings_unavailable")
+                    b.onApplyEditHiddenAttributeAtTab(idx, holderId, path, patch)
+                }
+                proceduralToolOutcomeToResult(outcome)
+            },
+            syncTool(
+                jsonMapper,
+                name = McpEditToolNames.CANVAS_SELECTION_RECTANGLE,
+                title = "Edit canvas selection by rectangle",
+                description = "Marquee-selects in schema coordinates (x0,y0,x1,y1) using the same geometry as the canvas rectangle tool. " +
+                    "mergeMode add unions band picks with the current selection; replace keeps only picks in the band; subtract removes band picks from the selection. " +
+                    "dryRun returns objectsInBand, selectionUiAfter (projection), and selectionSymmetricDelta without mutating the UI (requestWindowFocus is ignored). " +
+                    "When applying changes, optional requestWindowFocus raises the editor — use only to show the user something (see MCP server instructions). " +
+                    "A Portuguese snackbar appears when the selection changes and/or the window is focused. " +
+                    McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
+                schema = McpEditToolJsonSchemas.EDIT_CANVAS_SELECTION_RECTANGLE,
+            ) { _, req ->
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
+                val x0 = intArg(req, "x0") ?: return@syncTool err("x0_required")
+                val y0 = intArg(req, "y0") ?: return@syncTool err("y0_required")
+                val x1 = intArg(req, "x1") ?: return@syncTool err("x1_required")
+                val y1 = intArg(req, "y1") ?: return@syncTool err("y1_required")
+                val mode = canvasSelectionRectangleMergeModeArg(req) ?: return@syncTool err("mergeMode_invalid")
+                val dryRun = optionalBoolArg(req, "dryRun") == true
+                val wantFocus = boolArg(req, "requestWindowFocus") == true
+                val outcome = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt McpProceduralToolApplyOutcome.err("bindings_unavailable")
+                    b.onApplyCanvasSelectionRectangleAtTab(idx, x0, y0, x1, y1, mode, dryRun, wantFocus)
+                }
+                proceduralToolOutcomeToResult(outcome)
+            },
+            syncTool(
+                jsonMapper,
+                name = McpEditToolNames.CANVAS_SELECTION,
+                title = "Set canvas selection",
+                description = "Replaces the diagram multi-selection from `elementIds` and/or `cardinalityConnectionIds` (validated against the tab schema), like rectangle or Shift picks. " +
+                    "Omit each array or pass [] to clear that side. Optional `requestWindowFocus` raises the editor window — use only when you want the user to notice the app (see MCP server instructions). " +
+                    "When selection or focus changes, the user sees a short snackbar that an MCP action did it. " +
+                    McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
+                schema = McpEditToolJsonSchemas.EDIT_CANVAS_SELECTION,
+            ) { _, req ->
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
+                val args = req.arguments()
+                val rawE = args["elementIds"]
+                val elementIds = when (rawE) {
+                    null -> emptyList()
+                    is List<*> -> intListArg(rawE) ?: return@syncTool err("elementIds_invalid")
+                    else -> return@syncTool err("elementIds_must_be_array")
+                }
+                val rawC = args["cardinalityConnectionIds"]
+                val cardinalityIds = when (rawC) {
+                    null -> emptyList()
+                    is List<*> -> intListArg(rawC) ?: return@syncTool err("cardinalityConnectionIds_invalid")
+                    else -> return@syncTool err("cardinalityConnectionIds_must_be_array")
+                }
+                val wantFocus = boolArg(req, "requestWindowFocus") == true
+                val errMsg = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt "bindings_unavailable"
+                    val snap = b.current()
+                    if (idx !in snap.sessions.indices) return@runOnEdt "invalid_tab_index"
+                    val schema = snap.sessions[idx].schema
+                    val (sel, verr) = tryBuildCanvasSelectionFromMcpPickLists(schema, elementIds, cardinalityIds)
+                    if (verr != null) return@runOnEdt verr
+                    b.onSetCanvasSelectionAtTab(idx, sel!!)
+                    if (wantFocus) {
+                        b.onRequestAppWindowFocus()
+                    }
+                    b.onShowMcpAgentUserNotice(
+                        McpAgentUserNotice(
+                            selectionChanged = true,
+                            windowFocused = wantFocus,
+                        ),
+                    )
+                    null
+                }
+                if (errMsg != null) return@syncTool err(errMsg)
+                val wfJson = if (wantFocus) "true" else "false"
+                val resourceUriJson = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt null
+                    val tab = b.current().sessions.getOrNull(idx) ?: return@runOnEdt null
+                    jsonString(modelResourceUriForSession(tab.id))
+                } ?: return@syncTool err("invalid_tab_index")
+                okText("""{"ok":true,"resourceUri":$resourceUriJson,"requestWindowFocus":$wfJson}""")
+            },
         )
+    }
+
+    private fun parseStringKeyedMap(raw: Any?): Map<String, Any?>? {
+        if (raw !is Map<*, *>) return null
+        val out = LinkedHashMap<String, Any?>()
+        for ((k, v) in raw) {
+            if (k !is String) return null
+            out[k] = v
+        }
+        return out
+    }
+
+    private fun intListArg(raw: Any?): List<Int>? {
+        if (raw !is List<*>) return null
+        val out = ArrayList<Int>(raw.size)
+        for (e in raw) {
+            when (e) {
+                is Int -> out.add(e)
+                is Long -> out.add(e.toInt())
+                is Double -> out.add(e.toInt())
+                is Number -> out.add(e.toInt())
+                else -> return null
+            }
+        }
+        return out
     }
 
     private fun validateCompositeLeafRequestItems(raw: List<*>): String? {
@@ -1366,7 +2000,7 @@ internal actual class McpRuntime {
         req: McpSchema.CallToolRequest,
         variant: ConceptualSpecializationToolVariant,
     ): McpSchema.CallToolResult {
-        val idx = tabIndexFromTabOrUriArgs(req) ?: return err("tabIndex_or_uri_required")
+        val idx = tabIndexFromResourceUriArg(req) ?: return err("resource_uri_required")
         val baseId = intArg(req, "baseEntityId") ?: return err("baseEntityId_required")
         val outcome = runOnEdt {
             val b = bindingsRef.get() ?: return@runOnEdt McpProceduralToolApplyOutcome.err("bindings_unavailable")
@@ -1412,16 +2046,55 @@ internal actual class McpRuntime {
             arrowDirectionCode = optionalIntArg(req, "arrowDirectionCode"),
         )
 
+    private fun proceduralOverridesForObservation(req: McpSchema.CallToolRequest): ConceptualProceduralToolOverrides =
+        ConceptualProceduralToolOverrides(
+            name = optionalKeyedTrimmedString(req, "name"),
+            observations = optionalKeyedRawString(req, "observations"),
+            dictionary = optionalKeyedRawString(req, "dictionary"),
+            labelColorArgb = optionalIntArg(req, "labelColorArgb"),
+            labelBold = optionalBoolArg(req, "labelBold"),
+            labelItalic = optionalBoolArg(req, "labelItalic"),
+            annotationColorArgb = optionalIntArg(req, "annotationColorArgb"),
+            annotationTypeCode = optionalIntArg(req, "annotationTypeCode"),
+            alignmentCode = optionalIntArg(req, "alignmentCode"),
+            annotationAutoSize = optionalBoolArg(req, "autoSize"),
+            annotationWidth = optionalIntArg(req, "width"),
+            annotationHeight = optionalIntArg(req, "height"),
+        )
+
     private fun proceduralToolOutcomeToResult(outcome: McpProceduralToolApplyOutcome): McpSchema.CallToolResult {
         val errMsg = outcome.error
         if (errMsg != null) {
             return err(errMsg)
         }
         val ej = outcome.elementJson ?: return err("internal_no_element_json")
-        if (outcome.isFullResponseJson) {
-            return okText(ej)
+        val report = outcome.layoutQualityScan?.let { scan ->
+            runOnEdt {
+                val b = bindingsRef.get() ?: return@runOnEdt null
+                val schema = b.current().schemaForTab(scan.tabIndex) ?: return@runOnEdt null
+                analyzeConceptualLayoutQuality(schema, scan.touchedElementIds)
+            }
         }
-        return okText("""{"ok":true,"tabIndex":${outcome.tabIndex},"element":$ej}""")
+        if (outcome.isFullResponseJson) {
+            val text = if (report != null) {
+                McpLayoutQualityJson.mergeLayoutQualityIntoJsonObjectBody(ej, report)
+            } else {
+                ej
+            }
+            return okText(text)
+        }
+        val resourceUriJson = runOnEdt {
+            val b = bindingsRef.get() ?: return@runOnEdt null
+            val tab = b.current().sessions.getOrNull(outcome.tabIndex) ?: return@runOnEdt null
+            jsonString(modelResourceUriForSession(tab.id))
+        } ?: "null"
+        val text = if (report != null) {
+            val lq = McpLayoutQualityJson.layoutQualityObjectJson(report)
+            """{"ok":true,"resourceUri":$resourceUriJson,"element":$ej,"layoutQuality":$lq}"""
+        } else {
+            """{"ok":true,"resourceUri":$resourceUriJson,"element":$ej}"""
+        }
+        return okText(text)
     }
 
     private fun optionalKeyedTrimmedString(req: McpSchema.CallToolRequest, key: String): String? {
@@ -1492,6 +2165,16 @@ internal actual class McpRuntime {
         }
     }
 
+    private fun canvasSelectionRectangleMergeModeArg(req: McpSchema.CallToolRequest): CanvasSelectionRectangleMergeMode? {
+        val raw = stringArg(req, "mergeMode") ?: return null
+        return when (raw.lowercase()) {
+            "add" -> CanvasSelectionRectangleMergeMode.ADD
+            "replace" -> CanvasSelectionRectangleMergeMode.REPLACE
+            "subtract" -> CanvasSelectionRectangleMergeMode.SUBTRACT
+            else -> null
+        }
+    }
+
     private fun stringArg(req: McpSchema.CallToolRequest, key: String): String? {
         val raw = req.arguments()[key] ?: return null
         return when (raw) {
@@ -1522,8 +2205,8 @@ internal actual class McpRuntime {
         extraFieldsJson: String = "",
     ): String {
         return buildString {
-            append(
-                """{"ok":true,"createdTabIndex":${change.createdTabIndex},"selectedIndex":${change.selectedTabIndex},"createdResourceUri":${jsonString(change.createdResourceUri)},"selectedResourceUri":${jsonString(change.selectedResourceUri)}""",
+                append(
+                """{"ok":true,"createdResourceUri":${jsonString(change.createdResourceUri)},"selectedResourceUri":${jsonString(change.selectedResourceUri)},"createdResourceUriPng":${jsonString(change.createdResourceUriPng)},"createdResourceUriJpeg":${jsonString(change.createdResourceUriJpeg)},"selectedResourceUriPng":${jsonString(change.selectedResourceUriPng)},"selectedResourceUriJpeg":${jsonString(change.selectedResourceUriJpeg)}""",
             )
             if (extraFieldsJson.isNotEmpty()) {
                 append(',')
@@ -1531,6 +2214,16 @@ internal actual class McpRuntime {
             }
             append('}')
         }
+    }
+
+    private fun okJsonPlusMcpImage(json: String, mimeType: String, imageBytes: ByteArray): McpSchema.CallToolResult {
+        val b64 = Base64.getEncoder().encodeToString(imageBytes)
+        val annotations = McpSchema.Annotations(emptyList<McpSchema.Role>(), null)
+        val image = McpSchema.ImageContent(annotations, b64, mimeType)
+        return McpSchema.CallToolResult.builder()
+            .addTextContent(json)
+            .addContent(image)
+            .build()
     }
 
     private fun okText(json: String): McpSchema.CallToolResult =

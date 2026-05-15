@@ -16,25 +16,18 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package games.polyclub.power.brmodelo
+package games.polyclub.power.brmodelo.mcp
 
-internal actual fun registerDesktopMainWindowCloseHandler(handler: (() -> Unit)?) = Unit
+/** MCP tools that return diagram rasters for agents (desktop server only). */
+internal object McpExportToolNames {
+    const val EXPORT_GROUP = "export"
+    const val EXPORT_SEPARATOR = "__"
 
-internal actual fun setBrowserUnloadWarningEnabled(enabled: Boolean): Unit = js(
-    """
-    (function(on) {
-        if (!window._kbrUnloadWarn) {
-            window._kbrUnloadWarn = function(e) {
-                e.preventDefault();
-                e.returnValue = ' ';
-            };
-        }
-        if (on) window.addEventListener('beforeunload', window._kbrUnloadWarn);
-        else window.removeEventListener('beforeunload', window._kbrUnloadWarn);
-    })(enabled)
-    """
-)
+    private fun exportTool(suffix: String): String = "$EXPORT_GROUP$EXPORT_SEPARATOR$suffix"
 
-internal actual fun quitApplicationCompletely() = Unit
+    /** Raster of a chosen set of canvas elements (subset clipboard-style preview). */
+    val SUBSET_RASTER = exportTool("subset_raster")
 
-internal actual fun requestDesktopMainWindowToFront() = Unit
+    /** Snapshot of the user's current canvas selection on a tab (JSON); optional raster like subset_raster when imageFormat is set. */
+    val CURRENT_CANVAS_SELECTION = exportTool("current_canvas_selection")
+}

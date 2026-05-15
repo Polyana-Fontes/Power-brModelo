@@ -39,3 +39,7 @@ internal actual fun setBrowserUnloadWarningEnabled(enabled: Boolean) = Unit
 internal actual fun quitApplicationCompletely() {
     DesktopApplicationScopeHolder.applicationScope.exitApplication()
 }
+
+internal actual fun requestDesktopMainWindowToFront() {
+    DesktopMainWindowFocus.requestToFront()
+}

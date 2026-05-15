@@ -19,6 +19,7 @@
 package games.polyclub.power.brmodelo.mcp
 
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.ui.geometry.Offset
 import games.polyclub.power.brmodelo.domain.ConceptualAttributeAttachPonto
 import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolVariant
 import games.polyclub.power.brmodelo.domain.ConceptualCompositeLeafSpec
@@ -33,7 +34,11 @@ import games.polyclub.power.brmodelo.domain.ConceptualSearchHit
 import games.polyclub.power.brmodelo.domain.ConceptualSearchOutcome
 import games.polyclub.power.brmodelo.domain.ConceptualSearchTextScope
 import games.polyclub.power.brmodelo.domain.ConceptualSearchTypeFilters
+import games.polyclub.power.brmodelo.domain.CanvasSelection
+import games.polyclub.power.brmodelo.domain.CanvasSelectionRectangleMergeMode
 import games.polyclub.power.brmodelo.ui.EditorTabSession
+import games.polyclub.power.brmodelo.ui.ConceptualSubsetRasterEncodeResult
+import games.polyclub.power.brmodelo.ui.ConceptualSubsetRasterFormat
 import kotlinx.coroutines.CoroutineScope
 
 @Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING")
@@ -90,6 +95,19 @@ internal actual object McpDesktopSync {
             ConceptualLinkPick,
             ConceptualProceduralToolOverrides?,
             List<ConceptualLinkConnectionOverridePatch>?,
+            Offset?,
+        ) -> McpProceduralToolApplyOutcome,
+        onApplyEditConceptualModelAtTab: (Int, Map<String, Any?>) -> McpProceduralToolApplyOutcome,
+        onApplyEditCanvasElementAtTab: (Int, Int, Map<String, Any?>) -> McpProceduralToolApplyOutcome,
+        onApplyEditConnectionAtTab: (Int, Int, Map<String, Any?>) -> McpProceduralToolApplyOutcome,
+        onApplyEditHiddenAttributeAtTab: (Int, Int, List<Int>, Map<String, Any?>) -> McpProceduralToolApplyOutcome,
+        onApplyOrganizeAttributesMenuAtTab: (Int, Set<ConceptualAttributeAttachPonto>?) -> McpProceduralToolApplyOutcome,
+        onApplyMoveCanvasElementsAtTab: (
+            Int,
+            List<Int>,
+            Int,
+            Int,
+            Boolean,
         ) -> McpProceduralToolApplyOutcome,
         onConceptualSearchFind: (
             Int,
@@ -98,6 +116,22 @@ internal actual object McpDesktopSync {
             ConceptualSearchTextScope,
         ) -> ConceptualSearchOutcome,
         onConceptualSearchApplyHit: (Int, ConceptualSearchHit) -> String?,
+        onEncodeTabConceptualMenuExportPng: (Int) -> ByteArray?,
+        onEncodeTabConceptualMenuExportJpeg: (Int) -> ByteArray?,
+        onEncodeConceptualElementSubsetRaster: (Int, List<Int>, ConceptualSubsetRasterFormat) -> ConceptualSubsetRasterEncodeResult?,
+        onApplyCanvasSelectionRectangleAtTab: (
+            Int,
+            Int,
+            Int,
+            Int,
+            Int,
+            CanvasSelectionRectangleMergeMode,
+            Boolean,
+            Boolean,
+        ) -> McpProceduralToolApplyOutcome,
+        onSetCanvasSelectionAtTab: (Int, CanvasSelection) -> Unit,
+        onRequestAppWindowFocus: () -> Unit,
+        onShowMcpAgentUserNotice: (McpAgentUserNotice) -> Unit,
         onServerRunningChanged: (Boolean) -> Unit,
     ) {
         runtime.updateBindings(null)

@@ -1395,7 +1395,7 @@ private fun processAutoSelfRelationshipTap(
         onMessage("Selecione uma entidade.")
         return
     }
-    when (val r = validateAndBuildConceptualLink(schema, pick, pick)) {
+    when (val r = validateAndBuildConceptualLink(schema, pick, pick, schemaPoint)) {
         is ConceptualLinkValidationResult.Ok -> {
             val beforeConnIds = schema.connections.map { it.id }.toSet()
             var committed = r.schema

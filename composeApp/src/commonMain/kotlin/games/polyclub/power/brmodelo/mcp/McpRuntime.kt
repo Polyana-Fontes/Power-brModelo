@@ -18,6 +18,7 @@
 
 package games.polyclub.power.brmodelo.mcp
 
+import androidx.compose.ui.geometry.Offset
 import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolKind
 import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolOverrides
 import games.polyclub.power.brmodelo.domain.ConceptualLinkConnectionOverridePatch
@@ -29,10 +30,14 @@ import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolVariant
 import games.polyclub.power.brmodelo.domain.ConceptualCompositeLeafSpec
 import games.polyclub.power.brmodelo.domain.ConceptualSimpleAttributePlacementOverrides
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
+import games.polyclub.power.brmodelo.domain.CanvasSelection
+import games.polyclub.power.brmodelo.domain.CanvasSelectionRectangleMergeMode
 import games.polyclub.power.brmodelo.domain.ConceptualSearchHit
 import games.polyclub.power.brmodelo.domain.ConceptualSearchOutcome
 import games.polyclub.power.brmodelo.domain.ConceptualSearchTextScope
 import games.polyclub.power.brmodelo.domain.ConceptualSearchTypeFilters
+import games.polyclub.power.brmodelo.ui.ConceptualSubsetRasterEncodeResult
+import games.polyclub.power.brmodelo.ui.ConceptualSubsetRasterFormat
 import games.polyclub.power.brmodelo.ui.EditorTabSession
 
 /**
@@ -111,6 +116,8 @@ internal class McpUiBindings(
     ) -> McpProceduralToolApplyOutcome,
     /**
      * Same conceptual rules as the editor **Ligar Objetos** tool (two picks in one call). Must run on the UI thread.
+     * When [endA] and [endB] denote the same entity auto-relationship, [autoSelfRelationshipClickSchema] is optional
+     * schema-space coordinates (same as canvas); `null` uses the legacy right-side diamond placement.
      */
     val onLinkConceptualObjectsAtTab: (
         tabIndex: Int,
@@ -118,6 +125,34 @@ internal class McpUiBindings(
         endB: ConceptualLinkPick,
         relationshipOverrides: ConceptualProceduralToolOverrides?,
         connectionPatches: List<ConceptualLinkConnectionOverridePatch>?,
+        autoSelfRelationshipClickSchema: Offset?,
+    ) -> McpProceduralToolApplyOutcome,
+    /** Inspector-aligned model metadata edits (one undo step). */
+    val onApplyEditConceptualModelAtTab: (tabIndex: Int, patch: Map<String, Any?>) -> McpProceduralToolApplyOutcome,
+    /** Inspector-aligned canvas element property edits (one undo step). */
+    val onApplyEditCanvasElementAtTab: (tabIndex: Int, elementId: Int, patch: Map<String, Any?>) -> McpProceduralToolApplyOutcome,
+    /** Inspector-aligned connection / cardinality edits (one undo step). */
+    val onApplyEditConnectionAtTab: (tabIndex: Int, connectionId: Int, patch: Map<String, Any?>) -> McpProceduralToolApplyOutcome,
+    /** Inspector-aligned hidden-attribute node edits by tree path (one undo step). */
+    val onApplyEditHiddenAttributeAtTab: (tabIndex: Int, holderElementId: Int, path: List<Int>, patch: Map<String, Any?>) -> McpProceduralToolApplyOutcome,
+    /**
+     * **Operações → Organizar Atributos** on [tabIndex] (one undo step). When [attributeSides] is null or empty,
+     * all attach sides are reorganized like the menu; otherwise only those sides (left / top / right / bottom).
+     */
+    val onApplyOrganizeAttributesMenuAtTab: (
+        tabIndex: Int,
+        attributeSides: Set<ConceptualAttributeAttachPonto>?,
+    ) -> McpProceduralToolApplyOutcome,
+    /**
+     * Translates canvas elements by delta in schema coordinates; expands owned on-canvas attributes when requested.
+     * One undo step; cardinality updates match canvas drag (fixed vs floating).
+     */
+    val onApplyMoveCanvasElementsAtTab: (
+        tabIndex: Int,
+        seedElementIds: List<Int>,
+        deltaX: Int,
+        deltaY: Int,
+        moveOwnedCanvasAttributes: Boolean,
     ) -> McpProceduralToolApplyOutcome,
     /**
      * Runs the same conceptual search as the **Localizar** dialog on [tabIndex] (must be invoked on the UI thread).
@@ -133,6 +168,46 @@ internal class McpUiBindings(
      * Returns null on success or a short error code.
      */
     val onConceptualSearchApplyHit: (tabIndex: Int, hit: ConceptualSearchHit) -> String?,
+    /**
+     * Encodes the tab's conceptual schema as PNG bytes (same as **Exportar em PNG**). Invoked on the UI thread.
+     */
+    val onEncodeTabConceptualMenuExportPng: (tabIndex: Int) -> ByteArray?,
+    /**
+     * Encodes the tab's conceptual schema as JPEG bytes (same as **Exportar em JPEG**). Invoked on the UI thread.
+     */
+    val onEncodeTabConceptualMenuExportJpeg: (tabIndex: Int) -> ByteArray?,
+    /**
+     * Encodes a subset of canvas elements as PNG or JPEG (same subgraph + crop as Ctrl+C clipboard preview;
+     * JPEG uses opaque canvas-gray background like **Exportar em JPEG**). Invoked on the UI thread.
+     */
+    val onEncodeConceptualElementSubsetRaster: (
+        tabIndex: Int,
+        seedElementIds: List<Int>,
+        format: ConceptualSubsetRasterFormat,
+    ) -> ConceptualSubsetRasterEncodeResult?,
+    /**
+     * Marquee-style rectangle selection in schema coordinates (same geometric pick as the canvas tool).
+     * [dryRun] returns hits and projected selection without mutating the UI (window focus is ignored).
+     * Invoked on the UI thread.
+     */
+    val onApplyCanvasSelectionRectangleAtTab: (
+        tabIndex: Int,
+        x0: Int,
+        y0: Int,
+        x1: Int,
+        y1: Int,
+        mergeMode: CanvasSelectionRectangleMergeMode,
+        dryRun: Boolean,
+        requestWindowFocus: Boolean,
+    ) -> McpProceduralToolApplyOutcome,
+    /**
+     * Replaces the canvas selection on [tabIndex] (no schema mutation; not an undo step).
+     */
+    val onSetCanvasSelectionAtTab: (tabIndex: Int, selection: CanvasSelection) -> Unit,
+    /** Desktop: raises the main editor window; no-op on WASM. */
+    val onRequestAppWindowFocus: () -> Unit,
+    /** Shows a short snackbar so the user knows MCP changed focus, selection, or tab. */
+    val onShowMcpAgentUserNotice: (McpAgentUserNotice) -> Unit,
     val onNotifyUser: (String) -> Unit,
     val onServerRunningChanged: (Boolean) -> Unit,
 )

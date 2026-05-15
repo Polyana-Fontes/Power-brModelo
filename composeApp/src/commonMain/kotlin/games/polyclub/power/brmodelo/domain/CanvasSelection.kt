@@ -102,6 +102,27 @@ fun canvasSelectionFromPickSets(
 }
 
 /**
+ * Validates MCP-supplied element and cardinality-label ids, then builds the same [CanvasSelection] shape
+ * the editor uses for multi-pick (rectangle / Shift). On validation failure returns `(null, errorCode)`.
+ */
+fun tryBuildCanvasSelectionFromMcpPickLists(
+    schema: ConceptualSchema,
+    elementIds: Collection<Int>,
+    cardinalityConnectionIds: Collection<Int>,
+): Pair<CanvasSelection?, String?> {
+    val e = elementIds.toSet()
+    val c = cardinalityConnectionIds.toSet()
+    for (id in e) {
+        if (id !in schema.elements) return null to "unknown_element_id:$id"
+    }
+    val validConn = schema.connections.map { it.id }.toSet()
+    for (cid in c) {
+        if (cid !in validConn) return null to "unknown_connection_id:$cid"
+    }
+    return canvasSelectionFromPickSets(e, c) to null
+}
+
+/**
  * Selects every [ConceptualSchema.elements] id in [schema]. Cardinality-only picks are omitted.
  * Empty model → [CanvasSelection.None].
  */
@@ -131,4 +152,64 @@ fun toggleCardinalityInMultiSelection(current: CanvasSelection, connectionId: In
     val (e, c) = current.toMultiPickSets()
     val nextC = if (connectionId in c) c - connectionId else c + connectionId
     return canvasSelectionFromPickSets(e, nextC)
+}
+
+/**
+ * How a schema-space rectangle pick is merged into the current [CanvasSelection] (MCP / editor parity).
+ */
+enum class CanvasSelectionRectangleMergeMode {
+    /** Union band picks with existing picks (Shift-style). */
+    ADD,
+
+    /** Keep only picks inside the band (rubber-band replace). */
+    REPLACE,
+
+    /** Remove band picks from existing picks. */
+    SUBTRACT,
+}
+
+/**
+ * Removes every element id in [bandElementIds] and every cardinality connection id in [bandCardinalityIds]
+ * from the current multi-pick view of [selectionAtStart].
+ */
+fun subtractCanvasBandFromSelection(
+    selectionAtStart: CanvasSelection,
+    bandElementIds: Set<Int>,
+    bandCardinalityIds: Set<Int>,
+): CanvasSelection {
+    val (e0, c0) = selectionAtStart.toMultiPickSets()
+    return canvasSelectionFromPickSets(
+        e0 - bandElementIds,
+        c0 - bandCardinalityIds,
+    )
+}
+
+/**
+ * Applies a rectangle band pick to [selectionAtStart] using the same rules as the canvas rectangle tool
+ * ([ADD] additive, [REPLACE] replace, [SUBTRACT] remove band hits from the current selection).
+ */
+fun mergeCanvasRectangleSelection(
+    mode: CanvasSelectionRectangleMergeMode,
+    selectionAtStart: CanvasSelection,
+    bandElementIds: Set<Int>,
+    bandCardinalityIds: Set<Int>,
+): CanvasSelection = when (mode) {
+    CanvasSelectionRectangleMergeMode.ADD ->
+        mergeCanvasBandPick(true, selectionAtStart, bandElementIds, bandCardinalityIds)
+    CanvasSelectionRectangleMergeMode.REPLACE ->
+        mergeCanvasBandPick(false, selectionAtStart, bandElementIds, bandCardinalityIds)
+    CanvasSelectionRectangleMergeMode.SUBTRACT ->
+        subtractCanvasBandFromSelection(selectionAtStart, bandElementIds, bandCardinalityIds)
+}
+
+/**
+ * Symmetric pick delta between two selections (element ids and cardinality connection ids that differ
+ * between [a] and [b] when viewed as multi-pick sets), sorted for stable JSON.
+ */
+fun canvasSelectionSymmetricPickDelta(a: CanvasSelection, b: CanvasSelection): Pair<List<Int>, List<Int>> {
+    val (ae, ac) = a.toMultiPickSets()
+    val (be, bc) = b.toMultiPickSets()
+    val de = ((ae - be) + (be - ae)).toList().sorted()
+    val dc = ((ac - bc) + (bc - ac)).toList().sorted()
+    return de to dc
 }

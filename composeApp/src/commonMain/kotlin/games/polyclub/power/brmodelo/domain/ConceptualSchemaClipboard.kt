@@ -79,6 +79,17 @@ fun connectionsForClipboard(schema: ConceptualSchema, elementIds: Set<Int>): Lis
     schema.connections.filter { it.elementIdA in elementIds && it.elementIdB in elementIds }
         .sortedBy { it.id }
 
+/**
+ * Expands agent-supplied canvas element ids for subset raster export: keeps ids present in [schema],
+ * then adds every canvas attribute in their trees (same attribute closure as Ctrl+C on element picks;
+ * cardinality-only picks are not represented here — pass connection endpoints explicitly if needed).
+ */
+fun expandElementIdsForSubsetRasterExport(schema: ConceptualSchema, seedElementIds: Collection<Int>): Set<Int> {
+    val seeds = seedElementIds.filter { it in schema.elements }.toSet()
+    if (seeds.isEmpty()) return emptySet()
+    return seeds + collectAttributeTreeIdsFromSeeds(schema, seeds)
+}
+
 /** Subgraph as a standalone [ConceptualSchema] suitable for XML serialization. */
 fun extractClipboardFragment(schema: ConceptualSchema, elementIds: Set<Int>): ConceptualSchema? {
     if (elementIds.isEmpty()) return null

@@ -31,26 +31,72 @@ internal fun conceptualMerDtdResourceUri(): String = "brmodelo://schema/conceptu
 internal fun modelResourceUriForSession(editorTabSessionId: Long): String =
     "brmodelo://model/$editorTabSessionId.xml"
 
+/** Same diagram raster as **Exportar em PNG** (transparent background, tight crop). */
+internal fun modelResourcePngUriForSession(editorTabSessionId: Long): String =
+    "brmodelo://model/$editorTabSessionId.png"
+
+/** Same diagram raster as **Exportar em JPEG** (gray canvas background, tight crop, quality 95 in the encoder). */
+internal fun modelResourceJpgUriForSession(editorTabSessionId: Long): String =
+    "brmodelo://model/$editorTabSessionId.jpg"
+
+internal enum class LiveModelTabResourceSurface {
+    Xml,
+    Png,
+    Jpeg,
+}
+
+internal data class ParsedLiveModelTabResource(
+    val tabKey: String,
+    val surface: LiveModelTabResourceSurface?,
+)
+
+/**
+ * Parses `brmodelo://model/…` into a tab key and surface, or `null` if not a model URI.
+ * [ParsedLiveModelTabResource.surface] is `null` for legacy list-index URIs without a file suffix.
+ */
+internal fun parseLiveModelTabResourceUri(uri: String): ParsedLiveModelTabResource? {
+    val marker = "brmodelo://model/"
+    val idx = uri.indexOf(marker)
+    if (idx < 0) return null
+    val tail = uri.substring(idx + marker.length).substringBefore('/').substringBefore('?')
+    val low = tail.lowercase()
+    return when {
+        low.endsWith(".jpeg") ->
+            ParsedLiveModelTabResource(tail.dropLast(5), LiveModelTabResourceSurface.Jpeg)
+        low.endsWith(".jpg") ->
+            ParsedLiveModelTabResource(tail.dropLast(4), LiveModelTabResourceSurface.Jpeg)
+        low.endsWith(".png") ->
+            ParsedLiveModelTabResource(tail.dropLast(4), LiveModelTabResourceSurface.Png)
+        low.endsWith(".xml") ->
+            ParsedLiveModelTabResource(tail.dropLast(4), LiveModelTabResourceSurface.Xml)
+        else ->
+            ParsedLiveModelTabResource(tail, null)
+    }
+}
+
+/** True for tab XML (`.xml` or legacy index URI); false for `.png`/`.jpg` previews. */
+internal fun isLiveModelTabXmlPlainTextResourceUri(uri: String): Boolean {
+    val parsed = parseLiveModelTabResourceUri(uri) ?: return false
+    return parsed.surface == LiveModelTabResourceSurface.Xml || parsed.surface == null
+}
+
 /**
  * Resolves a live model resource URI to the current **list index** of that tab, or `null` if unknown.
  *
  * Accepts:
- * - `brmodelo://model/{id}.xml` — matches [EditorTabSession.id] (preferred).
+ * - `brmodelo://model/{id}.xml|.png|.jpg` — matches [EditorTabSession.id] (preferred).
  * - Legacy `brmodelo://model/{n}` with no suffix — treated as a **tab list index** `n` (older clients).
  */
 internal fun tabIndexForModelResourceUri(uri: String, sessions: List<EditorTabSession>): Int? {
-    val marker = "brmodelo://model/"
-    val idx = uri.indexOf(marker)
-    if (idx < 0) return null
-    var tail = uri.substring(idx + marker.length).substringBefore('/').substringBefore('?')
-    if (tail.endsWith(".xml", ignoreCase = true)) {
-        tail = tail.dropLast(4)
-        val sessionId = tail.toLongOrNull() ?: return null
+    val parsed = parseLiveModelTabResourceUri(uri) ?: return null
+    return if (parsed.surface != null) {
+        val sessionId = parsed.tabKey.toLongOrNull() ?: return null
         val tabIdx = sessions.indexOfFirst { it.id == sessionId }
-        return tabIdx.takeIf { it >= 0 }
+        tabIdx.takeIf { it >= 0 }
+    } else {
+        val legacyIndex = parsed.tabKey.toIntOrNull() ?: return null
+        legacyIndex.takeIf { it in sessions.indices }
     }
-    val legacyIndex = tail.toIntOrNull() ?: return null
-    return legacyIndex.takeIf { it in sessions.indices }
 }
 
 /**
@@ -65,4 +111,23 @@ internal fun mcpCreatedTabIndexAfterOpen(
     val beforeIds = before.map { it.id }.toSet()
     val newIdx = after.withIndex().firstOrNull { it.value.id !in beforeIds }?.index
     return newIdx ?: selectedAfter.coerceIn(0, (after.size - 1).coerceAtLeast(0))
+}
+
+/** JSON string literal (escaped for use inside MCP tool JSON bodies built outside [McpRuntime]). */
+internal fun mcpJsonStringLiteral(value: String): String {
+    val escaped = buildString(value.length + 8) {
+        append('"')
+        for (ch in value) {
+            when (ch) {
+                '\\' -> append("\\\\")
+                '"' -> append("\\\"")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                else -> if (ch.code < 32) append("\\u%04x".format(ch.code)) else append(ch)
+            }
+        }
+        append('"')
+    }
+    return escaped
 }

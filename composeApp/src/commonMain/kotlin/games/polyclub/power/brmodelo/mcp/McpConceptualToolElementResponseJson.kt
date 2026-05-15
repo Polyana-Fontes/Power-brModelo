@@ -51,6 +51,10 @@ internal object McpConceptualToolElementResponseJson {
             is SchemaElement.Attribute -> {
                 """{$base,"elementKind":"attribute","ownerId":${element.ownerId},"isIdentifier":${element.isIdentifier},"isMultiValued":${element.isMultiValued},"isOptional":${element.isOptional},"isComposite":${element.isComposite},"valueType":${jsonString(element.valueType)},"complement":${jsonString(element.complement)},"childAttributeIds":${intListJson(element.childAttributeIds)}}"""
             }
+            is SchemaElement.Annotation -> {
+                val c = element.color
+                """{$base,"elementKind":"annotation","annotationColorArgb":${c?.let { "$it" } ?: "null"},"annotationTypeCode":${element.annotationType.code},"alignmentCode":${element.alignment.code},"autoSize":${element.autoSize}}"""
+            }
             else -> """{$base,"elementKind":"other"}"""
         }
     }

@@ -39,7 +39,7 @@ internal object McpConnectionToolResponseJson {
     }
 
     fun linkObjectsToolSuccessJson(
-        tabIndex: Int,
+        resourceUri: String,
         newConnections: List<Connection>,
         newRelationship: SchemaElement.Relationship?,
         newSelfRelationship: SchemaElement.SelfRelationship?,
@@ -47,7 +47,7 @@ internal object McpConnectionToolResponseJson {
         val connsJson = newConnections.joinToString(prefix = "[", postfix = "]") { connectionSummary(it) }
         val relJson = newRelationship?.let { """{"element":${McpConceptualToolElementResponseJson.elementSummary(it)}}""" } ?: "null"
         val selfJson = newSelfRelationship?.let { """{"element":${McpConceptualToolElementResponseJson.elementSummary(it)}}""" } ?: "null"
-        return """{"ok":true,"tabIndex":$tabIndex,"newConnections":$connsJson,"newRelationship":$relJson,"newSelfRelationship":$selfJson}"""
+        return """{"ok":true,"resourceUri":${jsonString(resourceUri)},"newConnections":$connsJson,"newRelationship":$relJson,"newSelfRelationship":$selfJson}"""
     }
 
     private fun jsonString(s: String): String {

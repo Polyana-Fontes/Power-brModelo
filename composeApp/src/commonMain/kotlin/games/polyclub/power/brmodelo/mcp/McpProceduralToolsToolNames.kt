@@ -32,8 +32,14 @@ internal object McpProceduralToolsToolNames {
     val PLACE_RELATIONSHIP = tool("place_relationship")
     val PLACE_ASSOCIATIVE_ENTITY = tool("place_associative_entity")
 
+    /** Same as ribbon **Observação** — observation / annotation text box. */
+    val PLACE_OBSERVATION = tool("place_observation")
+
     /** Same rules as the editor **Ligar Objetos** tool (two picks); MCP exposes both ends in one call. */
     val LINK_OBJECTS = tool("link_objects")
+
+    /** Same rules as **Auto Relacionar** on an entity (one pick + side); optional overrides for the new self-relationship and its two cardinality legs. */
+    val AUTO_SELF_RELATIONSHIP = tool("auto_self_relationship")
 
     /** Same as ribbon specialization tool (triangle only, optional). */
     val APPLY_SPECIALIZATION_BASIC = tool("apply_specialization_basic")

@@ -19,6 +19,16 @@
 package games.polyclub.power.brmodelo.mcp
 
 /**
+ * When set, the MCP runtime merges a `layoutQuality` JSON object into the tool result after success,
+ * using the tab schema read on the UI thread. [touchedElementIds] null means the whole diagram is analyzed; otherwise
+ * only overlaps, tight clearances, and crossings that involve at least one listed element id are reported.
+ */
+internal data class McpProceduralToolLayoutQualityScan(
+    val tabIndex: Int,
+    val touchedElementIds: Set<Int>?,
+)
+
+/**
  * Result of applying a procedural conceptual tool on the UI thread (MCP handler interprets).
  */
 internal data class McpProceduralToolApplyOutcome(
@@ -26,15 +36,35 @@ internal data class McpProceduralToolApplyOutcome(
     val tabIndex: Int = -1,
     /** JSON object for the placed element (starts with `{`), unless [isFullResponseJson] is true. */
     val elementJson: String? = null,
-    /** When true, [elementJson] is the entire tool success JSON body (including `ok` and `tabIndex`). */
+    /** When true, [elementJson] is the entire tool success JSON body (including `ok` and usually `resourceUri`). */
     val isFullResponseJson: Boolean = false,
+    val layoutQualityScan: McpProceduralToolLayoutQualityScan? = null,
 ) {
     companion object {
-        fun ok(tabIndex: Int, elementJson: String): McpProceduralToolApplyOutcome =
-            McpProceduralToolApplyOutcome(null, tabIndex, elementJson, isFullResponseJson = false)
+        fun ok(
+            tabIndex: Int,
+            elementJson: String,
+            layoutQualityScan: McpProceduralToolLayoutQualityScan? = null,
+        ): McpProceduralToolApplyOutcome =
+            McpProceduralToolApplyOutcome(
+                null,
+                tabIndex,
+                elementJson,
+                isFullResponseJson = false,
+                layoutQualityScan = layoutQualityScan,
+            )
 
-        fun okFullJson(bodyJson: String): McpProceduralToolApplyOutcome =
-            McpProceduralToolApplyOutcome(null, -1, bodyJson, isFullResponseJson = true)
+        fun okFullJson(
+            bodyJson: String,
+            layoutQualityScan: McpProceduralToolLayoutQualityScan? = null,
+        ): McpProceduralToolApplyOutcome =
+            McpProceduralToolApplyOutcome(
+                null,
+                -1,
+                bodyJson,
+                isFullResponseJson = true,
+                layoutQualityScan = layoutQualityScan,
+            )
 
         fun err(code: String): McpProceduralToolApplyOutcome =
             McpProceduralToolApplyOutcome(code, -1, null)

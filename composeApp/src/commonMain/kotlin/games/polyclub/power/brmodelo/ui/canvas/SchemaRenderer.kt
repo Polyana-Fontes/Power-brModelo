@@ -82,13 +82,51 @@ private val TEXT_BOX_DARK = Color(0xFF363636)
 private val CANVAS_TEXT_STYLE = TextStyle(fontSize = 11.sp, color = Color.Black)
 private val MULTIVALUE_CARD_STYLE = TextStyle(fontSize = 11.sp, color = Color.Black)
 
+private val SELECTION_COLOR = Color(0xFF0060C0)
+/** Connection polyline when the cardinality label (or specialization) is selected — darker than [SELECTION_COLOR]. */
+private val SELECTION_CONNECTION_LINE_COLOR = Color(0xFF003060)
+
+/**
+ * Connection ids whose link lines should use [SELECTION_CONNECTION_LINE_COLOR]: cardinality picks,
+ * and every link touching a selected [SchemaElement.Specialization].
+ */
+private fun connectionIdsForSelectionLinkedLineHighlight(
+    selection: CanvasSelection,
+    schema: ConceptualSchema,
+): Set<Int> = when (selection) {
+    CanvasSelection.None -> emptySet()
+    is CanvasSelection.Cardinality -> setOf(selection.connectionId)
+    is CanvasSelection.Element -> {
+        val el = schema.elements[selection.id]
+        if (el is SchemaElement.Specialization) {
+            schema.connections
+                .asSequence()
+                .filter { it.elementIdA == selection.id || it.elementIdB == selection.id }
+                .map { it.id }
+                .toSet()
+        } else {
+            emptySet()
+        }
+    }
+    is CanvasSelection.Multiple -> buildSet {
+        addAll(selection.cardinalityConnectionIds)
+        for (eid in selection.elementIds) {
+            if (schema.elements[eid] is SchemaElement.Specialization) {
+                schema.connections.forEach { c ->
+                    if (c.elementIdA == eid || c.elementIdB == eid) add(c.id)
+                }
+            }
+        }
+    }
+}
+
 // ── Main entry point ──────────────────────────────────────────────────────────
 
 /**
  * Draws the full [games.polyclub.power.brmodelo.domain.ConceptualSchema] into this [DrawScope].
  *
  * Rendering order mirrors VCL z-order (back → front):
- * 1. Non-assoc connection lines — behind all elements.
+ * 1. Non-assoc connection lines — behind all elements (selected cardinality / specialization links use a darker blue stroke).
  * 2. All elements (entities, relationships, attributes, AssociativeEntity outer+inner).
  * 3. AssociativeEntity connection lines — redrawn on top of outer rect white fill,
  *    faithfully replicating the VCL behaviour where [TLinha] components have a
@@ -117,13 +155,16 @@ fun DrawScope.drawSchema(
     selectionBandHighlightCardinalityConnectionIds: Set<Int> = emptySet(),
 ) {
     val dividedPoints = computeDividedPoints(schema)
+    val selectionLinkedConnectionIds = connectionIdsForSelectionLinkedLineHighlight(selection, schema)
 
     // 1. Connection lines that do NOT involve an AssociativeEntity
     schema.connections.forEach { conn ->
         val a = schema.elements[conn.elementIdA]
         val b = schema.elements[conn.elementIdB]
         if (a !is SchemaElement.AssociativeEntity && b !is SchemaElement.AssociativeEntity) {
-            drawConnectionLine(conn, schema, dividedPoints)
+            val lineColor =
+                if (conn.id in selectionLinkedConnectionIds) SELECTION_CONNECTION_LINE_COLOR else null
+            drawConnectionLine(conn, schema, dividedPoints, lineHighlightColor = lineColor)
         }
     }
     // 2. All elements (including AssociativeEntity outer rect + inner diamond)
@@ -137,7 +178,9 @@ fun DrawScope.drawSchema(
         val a = schema.elements[conn.elementIdA]
         val b = schema.elements[conn.elementIdB]
         if (a is SchemaElement.AssociativeEntity || b is SchemaElement.AssociativeEntity) {
-            drawConnectionLine(conn, schema, dividedPoints)
+            val lineColor =
+                if (conn.id in selectionLinkedConnectionIds) SELECTION_CONNECTION_LINE_COLOR else null
+            drawConnectionLine(conn, schema, dividedPoints, lineHighlightColor = lineColor)
         }
     }
     // 4. Re-draw the inner diamonds on top of the connection lines so that the diamond
@@ -227,8 +270,7 @@ fun DrawScope.drawSchema(
 
 // ── Selection handles ─────────────────────────────────────────────────────────
 
-private val SELECTION_COLOR = Color(0xFF0060C0)
-private val HANDLE_FILL     = Color(0xFF0060C0)
+private val HANDLE_FILL     = SELECTION_COLOR
 private val HANDLE_SIZE     = HANDLE_SIZE_PX
 
 /**
@@ -925,6 +967,7 @@ private fun DrawScope.drawConnectionLine(
     conn: Connection,
     schema: ConceptualSchema,
     dividedPoints: Map<Int, Map<Int, Offset>>,
+    lineHighlightColor: Color? = null,
 ) {
     val elemA = schema.elements[conn.elementIdA] ?: return
     val elemB = schema.elements[conn.elementIdB] ?: return
@@ -956,15 +999,17 @@ private fun DrawScope.drawConnectionLine(
     )
     if (waypoints.size < 2) return
 
+    val strokeColor = lineHighlightColor ?: Color.Black
     for (i in 0 until waypoints.size - 1) {
         val from = waypoints[i]
         val to   = waypoints[i + 1]
         if (conn.isWeak) {
             // Weak connection = 3-pixel-wide solid line, matching TLinha.Paint isWeak:
             //   pixels x=2,3,4 (or y=2,3,4) all black, with a 1-px white gap on one side.
-            drawLine(Color.Black, from, to, strokeWidth = 3f)
+            drawLine(strokeColor, from, to, strokeWidth = 3f)
         } else {
-            drawLine(Color.Black, from, to)
+            val width = if (lineHighlightColor != null) 2f else 1f
+            drawLine(strokeColor, from, to, strokeWidth = width)
         }
     }
 }
@@ -1372,6 +1417,42 @@ internal fun ConceptualSchema.withCardinalityPositionsAfterElementsMovedByDelta(
             conn
         },
     )
+}
+
+/**
+ * After an element's bounds were updated in the schema (inspector or MCP `edit__canvas_element` position patch),
+ * updates cardinality labels the same way as canvas drag / keyboard nudge: translate floating labels from
+ * geometry when the element moved; shift fixed labels by the same delta when the link touches the element;
+ * re-materialize floating labels when width/height changed (resize-like).
+ */
+internal fun ConceptualSchema.afterCardinalitySyncForElementBoundsChange(
+    elementId: Int,
+    previousPosition: ElementPosition,
+    textMeasurer: TextMeasurer,
+): ConceptualSchema {
+    val el = elements[elementId] ?: return this
+    val newPos = el.position
+    val dx = newPos.x - previousPosition.x
+    val dy = newPos.y - previousPosition.y
+    val sizeChanged =
+        newPos.width != previousPosition.width || newPos.height != previousPosition.height
+    var s = this
+    if (dx != 0 || dy != 0) {
+        s = s.withCardinalityPositionsAfterElementsMovedByDelta(
+            movedElementIds = setOf(elementId),
+            dx = dx,
+            dy = dy,
+            selectedCardinalityConnectionIds = emptySet(),
+            textMeasurer = textMeasurer,
+        )
+    }
+    if (sizeChanged) {
+        s = s.withRecalculatedFloatingCardinalityPositions(
+            onlyIncidentToElementId = elementId,
+            textMeasurer = textMeasurer,
+        )
+    }
+    return s
 }
 
 /**

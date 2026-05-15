@@ -106,4 +106,78 @@ class ConceptualProceduralToolPlacementTest {
         val err = assertIs<ConceptualProceduralToolPlacementResult.Err>(r)
         assertEquals("relationship_name_conflict", err.code)
     }
+
+    @Test
+    fun `annotation overrides apply after placement`() {
+        // Arrange
+        val empty = ConceptualSchema()
+
+        // Act
+        val r = empty.placeProceduralConceptualTool(
+            ConceptualProceduralToolKind.ANNOTATION,
+            topLeftX = 5,
+            topLeftY = 7,
+            overrides = ConceptualProceduralToolOverrides(
+                name = "Note",
+                observations = "body",
+                dictionary = "dd",
+                annotationColorArgb = 12345,
+                annotationTypeCode = AnnotationType.BOX.code,
+                alignmentCode = TextAlignment.CENTER.code,
+                annotationAutoSize = false,
+                annotationWidth = 200,
+                annotationHeight = 40,
+            ),
+        )
+
+        // Assert
+        val ok = assertIs<ConceptualProceduralToolPlacementResult.Ok>(r)
+        val ann = assertIs<SchemaElement.Annotation>(ok.element)
+        assertEquals(5, ann.position.x)
+        assertEquals(7, ann.position.y)
+        assertEquals(200, ann.position.width)
+        assertEquals(40, ann.position.height)
+        assertEquals("Note", ann.name)
+        assertEquals("body", ann.observations)
+        assertEquals("dd", ann.dictionary)
+        assertEquals(12345, ann.color)
+        assertEquals(AnnotationType.BOX, ann.annotationType)
+        assertEquals(TextAlignment.CENTER, ann.alignment)
+        assertEquals(false, ann.autoSize)
+    }
+
+    @Test
+    fun `invalid annotation type code returns error`() {
+        // Arrange
+        val empty = ConceptualSchema()
+
+        // Act
+        val r = empty.placeProceduralConceptualTool(
+            ConceptualProceduralToolKind.ANNOTATION,
+            0,
+            0,
+            overrides = ConceptualProceduralToolOverrides(annotationTypeCode = 9),
+        )
+
+        // Assert
+        val err = assertIs<ConceptualProceduralToolPlacementResult.Err>(r)
+        assertEquals("invalid_annotation_type_code", err.code)
+    }
+
+    @Test
+    fun `entity placement ignores invalid arrow override`() {
+        // Arrange
+        val empty = ConceptualSchema()
+
+        // Act
+        val r = empty.placeProceduralConceptualTool(
+            ConceptualProceduralToolKind.ENTITY,
+            0,
+            0,
+            overrides = ConceptualProceduralToolOverrides(arrowDirectionCode = 99),
+        )
+
+        // Assert
+        assertIs<ConceptualProceduralToolPlacementResult.Ok>(r)
+    }
 }

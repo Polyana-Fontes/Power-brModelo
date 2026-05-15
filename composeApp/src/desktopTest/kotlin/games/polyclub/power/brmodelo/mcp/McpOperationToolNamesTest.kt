@@ -20,26 +20,16 @@ package games.polyclub.power.brmodelo.mcp
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
-class McpTabToolNamesTest {
+class McpOperationToolNamesTest {
 
     @Test
-    fun `tool names use category double underscore suffix pattern`() {
+    fun `operation tool names use operation__ prefix`() {
         // Arrange
-        val sep = McpTabToolNames.TAB_TOOL_SEPARATOR
+        // (constants under test)
 
         // Act & Assert
-        assertEquals("tabs", McpTabToolNames.TAB_TOOL_CATEGORY)
-        assertEquals("__", sep)
-        assertTrue(McpTabToolNames.LIST_OPEN.startsWith("tabs$sep"))
-        assertEquals("tabs__list_open", McpTabToolNames.LIST_OPEN)
-        assertEquals("tabs__select", McpTabToolNames.SELECT)
-        assertEquals("tabs__open_xml", McpTabToolNames.OPEN_XML)
-        assertEquals("tabs__close", McpTabToolNames.CLOSE)
-        assertEquals("tabs__save", McpTabToolNames.SAVE)
-        assertEquals("tabs__replace_model_xml", McpTabToolNames.REPLACE_MODEL_XML)
-        assertEquals("tabs__patch_model_xml", McpTabToolNames.PATCH_MODEL_XML)
-        assertEquals("tabs__focus_window", McpTabToolNames.FOCUS_WINDOW)
+        assertEquals("operation__organize_attributes", McpOperationToolNames.ORGANIZE_ATTRIBUTES)
+        assertEquals("operation__layout_quality", McpOperationToolNames.LAYOUT_QUALITY)
     }
 }

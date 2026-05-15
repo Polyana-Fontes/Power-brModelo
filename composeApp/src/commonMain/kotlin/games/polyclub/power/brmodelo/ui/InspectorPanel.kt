@@ -117,6 +117,7 @@ import games.polyclub.power.brmodelo.domain.selectedPickCount
 import games.polyclub.power.brmodelo.domain.totalPickCount
 import games.polyclub.power.brmodelo.domain.TextAlignment
 import games.polyclub.power.brmodelo.ui.canvas.autoSizedAttributePosition
+import games.polyclub.power.brmodelo.ui.canvas.afterCardinalitySyncForElementBoundsChange
 import games.polyclub.power.brmodelo.ui.canvas.connectionCardinalityBoxForModel
 import games.polyclub.power.brmodelo.ui.canvas.materializeCardinalityPositionForFixed
 import games.polyclub.power.brmodelo.ui.canvas.withPosition
@@ -702,6 +703,20 @@ private fun commitAttributeElement(
     onSchemaCommit(schema.withElement(attr.resizedIfAuto(schema, textMeasurer, layoutDirection)))
 }
 
+private fun commitElementBoundsFromInspector(
+    schema: ConceptualSchema,
+    element: SchemaElement,
+    previousPosition: ElementPosition,
+    newPosition: ElementPosition,
+    textMeasurer: TextMeasurer,
+    onSchemaCommit: (ConceptualSchema) -> Unit,
+) {
+    val updated = schema.withElement(element.withPosition(newPosition))
+    onSchemaCommit(
+        updated.afterCardinalitySyncForElementBoundsChange(element.id, previousPosition, textMeasurer),
+    )
+}
+
 private fun previewAttributeElement(
     schema: ConceptualSchema,
     attr: SchemaElement.Attribute,
@@ -813,7 +828,7 @@ private fun ElementContent(
         onFocusChange
     ) { v ->
         v.toIntOrNull()?.let {
-            onSchemaCommit(schema.withElement(element.withPosition(p.copy(x = it))))
+            commitElementBoundsFromInspector(schema, element, p, p.copy(x = it), textMeasurer, onSchemaCommit)
         }
     }
     EditableRow(
@@ -824,7 +839,7 @@ private fun ElementContent(
         onFocusChange
     ) { v ->
         v.toIntOrNull()?.let {
-            onSchemaCommit(schema.withElement(element.withPosition(p.copy(y = it))))
+            commitElementBoundsFromInspector(schema, element, p, p.copy(y = it), textMeasurer, onSchemaCommit)
         }
     }
     if (attrAutoSize) {
@@ -851,7 +866,7 @@ private fun ElementContent(
             onFocusChange
         ) { v ->
             v.toIntOrNull()?.let {
-                onSchemaCommit(schema.withElement(element.withPosition(p.copy(width = it))))
+                commitElementBoundsFromInspector(schema, element, p, p.copy(width = it), textMeasurer, onSchemaCommit)
             }
         }
         EditableRow(
@@ -862,7 +877,7 @@ private fun ElementContent(
             onFocusChange
         ) { v ->
             v.toIntOrNull()?.let {
-                onSchemaCommit(schema.withElement(element.withPosition(p.copy(height = it))))
+                commitElementBoundsFromInspector(schema, element, p, p.copy(height = it), textMeasurer, onSchemaCommit)
             }
         }
     }

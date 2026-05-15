@@ -18,6 +18,7 @@
 
 package games.polyclub.power.brmodelo.domain
 
+import androidx.compose.ui.geometry.Offset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -213,6 +214,36 @@ class ConceptualLinkObjectsTest {
         assertEquals(90 - third, selfRel.position.height)
         assertEquals(2, s.connections.size)
         assertTrue(s.connections.all { it.elementIdA == selfRel.id && it.elementIdB == 1 })
+    }
+
+    @Test
+    fun `same entity auto self with click schema places diamond on click side`() {
+        // Arrange
+        val e1 = SchemaElement.Entity(id = 1, name = "A", position = ElementPosition(200, 100, 100, 80))
+        val schema = ConceptualSchema(elements = mapOf(1 to e1), nextId = 10)
+        val pick = ConceptualLinkPick(1)
+        val clickOnLeft = Offset(195f, 140f)
+
+        // Act
+        val r = validateAndBuildConceptualLink(schema, pick, pick, clickOnLeft)
+
+        // Assert
+        val ok = assertIs<ConceptualLinkValidationResult.Ok>(r)
+        val selfRel = ok.schema.selfRelationships.single()
+        assertTrue(selfRel.position.x + selfRel.position.width <= e1.position.x)
+    }
+
+    @Test
+    fun `selfRelationshipPositionFromClickOnOwner left click yields diamond west of entity`() {
+        // Arrange
+        val ep = ElementPosition(100, 50, 120, 80)
+        val click = Offset(95f, 90f)
+
+        // Act
+        val pos = selfRelationshipPositionFromClickOnOwner(ep, click)
+
+        // Assert
+        assertTrue(pos.x + pos.width <= ep.x)
     }
 
     @Test

@@ -21,7 +21,9 @@ package games.polyclub.power.brmodelo.mcp
 import games.polyclub.power.brmodelo.ui.EditorTabSession
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class McpResourceUrisTest {
 
@@ -38,6 +40,30 @@ class McpResourceUrisTest {
     }
 
     @Test
+    fun `modelResourcePngUriForSession ends with png suffix`() {
+        // Arrange
+        val sessionId = 7L
+
+        // Act
+        val uri = modelResourcePngUriForSession(sessionId)
+
+        // Assert
+        assertEquals("brmodelo://model/7.png", uri)
+    }
+
+    @Test
+    fun `modelResourceJpgUriForSession ends with jpg suffix`() {
+        // Arrange
+        val sessionId = 7L
+
+        // Act
+        val uri = modelResourceJpgUriForSession(sessionId)
+
+        // Assert
+        assertEquals("brmodelo://model/7.jpg", uri)
+    }
+
+    @Test
     fun `tabIndexForModelResourceUri resolves session id form`() {
         // Arrange
         val s0 = EditorTabSession.blank(10L)
@@ -50,6 +76,51 @@ class McpResourceUrisTest {
 
         // Assert
         assertEquals(1, index)
+    }
+
+    @Test
+    fun `tabIndexForModelResourceUri resolves png uri to same tab as xml`() {
+        // Arrange
+        val s0 = EditorTabSession.blank(10L)
+        val s1 = EditorTabSession.blank(20L)
+        val sessions = listOf(s0, s1)
+        val uri = modelResourcePngUriForSession(20L)
+
+        // Act
+        val index = tabIndexForModelResourceUri(uri, sessions)
+
+        // Assert
+        assertEquals(1, index)
+    }
+
+    @Test
+    fun `tabIndexForModelResourceUri resolves jpg uri to same tab as xml`() {
+        // Arrange
+        val s0 = EditorTabSession.blank(10L)
+        val s1 = EditorTabSession.blank(20L)
+        val sessions = listOf(s0, s1)
+        val uri = modelResourceJpgUriForSession(20L)
+
+        // Act
+        val index = tabIndexForModelResourceUri(uri, sessions)
+
+        // Assert
+        assertEquals(1, index)
+    }
+
+    @Test
+    fun `isLiveModelTabXmlPlainTextResourceUri is true for xml and legacy and false for raster`() {
+        // Arrange
+        val xml = modelResourceUriForSession(1L)
+        val png = modelResourcePngUriForSession(1L)
+        val jpg = modelResourceJpgUriForSession(1L)
+        val legacy = "brmodelo://model/0"
+
+        // Act & Assert
+        assertTrue(isLiveModelTabXmlPlainTextResourceUri(xml))
+        assertTrue(isLiveModelTabXmlPlainTextResourceUri(legacy))
+        assertFalse(isLiveModelTabXmlPlainTextResourceUri(png))
+        assertFalse(isLiveModelTabXmlPlainTextResourceUri(jpg))
     }
 
     @Test

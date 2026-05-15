@@ -18,6 +18,7 @@
 
 package games.polyclub.power.brmodelo
 
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,6 +60,11 @@ fun main() {
             state = windowState,
             icon = painterResource(Res.drawable.app_icon),
         ) {
+            val hostWindow = window
+            DisposableEffect(hostWindow) {
+                DesktopMainWindowFocus.register(hostWindow)
+                onDispose { DesktopMainWindowFocus.register(null) }
+            }
             App(onApplicationTitleChange = { windowTitle = it })
         }
     }

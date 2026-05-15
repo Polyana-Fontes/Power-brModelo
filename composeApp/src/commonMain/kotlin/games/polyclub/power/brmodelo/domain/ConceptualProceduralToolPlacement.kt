@@ -26,6 +26,9 @@ enum class ConceptualProceduralToolKind {
     ENTITY,
     RELATIONSHIP,
     ASSOCIATIVE_ENTITY,
+
+    /** Free-text observation box ([SchemaElement.Annotation]) — same placement as ribbon **Observação**. */
+    ANNOTATION,
 }
 
 /**
@@ -45,6 +48,17 @@ data class ConceptualProceduralToolOverrides(
     val relationshipDictionary: String? = null,
     val arrowDirectionCode: Int? = null,
     val showName: Boolean? = null,
+
+    /** Background colour (Windows COLORREF) for [SchemaElement.Annotation]; omit to keep placement default. */
+    val annotationColorArgb: Int? = null,
+    /** [AnnotationType.code] (0 plain, 1 hint, 2 box). */
+    val annotationTypeCode: Int? = null,
+    /** [TextAlignment.code] (0 left, 1 center, 2 right). */
+    val alignmentCode: Int? = null,
+    /** [SchemaElement.Annotation.autoSize]. */
+    val annotationAutoSize: Boolean? = null,
+    val annotationWidth: Int? = null,
+    val annotationHeight: Int? = null,
 )
 
 sealed class ConceptualProceduralToolPlacementResult {
@@ -73,8 +87,8 @@ private fun mergeLabelStyle(base: LabelStyle, overrides: ConceptualProceduralToo
     )
 
 /**
- * Inserts an entity, relationship, or associative entity using [placeConceptualItem], then applies
- * [ConceptualProceduralToolOverrides]. Does not create connections — agents link objects in later steps.
+ * Inserts a canvas element using [placeConceptualItem], then applies [ConceptualProceduralToolOverrides].
+ * Does not create connections — agents link objects in later steps (not applicable to annotations).
  */
 fun ConceptualSchema.placeProceduralConceptualTool(
     kind: ConceptualProceduralToolKind,
@@ -86,14 +100,19 @@ fun ConceptualSchema.placeProceduralConceptualTool(
         ConceptualProceduralToolKind.ENTITY -> ConceptualPlacementKind.PlainEntity
         ConceptualProceduralToolKind.RELATIONSHIP -> ConceptualPlacementKind.Relationship
         ConceptualProceduralToolKind.ASSOCIATIVE_ENTITY -> ConceptualPlacementKind.AssociativeEntity
+        ConceptualProceduralToolKind.ANNOTATION -> ConceptualPlacementKind.Annotation
     }
     val (schemaPlaced, id) = placeConceptualItem(placementKind, topLeftX, topLeftY)
     val baseEl = schemaPlaced.elements[id]
         ?: return ConceptualProceduralToolPlacementResult.Err("placement_internal_missing_element")
 
-    val arrow = overrides.arrowDirectionCode?.let { code ->
-        ArrowDirection.fromCode(code).takeIf { it.code == code }
-            ?: return ConceptualProceduralToolPlacementResult.Err("invalid_arrow_direction_code")
+    val arrow = when (kind) {
+        ConceptualProceduralToolKind.RELATIONSHIP, ConceptualProceduralToolKind.ASSOCIATIVE_ENTITY ->
+            overrides.arrowDirectionCode?.let { code ->
+                ArrowDirection.fromCode(code).takeIf { it.code == code }
+                    ?: return ConceptualProceduralToolPlacementResult.Err("invalid_arrow_direction_code")
+            }
+        else -> null
     }
 
     val updated: SchemaElement = when (baseEl) {
@@ -178,6 +197,44 @@ fun ConceptualSchema.placeProceduralConceptualTool(
                 relationshipObservations = overrides.relationshipObservations ?: baseEl.relationshipObservations,
                 relationshipDictionary = overrides.relationshipDictionary ?: baseEl.relationshipDictionary,
                 arrowDirection = arrow ?: baseEl.arrowDirection,
+            )
+        }
+        is SchemaElement.Annotation -> {
+            val name = when (val o = overrides.name) {
+                null -> baseEl.name
+                else -> {
+                    val t = o.trim()
+                    if (t.isEmpty()) {
+                        return ConceptualProceduralToolPlacementResult.Err("name_blank")
+                    }
+                    t
+                }
+            }
+            val annotationType = overrides.annotationTypeCode?.let { code ->
+                AnnotationType.entries.firstOrNull { it.code == code }
+                    ?: return ConceptualProceduralToolPlacementResult.Err("invalid_annotation_type_code")
+            } ?: baseEl.annotationType
+            val alignment = overrides.alignmentCode?.let { code ->
+                TextAlignment.entries.firstOrNull { it.code == code }
+                    ?: return ConceptualProceduralToolPlacementResult.Err("invalid_alignment_code")
+            } ?: baseEl.alignment
+            var pos = baseEl.position
+            if (overrides.annotationWidth != null || overrides.annotationHeight != null) {
+                pos = pos.copy(
+                    width = overrides.annotationWidth ?: pos.width,
+                    height = overrides.annotationHeight ?: pos.height,
+                ).coercedToMinimumDimensions()
+            }
+            baseEl.copy(
+                name = name,
+                position = pos,
+                observations = overrides.observations ?: baseEl.observations,
+                dictionary = overrides.dictionary ?: baseEl.dictionary,
+                labelStyle = mergeLabelStyle(baseEl.labelStyle, overrides),
+                color = overrides.annotationColorArgb ?: baseEl.color,
+                annotationType = annotationType,
+                alignment = alignment,
+                autoSize = overrides.annotationAutoSize ?: baseEl.autoSize,
             )
         }
         else -> return ConceptualProceduralToolPlacementResult.Err("unexpected_element_kind")

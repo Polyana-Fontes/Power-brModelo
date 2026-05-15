@@ -21,6 +21,7 @@ package games.polyclub.power.brmodelo
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -50,6 +51,13 @@ import games.polyclub.power.brmodelo.domain.buildConceptualClipboardPayload
 import games.polyclub.power.brmodelo.domain.canOpenBulkDataDictionaryForSelection
 import games.polyclub.power.brmodelo.domain.collectDictionarySlotsForSelection
 import games.polyclub.power.brmodelo.domain.ConceptualDictionarySlotRow
+import games.polyclub.power.brmodelo.domain.CanvasSelection
+import games.polyclub.power.brmodelo.domain.CanvasSelectionRectangleMergeMode
+import games.polyclub.power.brmodelo.domain.canvasElementIdsForLayoutScope
+import games.polyclub.power.brmodelo.domain.ConceptualBulkDeleteBand
+import games.polyclub.power.brmodelo.domain.canvasSelectionSymmetricPickDelta
+import games.polyclub.power.brmodelo.domain.mergeCanvasRectangleSelection
+import games.polyclub.power.brmodelo.domain.toMultiPickSets
 import games.polyclub.power.brmodelo.domain.deleteCanvasSelection
 import games.polyclub.power.brmodelo.domain.elementIdsForClipboard
 import games.polyclub.power.brmodelo.domain.extractClipboardFragment
@@ -57,15 +65,21 @@ import games.polyclub.power.brmodelo.domain.ConceptualPasteContext
 import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolPlacementResult
 import games.polyclub.power.brmodelo.domain.pasteConceptualClipboard
 import games.polyclub.power.brmodelo.domain.placeProceduralConceptualTool
+import games.polyclub.power.brmodelo.mcp.McpAgentUserNotice
 import games.polyclub.power.brmodelo.mcp.McpConnectionToolResponseJson
 import games.polyclub.power.brmodelo.mcp.McpConceptualToolElementResponseJson
 import games.polyclub.power.brmodelo.mcp.McpDesktopSync
 import games.polyclub.power.brmodelo.mcp.McpProceduralToolApplyOutcome
+import games.polyclub.power.brmodelo.mcp.McpProceduralToolLayoutQualityScan
 import games.polyclub.power.brmodelo.mcp.McpModelXmlPatch
 import games.polyclub.power.brmodelo.mcp.McpRuntime
+import games.polyclub.power.brmodelo.mcp.McpSelectionRectangleResponseJson
 import games.polyclub.power.brmodelo.mcp.McpSettingsDialog
 import games.polyclub.power.brmodelo.mcp.McpSettingsStore
+import games.polyclub.power.brmodelo.mcp.formatMcpAgentUserNoticePtBr
+import games.polyclub.power.brmodelo.mcp.mcpJsonStringLiteral
 import games.polyclub.power.brmodelo.mcp.mcpServerUrlFromStoredSettings
+import games.polyclub.power.brmodelo.mcp.modelResourceUriForSession
 import games.polyclub.power.brmodelo.mcp.tryLoadPickedFileFromAbsolutePath
 import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolVariant
 import games.polyclub.power.brmodelo.domain.applyHideCanvasAttribute
@@ -93,7 +107,6 @@ import games.polyclub.power.brmodelo.domain.canPromoteAttributeToEntityMenu
 import games.polyclub.power.brmodelo.domain.canPromoteToAssociativeEntityMenu
 import games.polyclub.power.brmodelo.domain.canSelectAttributeTreeMenu
 import games.polyclub.power.brmodelo.domain.expandCanvasSelectionWithAttributeTrees
-import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.domain.ConceptualSearchOutcome
 import games.polyclub.power.brmodelo.domain.searchConceptualModel
@@ -108,6 +121,13 @@ import games.polyclub.power.brmodelo.domain.applyConceptualSpecializationTool
 import games.polyclub.power.brmodelo.domain.ConceptualLinkObjectsMcpApplyResult
 import games.polyclub.power.brmodelo.domain.ConceptualLinkValidationResult
 import games.polyclub.power.brmodelo.domain.validateAndBuildConceptualLink
+import games.polyclub.power.brmodelo.domain.applyEditCanvasElement
+import games.polyclub.power.brmodelo.domain.applyEditConceptualModel
+import games.polyclub.power.brmodelo.domain.applyEditConnection
+import games.polyclub.power.brmodelo.domain.applyEditHiddenAttributeAtPath
+import games.polyclub.power.brmodelo.domain.applyMoveCanvasElementsByTranslation
+import games.polyclub.power.brmodelo.domain.ConceptualMoveCanvasElementsApplyResult
+import games.polyclub.power.brmodelo.domain.ConceptualPropertyEditResult
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaBrmParser
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaXmlParser
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaXmlSerializer
@@ -121,12 +141,19 @@ import games.polyclub.power.brmodelo.ui.clipboard.BrModeloConceptualClipboardSto
 import games.polyclub.power.brmodelo.ui.ConceptualSearchDialog
 import games.polyclub.power.brmodelo.ui.ConceptualSearchNavigateAction
 import games.polyclub.power.brmodelo.ui.conceptualSearchNavigateAction
-import games.polyclub.power.brmodelo.ui.conceptualSearchNavigateAction
+import games.polyclub.power.brmodelo.ui.encodeConceptualElementSubsetRasterBlocking
+import games.polyclub.power.brmodelo.ui.encodeConceptualSchemaAsMenuExportJpegBytesBlocking
+import games.polyclub.power.brmodelo.ui.encodeConceptualSchemaAsMenuExportPngBytesBlocking
+import games.polyclub.power.brmodelo.ui.ConceptualSubsetRasterFormat
 import games.polyclub.power.brmodelo.ui.clipboard.brModeloClipboardSetPlainText
 import games.polyclub.power.brmodelo.ui.clipboard.encodeImageBitmapToPngBytes
 import games.polyclub.power.brmodelo.ui.canvas.SchemaCanvasViewState
+import games.polyclub.power.brmodelo.ui.canvas.afterCardinalitySyncForElementBoundsChange
 import games.polyclub.power.brmodelo.ui.canvas.enrichConnectionWithInitialCardinalityPosition
+import games.polyclub.power.brmodelo.ui.canvas.withConnectionCardinalityInspectorParity
 import games.polyclub.power.brmodelo.ui.canvas.renderSchemaToImageBitmap
+import games.polyclub.power.brmodelo.ui.canvas.selectionBandGeometricPick
+import games.polyclub.power.brmodelo.ui.canvas.withCardinalityPositionsAfterElementsMovedByDelta
 import games.polyclub.power.brmodelo.ui.BulkDeleteObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.RectangleSelectionToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.BulkDeleteUiState
@@ -860,6 +887,17 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
 
     SideEffect {
         if (isDesktopTarget) {
+            val launchMcpUserNotice: (McpAgentUserNotice) -> Unit = { notice ->
+                scope.launch {
+                    val msg = formatMcpAgentUserNoticePtBr(notice)
+                    if (msg.isNotEmpty()) {
+                        snackbarHostState.showSnackbar(
+                            message = msg,
+                            duration = SnackbarDuration.Long,
+                        )
+                    }
+                }
+            }
             McpDesktopSync.syncBindingsFromApp(
                 runtime = mcpRuntime,
                 snackbarHostState = snackbarHostState,
@@ -971,6 +1009,7 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                             McpProceduralToolApplyOutcome.ok(
                                 tabIdx,
                                 McpConceptualToolElementResponseJson.elementSummary(placed),
+                                McpProceduralToolLayoutQualityScan(tabIdx, setOf(placed.id)),
                             )
                         }
                     }
@@ -991,6 +1030,7 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                             McpProceduralToolApplyOutcome.ok(
                                 tabIdx,
                                 McpConceptualToolElementResponseJson.elementSummary(placed),
+                                McpProceduralToolLayoutQualityScan(tabIdx, setOf(r.newSpecializationId)),
                             )
                         }
                     }
@@ -1025,6 +1065,10 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                             McpProceduralToolApplyOutcome.ok(
                                 tabIdx,
                                 McpConceptualToolElementResponseJson.elementSummary(out),
+                                McpProceduralToolLayoutQualityScan(
+                                    tabIdx,
+                                    setOf(r.newPrimaryAttributeId, r.ownerElementId),
+                                ),
                             )
                         }
                     }
@@ -1067,6 +1111,10 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                             McpProceduralToolApplyOutcome.ok(
                                 tabIdx,
                                 McpConceptualToolElementResponseJson.elementSummary(out),
+                                McpProceduralToolLayoutQualityScan(
+                                    tabIdx,
+                                    setOf(r.newPrimaryAttributeId, r.ownerElementId),
+                                ),
                             )
                         }
                     }
@@ -1082,18 +1130,19 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                         is ConceptualAppendHiddenAttributesResult.Ok -> {
                             pushCommitOnTabAt(tabIdx, r.schema)
                             McpProceduralToolApplyOutcome.okFullJson(
-                                """{"ok":true,"tabIndex":$tabIdx,"holderElementId":$holderId,"appendedRootCount":${roots.size}}""",
+                                """{"ok":true,"resourceUri":${mcpJsonStringLiteral(modelResourceUriForSession(tab.id))},"holderElementId":$holderId,"appendedRootCount":${roots.size}}""",
+                                McpProceduralToolLayoutQualityScan(tabIdx, setOf(holderId)),
                             )
                         }
                     }
                 },
-                onLinkConceptualObjectsAtTab = mcpLink@{ tabIdx, endA, endB, relOverrides, connPatches ->
+                onLinkConceptualObjectsAtTab = mcpLink@{ tabIdx, endA, endB, relOverrides, connPatches, autoSelfClick ->
                     if (tabIdx !in tabSessions.indices) {
                         return@mcpLink McpProceduralToolApplyOutcome.err("invalid_tab_index")
                     }
                     val tab = tabSessions[tabIdx]
                     val before = tab.schema
-                    when (val link = validateAndBuildConceptualLink(before, endA, endB)) {
+                    when (val link = validateAndBuildConceptualLink(before, endA, endB, autoSelfClick)) {
                         is ConceptualLinkValidationResult.Error ->
                             McpProceduralToolApplyOutcome.err(link.message)
                         is ConceptualLinkValidationResult.Ok -> {
@@ -1137,14 +1186,184 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                                         .firstOrNull()
                                     pushCommitOnTabAt(tabIdx, normalized)
                                     val body = McpConnectionToolResponseJson.linkObjectsToolSuccessJson(
-                                        tabIdx,
+                                        modelResourceUriForSession(tab.id),
                                         newConns,
                                         newRel,
                                         newSelf,
                                     )
-                                    McpProceduralToolApplyOutcome.okFullJson(body)
+                                    val linkScope = buildSet {
+                                        addAll(newElemIds)
+                                        newConns.forEach {
+                                            add(it.elementIdA)
+                                            add(it.elementIdB)
+                                        }
+                                    }
+                                    McpProceduralToolApplyOutcome.okFullJson(
+                                        body,
+                                        McpProceduralToolLayoutQualityScan(tabIdx, linkScope),
+                                    )
                                 }
                             }
+                        }
+                    }
+                },
+                onApplyEditConceptualModelAtTab = mcpEditModel@{ tabIdx, patch ->
+                    if (tabIdx !in tabSessions.indices) {
+                        return@mcpEditModel McpProceduralToolApplyOutcome.err("invalid_tab_index")
+                    }
+                    when (val r = applyEditConceptualModel(tabSessions[tabIdx].schema, patch)) {
+                        is ConceptualPropertyEditResult.Err ->
+                            McpProceduralToolApplyOutcome.err(r.code)
+                        is ConceptualPropertyEditResult.Ok -> {
+                            pushCommitOnTabAt(tabIdx, r.schema.withNormalizedAttributeMultiValuedCounts())
+                            McpProceduralToolApplyOutcome.okFullJson(
+                                """{"ok":true,"resourceUri":${mcpJsonStringLiteral(modelResourceUriForSession(tabSessions[tabIdx].id))}}""",
+                                McpProceduralToolLayoutQualityScan(tabIdx, null),
+                            )
+                        }
+                    }
+                },
+                onApplyEditCanvasElementAtTab = mcpEditEl@{ tabIdx, elementId, patch ->
+                    if (tabIdx !in tabSessions.indices) {
+                        return@mcpEditEl McpProceduralToolApplyOutcome.err("invalid_tab_index")
+                    }
+                    val tab = tabSessions[tabIdx]
+                    when (val r = applyEditCanvasElement(tab.schema, elementId, patch)) {
+                        is ConceptualPropertyEditResult.Err ->
+                            McpProceduralToolApplyOutcome.err(r.code)
+                        is ConceptualPropertyEditResult.Ok -> {
+                            var s = r.schema
+                            val touched = s.elements[elementId] as? SchemaElement.Attribute
+                            if (touched != null) {
+                                s = s.withAutoSizedAttributeSubtree(
+                                    touched.id,
+                                    clipboardPreviewTextMeasurer,
+                                    layoutDirection,
+                                )
+                                val fresh = s.elements[elementId] as? SchemaElement.Attribute
+                                if (fresh?.isComposite == true) {
+                                    s = relayoutCompositeSubtree(s, fresh.id)
+                                }
+                            }
+                            if (patch.containsKey("position")) {
+                                val prevPos = tab.schema.elements[elementId]?.position
+                                if (prevPos != null) {
+                                    s = s.afterCardinalitySyncForElementBoundsChange(
+                                        elementId,
+                                        prevPos,
+                                        clipboardPreviewTextMeasurer,
+                                    )
+                                }
+                            }
+                            pushCommitOnTabAt(tabIdx, s.withNormalizedAttributeMultiValuedCounts())
+                            McpProceduralToolApplyOutcome.okFullJson(
+                                """{"ok":true,"resourceUri":${mcpJsonStringLiteral(modelResourceUriForSession(tabSessions[tabIdx].id))}}""",
+                                McpProceduralToolLayoutQualityScan(tabIdx, setOf(elementId)),
+                            )
+                        }
+                    }
+                },
+                onApplyEditConnectionAtTab = mcpEditConn@{ tabIdx, connectionId, patch ->
+                    if (tabIdx !in tabSessions.indices) {
+                        return@mcpEditConn McpProceduralToolApplyOutcome.err("invalid_tab_index")
+                    }
+                    val tab = tabSessions[tabIdx]
+                    val prev = tab.schema.connections.firstOrNull { it.id == connectionId }
+                        ?: return@mcpEditConn McpProceduralToolApplyOutcome.err("connection_not_found")
+                    when (val r = applyEditConnection(tab.schema, connectionId, patch)) {
+                        is ConceptualPropertyEditResult.Err ->
+                            McpProceduralToolApplyOutcome.err(r.code)
+                        is ConceptualPropertyEditResult.Ok -> {
+                            var s = r.schema
+                            val newConn = s.connections.firstOrNull { it.id == connectionId }
+                                ?: return@mcpEditConn McpProceduralToolApplyOutcome.err("connection_not_found")
+                            if (
+                                patch.keys.any {
+                                    it == "cardinalityFixed" || it == "cardinalityAutoSize" || it == "showCardinality"
+                                }
+                            ) {
+                                s = s.withConnectionCardinalityInspectorParity(
+                                    prev,
+                                    newConn,
+                                    clipboardPreviewTextMeasurer,
+                                )
+                            }
+                            pushCommitOnTabAt(tabIdx, s.withNormalizedAttributeMultiValuedCounts())
+                            McpProceduralToolApplyOutcome.okFullJson(
+                                """{"ok":true,"resourceUri":${mcpJsonStringLiteral(modelResourceUriForSession(tabSessions[tabIdx].id))}}""",
+                                McpProceduralToolLayoutQualityScan(
+                                    tabIdx,
+                                    setOf(prev.elementIdA, prev.elementIdB),
+                                ),
+                            )
+                        }
+                    }
+                },
+                onApplyEditHiddenAttributeAtTab = mcpEditHid@{ tabIdx, holderId, path, patch ->
+                    if (tabIdx !in tabSessions.indices) {
+                        return@mcpEditHid McpProceduralToolApplyOutcome.err("invalid_tab_index")
+                    }
+                    val tab = tabSessions[tabIdx]
+                    when (val r = applyEditHiddenAttributeAtPath(tab.schema, holderId, path, patch)) {
+                        is ConceptualPropertyEditResult.Err ->
+                            McpProceduralToolApplyOutcome.err(r.code)
+                        is ConceptualPropertyEditResult.Ok -> {
+                            pushCommitOnTabAt(tabIdx, r.schema)
+                            McpProceduralToolApplyOutcome.okFullJson(
+                                """{"ok":true,"resourceUri":${mcpJsonStringLiteral(modelResourceUriForSession(tabSessions[tabIdx].id))}}""",
+                                McpProceduralToolLayoutQualityScan(tabIdx, setOf(holderId)),
+                            )
+                        }
+                    }
+                },
+                onApplyOrganizeAttributesMenuAtTab = mcpOrgMenu@{ tabIdx, attributeSides ->
+                    if (tabIdx !in tabSessions.indices) {
+                        return@mcpOrgMenu McpProceduralToolApplyOutcome.err("invalid_tab_index")
+                    }
+                    val tab = tabSessions[tabIdx]
+                    if (!canOrganizeAttributesMenuSelection(tab.schema, tab.selection)) {
+                        return@mcpOrgMenu McpProceduralToolApplyOutcome.err("organize_attributes_not_applicable")
+                    }
+                    val updated = applyOrganizeAttributesMenuAction(tab.schema, tab.selection, attributeSides)
+                        ?: return@mcpOrgMenu McpProceduralToolApplyOutcome.err("organize_attributes_not_applicable")
+                    pushCommitOnTabAt(tabIdx, updated.withNormalizedAttributeMultiValuedCounts())
+                    McpProceduralToolApplyOutcome.okFullJson(
+                        """{"ok":true,"resourceUri":${mcpJsonStringLiteral(modelResourceUriForSession(tab.id))}}""",
+                        McpProceduralToolLayoutQualityScan(
+                            tabIdx,
+                            canvasElementIdsForLayoutScope(tab.selection),
+                        ),
+                    )
+                },
+                onApplyMoveCanvasElementsAtTab = mcpMoveElems@{ tabIdx, seedIds, dx, dy, moveOwned ->
+                    if (tabIdx !in tabSessions.indices) {
+                        return@mcpMoveElems McpProceduralToolApplyOutcome.err("invalid_tab_index")
+                    }
+                    when (
+                        val r = applyMoveCanvasElementsByTranslation(
+                            tabSessions[tabIdx].schema,
+                            seedIds,
+                            dx,
+                            dy,
+                            moveOwned,
+                        )
+                    ) {
+                        is ConceptualMoveCanvasElementsApplyResult.Err ->
+                            McpProceduralToolApplyOutcome.err(r.code)
+                        is ConceptualMoveCanvasElementsApplyResult.Ok -> {
+                            val s = r.schema.withCardinalityPositionsAfterElementsMovedByDelta(
+                                movedElementIds = r.movedElementIds,
+                                dx = dx,
+                                dy = dy,
+                                selectedCardinalityConnectionIds = emptySet(),
+                                textMeasurer = clipboardPreviewTextMeasurer,
+                            )
+                            pushCommitOnTabAt(tabIdx, s.withNormalizedAttributeMultiValuedCounts())
+                            val idsJson = r.movedElementIds.sorted().joinToString(",", prefix = "[", postfix = "]")
+                            McpProceduralToolApplyOutcome.okFullJson(
+                                """{"ok":true,"resourceUri":${mcpJsonStringLiteral(modelResourceUriForSession(tabSessions[tabIdx].id))},"movedElementIds":$idsJson,"deltaX":$dx,"deltaY":$dy}""",
+                                McpProceduralToolLayoutQualityScan(tabIdx, r.movedElementIds),
+                            )
                         }
                     }
                 },
@@ -1160,6 +1379,109 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                     applyConceptualSearchNavigateOnTab(tabIdx, action)
                     null
                 },
+                onEncodeTabConceptualMenuExportPng = mcpTabPng@{ tabIdx ->
+                    if (tabIdx !in tabSessions.indices) return@mcpTabPng null
+                    val tab = tabSessions[tabIdx]
+                    encodeConceptualSchemaAsMenuExportPngBytesBlocking(
+                        tab.schema,
+                        clipboardPreviewTextMeasurer,
+                        clipboardPreviewDensity,
+                    )
+                },
+                onEncodeTabConceptualMenuExportJpeg = mcpTabJpg@{ tabIdx ->
+                    if (tabIdx !in tabSessions.indices) return@mcpTabJpg null
+                    val tab = tabSessions[tabIdx]
+                    encodeConceptualSchemaAsMenuExportJpegBytesBlocking(
+                        tab.schema,
+                        clipboardPreviewTextMeasurer,
+                        clipboardPreviewDensity,
+                    )
+                },
+                onEncodeConceptualElementSubsetRaster = mcpSubsetRaster@{ tabIdx, seeds, format ->
+                    if (tabIdx !in tabSessions.indices) return@mcpSubsetRaster null
+                    val tab = tabSessions[tabIdx]
+                    encodeConceptualElementSubsetRasterBlocking(
+                        tab.schema,
+                        seeds,
+                        format,
+                        clipboardPreviewTextMeasurer,
+                        clipboardPreviewDensity,
+                    )
+                },
+                onApplyCanvasSelectionRectangleAtTab = mcpRect@{ tabIdx, x0, y0, x1, y1, mergeMode, dryRun, requestWindowFocus ->
+                    if (tabIdx !in tabSessions.indices) {
+                        return@mcpRect McpProceduralToolApplyOutcome.err("invalid_tab_index")
+                    }
+                    val tab = tabSessions[tabIdx]
+                    val schema = tab.schema
+                    val selectionBefore = tab.selection
+                    val band = ConceptualBulkDeleteBand.fromCorners(
+                        x0.toFloat(),
+                        y0.toFloat(),
+                        x1.toFloat(),
+                        y1.toFloat(),
+                    )
+                    val pick = selectionBandGeometricPick(schema, band, clipboardPreviewTextMeasurer)
+                    val bandE = pick.elementIds
+                    val bandC = pick.cardinalityConnectionIds
+                    val selectionAfter = mergeCanvasRectangleSelection(mergeMode, selectionBefore, bandE, bandC)
+                    val (deltaE, deltaC) = canvasSelectionSymmetricPickDelta(selectionBefore, selectionAfter)
+                    val setsBefore = selectionBefore.toMultiPickSets()
+                    val setsAfter = selectionAfter.toMultiPickSets()
+                    val selectionMutated = setsBefore != setsAfter
+                    var committed = false
+                    if (!dryRun) {
+                        if (selectionMutated) {
+                            replaceTabAt(
+                                tabIdx,
+                                tab.copy(selection = selectionAfter, hiddenAttributeRevealPath = null),
+                            )
+                            committed = true
+                        }
+                        val focusApplied = requestWindowFocus && isDesktopTarget
+                        if (focusApplied) {
+                            requestDesktopMainWindowToFront()
+                        }
+                        if (selectionMutated || focusApplied) {
+                            launchMcpUserNotice(
+                                McpAgentUserNotice(
+                                    selectionChanged = selectionMutated,
+                                    windowFocused = focusApplied,
+                                ),
+                            )
+                        }
+                    }
+                    val focusAppliedForJson = !dryRun && requestWindowFocus && isDesktopTarget
+                    val body = McpSelectionRectangleResponseJson.canvasSelectionRectangleSuccess(
+                        resourceUri = modelResourceUriForSession(tab.id),
+                        dryRun = dryRun,
+                        mergeMode = mergeMode,
+                        requestWindowFocusRequested = requestWindowFocus,
+                        requestWindowFocusApplied = focusAppliedForJson,
+                        selectionCommittedToUi = !dryRun && committed,
+                        bandElementIds = bandE,
+                        bandCardinalityIds = bandC,
+                        selectionBefore = selectionBefore,
+                        selectionAfterProjection = selectionAfter,
+                        selectionSymmetricDeltaElements = deltaE,
+                        selectionSymmetricDeltaCardinality = deltaC,
+                    )
+                    McpProceduralToolApplyOutcome.okFullJson(body)
+                },
+                onSetCanvasSelectionAtTab = mcpSetSel@{ tabIdx, newSel ->
+                    if (tabIdx !in tabSessions.indices) return@mcpSetSel
+                    val tab = tabSessions[tabIdx]
+                    replaceTabAt(
+                        tabIdx,
+                        tab.copy(selection = newSel, hiddenAttributeRevealPath = null),
+                    )
+                },
+                onRequestAppWindowFocus = {
+                    if (isDesktopTarget) {
+                        requestDesktopMainWindowToFront()
+                    }
+                },
+                onShowMcpAgentUserNotice = launchMcpUserNotice,
                 onServerRunningChanged = { running -> mcpServerRunning = running },
             )
         } else {

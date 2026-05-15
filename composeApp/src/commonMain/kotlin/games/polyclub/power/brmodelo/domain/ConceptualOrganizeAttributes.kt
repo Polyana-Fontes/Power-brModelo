@@ -359,9 +359,43 @@ fun organizeAttributesOnOwnerSide(
     return s
 }
 
-private fun applyOwnerRepositionTask(schema: ConceptualSchema, task: OwnerRepositionTask): ConceptualSchema {
+private fun compositeDirectAttachSideForOwner(
+    schema: ConceptualSchema,
+    ownerId: Int,
+    compositeId: Int,
+): ConceptualAttributeAttachPonto? {
+    val owner = schema.elements[ownerId] ?: return null
+    val parent = schema.elements[compositeId] as? SchemaElement.Attribute ?: return null
+    if (parent.ownerId != ownerId) return null
+    val code = conceptualAttributeAttachPonto(owner.position, parent.position)
+    return ConceptualAttributeAttachPonto.fromPascalCode(code)
+}
+
+private fun attributeSidesUseFullMenuPass(sides: Set<ConceptualAttributeAttachPonto>?): Boolean =
+    sides.isNullOrEmpty() || sides.size >= ConceptualAttributeAttachPonto.entries.size
+
+private fun applyOwnerRepositionTask(
+    schema: ConceptualSchema,
+    task: OwnerRepositionTask,
+    attributeSides: Set<ConceptualAttributeAttachPonto>?,
+): ConceptualSchema {
     val filter = task.attributeIdFilter
-    var s = repositionDirectAttributesOfOwner(schema, task.ownerId, sideFilter = null, attributeIdFilter = filter)
+    var s = schema
+    val fullPass = attributeSidesUseFullMenuPass(attributeSides)
+    if (fullPass) {
+        s = repositionDirectAttributesOfOwner(s, task.ownerId, sideFilter = null, attributeIdFilter = filter)
+    } else {
+        val partialSides = checkNotNull(attributeSides) { "internal: non-full organize requires non-null sides" }
+        val ordered = listOf(
+            ConceptualAttributeAttachPonto.LEFT,
+            ConceptualAttributeAttachPonto.TOP,
+            ConceptualAttributeAttachPonto.RIGHT,
+            ConceptualAttributeAttachPonto.BOTTOM,
+        ).filter { it in partialSides }
+        for (side in ordered) {
+            s = repositionDirectAttributesOfOwner(s, task.ownerId, sideFilter = side, attributeIdFilter = filter)
+        }
+    }
     val compositesUnder = s.attributesOf(task.ownerId).filter { it.isComposite }
     for (c in compositesUnder) {
         val relayout = when {
@@ -369,7 +403,16 @@ private fun applyOwnerRepositionTask(schema: ConceptualSchema, task: OwnerReposi
             c.id in filter -> true
             else -> false
         }
-        if (relayout) s = relayoutCompositeSubtree(s, c.id)
+        if (!relayout) continue
+        val forceFromFilter = filter != null && c.id in filter
+        val sideTouch = compositeDirectAttachSideForOwner(s, task.ownerId, c.id)
+        val touchesSelectedSide = fullPass || run {
+            val partialSides = attributeSides
+            partialSides != null && sideTouch != null && partialSides.contains(sideTouch)
+        }
+        if (touchesSelectedSide || forceFromFilter) {
+            s = relayoutCompositeSubtree(s, c.id)
+        }
     }
     return s
 }
@@ -389,11 +432,15 @@ private fun applyCompositeBarTask(schema: ConceptualSchema, task: CompositeBarTa
     return s
 }
 
-private fun applyOrganizePlan(schema: ConceptualSchema, plan: OrganizePlan): ConceptualSchema {
+private fun applyOrganizePlan(
+    schema: ConceptualSchema,
+    plan: OrganizePlan,
+    attributeSides: Set<ConceptualAttributeAttachPonto>?,
+): ConceptualSchema {
     val depthSchema = schema
     var s = schema
     for (task in plan.ownerTasks) {
-        s = applyOwnerRepositionTask(s, task)
+        s = applyOwnerRepositionTask(s, task, attributeSides)
     }
     val sortedComposites = plan.compositeTasks.sortedBy { compositeBarDepthFromCanvasOwner(depthSchema, it.compositeId) }
     for (task in sortedComposites) {
@@ -426,13 +473,23 @@ fun canOrganizeAttributesMenuSelection(schema: ConceptualSchema, selection: Canv
 fun canOrganizeAttributesMenu(schema: ConceptualSchema, selectedElementId: Int): Boolean =
     canOrganizeAttributesMenuSelection(schema, CanvasSelection.Element(selectedElementId))
 
-/** Applies **Operações → Organizar Atributos** for the current [CanvasSelection] (multi-select aware). */
-fun applyOrganizeAttributesMenuAction(schema: ConceptualSchema, selection: CanvasSelection): ConceptualSchema? {
+/**
+ * Applies **Operações → Organizar Atributos** for the current [CanvasSelection] (multi-select aware).
+ *
+ * When [attributeSides] is null or empty, or contains every attach side, behaviour matches the editor menu
+ * (single coordinated pass). Otherwise only the listed sides are reorganized on each owner (left / top /
+ * right / bottom in that order).
+ */
+fun applyOrganizeAttributesMenuAction(
+    schema: ConceptualSchema,
+    selection: CanvasSelection,
+    attributeSides: Set<ConceptualAttributeAttachPonto>? = null,
+): ConceptualSchema? {
     if (!canOrganizeAttributesMenuSelection(schema, selection)) return null
     val plan = buildOrganizePlan(schema, canvasSelectionElementIds(selection))
-    return applyOrganizePlan(schema, plan)
+    return applyOrganizePlan(schema, plan, attributeSides)
 }
 
 /** Applies the conceptual **Operações → Organizar Atributos** command for a single selected element id. */
 fun applyOrganizeAttributesMenuAction(schema: ConceptualSchema, selectedElementId: Int): ConceptualSchema? =
-    applyOrganizeAttributesMenuAction(schema, CanvasSelection.Element(selectedElementId))
+    applyOrganizeAttributesMenuAction(schema, CanvasSelection.Element(selectedElementId), attributeSides = null)

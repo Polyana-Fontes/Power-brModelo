@@ -18,6 +18,8 @@
 
 package games.polyclub.power.brmodelo.domain
 
+import androidx.compose.ui.geometry.Offset
+
 /**
  * Pick target for the conceptual "Ligar objetos" tool.
  *
@@ -138,6 +140,56 @@ private fun selfRelationshipPositionFromOwningEntity(entityPosition: ElementPosi
     )
 }
 
+private fun selfRelationshipDiamondMetrics(entityPosition: ElementPosition): Pair<Int, Int> {
+    val h = entityPosition.height
+    val third = h / 3
+    val diamondW = 2 * (h - third)
+    val diamondH = h - third
+    return diamondW to diamondH
+}
+
+/**
+ * Places the self-relationship diamond from a schema-space [clickSchema], using the same closest-edge
+ * rule as attribute tools ([closestConceptualAttributeAttachPonto]) and attribute-like insets along that edge.
+ */
+internal fun selfRelationshipPositionFromClickOnOwner(
+    entityPosition: ElementPosition,
+    clickSchema: Offset,
+): ElementPosition {
+    val ep = entityPosition
+    val (diamondW, diamondH) = selfRelationshipDiamondMetrics(ep)
+    val gap = 30
+    val side = closestConceptualAttributeAttachPonto(ep, clickSchema)
+    val cx = clickSchema.x.toInt()
+    val cy = clickSchema.y.toInt()
+    return when (side) {
+        ConceptualAttributeAttachPonto.RIGHT -> ElementPosition(
+            x = ep.x + ep.width + gap,
+            y = (cy - diamondH / 2).coerceIn(ep.y, (ep.y + ep.height - diamondH).coerceAtLeast(ep.y)),
+            width = diamondW,
+            height = diamondH,
+        )
+        ConceptualAttributeAttachPonto.LEFT -> ElementPosition(
+            x = ep.x - diamondW - gap,
+            y = (cy - diamondH / 2).coerceIn(ep.y, (ep.y + ep.height - diamondH).coerceAtLeast(ep.y)),
+            width = diamondW,
+            height = diamondH,
+        )
+        ConceptualAttributeAttachPonto.TOP -> ElementPosition(
+            x = (cx - diamondW / 2).coerceIn(ep.x - diamondW, ep.x + ep.width),
+            y = ep.y - diamondH - gap,
+            width = diamondW,
+            height = diamondH,
+        )
+        ConceptualAttributeAttachPonto.BOTTOM -> ElementPosition(
+            x = (cx - diamondW / 2).coerceIn(ep.x - diamondW, ep.x + ep.width),
+            y = ep.y + ep.height + gap,
+            width = diamondW,
+            height = diamondH,
+        )
+    }
+}
+
 /**
  * Pascal: [TBaseEntidade.AutoRelacionar] — [TAutoRelacao], `Relacione(Self)` twice, name from [GeraBaseNome]('Auto').
  */
@@ -145,6 +197,7 @@ private fun buildEntityAutoSelfRelationship(
     schema: ConceptualSchema,
     ownerElement: SchemaElement,
     entityPick: ConceptualLinkPick,
+    autoSelfRelationshipClickSchema: Offset?,
 ): ConceptualLinkValidationResult {
     require(entityPick.elementId == ownerElement.id)
     if (schema.selfRelationships.any { it.ownerEntityId == ownerElement.id }) {
@@ -153,7 +206,10 @@ private fun buildEntityAutoSelfRelationship(
         )
     }
     val name = schema.nextUnusedSelfRelationshipName()
-    val pos = selfRelationshipPositionFromOwningEntity(ownerElement.position)
+    val pos = when (autoSelfRelationshipClickSchema) {
+        null -> selfRelationshipPositionFromOwningEntity(ownerElement.position)
+        else -> selfRelationshipPositionFromClickOnOwner(ownerElement.position, autoSelfRelationshipClickSchema)
+    }
     val style = ConceptualPlacementDefaults.labelStyle
 
     var work = schema
@@ -328,6 +384,12 @@ fun validateAndBuildConceptualLink(
     schema: ConceptualSchema,
     first: ConceptualLinkPick,
     second: ConceptualLinkPick,
+    /**
+     * When the same entity is linked to itself to create an auto-relationship, optional schema-space click
+     * (same coordinates as the canvas) chooses the owner side and aligns the diamond like attribute tools.
+     * `null` keeps the legacy Pascal placement (diamond to the right of the entity at a fixed vertical offset).
+     */
+    autoSelfRelationshipClickSchema: Offset? = null,
 ): ConceptualLinkValidationResult {
     val elA = schema.elements[first.elementId]
     val elB = schema.elements[second.elementId]
@@ -356,7 +418,7 @@ fun validateAndBuildConceptualLink(
             return when (elA) {
                 is SchemaElement.Entity,
                 is SchemaElement.AssociativeEntity,
-                -> buildEntityAutoSelfRelationship(schema, elA, first)
+                -> buildEntityAutoSelfRelationship(schema, elA, first, autoSelfRelationshipClickSchema)
                 else -> ConceptualLinkValidationResult.Error("Não é possível ligar um objeto a si mesmo.")
             }
         }

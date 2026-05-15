@@ -16,25 +16,21 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package games.polyclub.power.brmodelo
+package games.polyclub.power.brmodelo.mcp
 
-internal actual fun registerDesktopMainWindowCloseHandler(handler: (() -> Unit)?) = Unit
+/**
+ * MCP tool names for property edits aligned with the inspector (sidebar).
+ */
+internal object McpEditToolNames {
+    const val EDIT_GROUP = "edit"
+    const val EDIT_SEPARATOR = "__"
 
-internal actual fun setBrowserUnloadWarningEnabled(enabled: Boolean): Unit = js(
-    """
-    (function(on) {
-        if (!window._kbrUnloadWarn) {
-            window._kbrUnloadWarn = function(e) {
-                e.preventDefault();
-                e.returnValue = ' ';
-            };
-        }
-        if (on) window.addEventListener('beforeunload', window._kbrUnloadWarn);
-        else window.removeEventListener('beforeunload', window._kbrUnloadWarn);
-    })(enabled)
-    """
-)
+    private fun tool(suffix: String): String = "$EDIT_GROUP$EDIT_SEPARATOR$suffix"
 
-internal actual fun quitApplicationCompletely() = Unit
-
-internal actual fun requestDesktopMainWindowToFront() = Unit
+    val MODEL = tool("model")
+    val CANVAS_ELEMENT = tool("canvas_element")
+    val CONNECTION = tool("connection")
+    val HIDDEN_ATTRIBUTE = tool("hidden_attribute")
+    val CANVAS_SELECTION = tool("canvas_selection")
+    val CANVAS_SELECTION_RECTANGLE = tool("canvas_selection_rectangle")
+}
