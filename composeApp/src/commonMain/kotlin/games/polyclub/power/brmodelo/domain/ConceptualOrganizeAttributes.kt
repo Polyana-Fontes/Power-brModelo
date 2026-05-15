@@ -19,6 +19,263 @@
 package games.polyclub.power.brmodelo.domain
 
 import kotlin.math.max
+import kotlin.math.roundToInt
+
+// ── Divida alignment (matches SchemaRenderer.computeDividedPoints for rectangle owners) ──
+
+private fun assocInnerDiamondPosOrganize(p: ElementPosition): ElementPosition =
+    ElementPosition(
+        x = p.x + 15,
+        y = p.y + 15,
+        width = (p.width - 30).coerceAtLeast(10),
+        height = (p.height - 30).coerceAtLeast(10),
+    )
+
+private fun associativeConnectionUsesInnerDiamondOrganize(
+    elem: SchemaElement,
+    otherElem: SchemaElement,
+    conn: Connection?,
+): Boolean {
+    if (elem !is SchemaElement.AssociativeEntity || otherElem is SchemaElement.Attribute) return true
+    if (conn == null) return true
+    return when (elem.id) {
+        conn.elementIdA -> !conn.useAssociativeOuterForEndA
+        conn.elementIdB -> !conn.useAssociativeOuterForEndB
+        else -> true
+    }
+}
+
+/**
+ * Mirrors [games.polyclub.power.brmodelo.ui.canvas.SchemaRenderer]'s `computeNonAttrPonto` / `TLigacao.Ative`.
+ */
+private fun computeNonAttrPontoForOrganize(
+    elemPos: ElementPosition,
+    otherPos: ElementPosition,
+    orientation: LineOrientation,
+    isE1: Boolean,
+): Int {
+    val e1Pos = if (isE1) elemPos else otherPos
+    val e2Pos = if (isE1) otherPos else elemPos
+
+    val e1r = e1Pos.x + e1Pos.width
+    val e1b = e1Pos.y + e1Pos.height
+    val e2r = e2Pos.x + e2Pos.width
+    val e2b = e2Pos.y + e2Pos.height
+
+    val isH = orientation == LineOrientation.HORIZONTAL
+    val DIST = 20
+
+    val c1fwd = e1r < e2Pos.x - DIST && e1b < e2Pos.y - DIST
+    val c1rev = e2r < e1Pos.x - DIST && e2b < e1Pos.y - DIST
+    if (c1fwd || c1rev) {
+        val swapped = c1rev
+        val actualIsE1 = if (swapped) !isE1 else isE1
+        return if (!isH) {
+            if (actualIsE1) 4 else 1
+        } else {
+            if (actualIsE1) 3 else 2
+        }
+    }
+
+    val c2fwd = e1r < e2Pos.x - DIST && e2b < e1Pos.y - DIST
+    val c2rev = e2r < e1Pos.x - DIST && e1b < e2Pos.y - DIST
+    if (c2fwd || c2rev) {
+        val swapped = c2rev
+        val actualIsE1 = if (swapped) !isE1 else isE1
+        return if (isH) {
+            if (actualIsE1) 2 else 1
+        } else {
+            if (actualIsE1) 3 else 4
+        }
+    }
+
+    if (e1b < e2Pos.y - 4) return if (isE1) 4 else 2
+    if (e2b < e1Pos.y - 4) return if (isE1) 2 else 4
+
+    if (e1r < e2Pos.x - 4) return if (isE1) 3 else 1
+    if (e2r < e1Pos.x - 4) return if (isE1) 1 else 3
+
+    return if (isH) {
+        if (isE1) { if (e1Pos.x <= e2Pos.x) 3 else 1 }
+        else { if (e1Pos.y <= e2Pos.y) 2 else 4 }
+    } else {
+        if (isE1) { if (e1Pos.y <= e2Pos.y) 4 else 2 }
+        else { if (e1Pos.x <= e2Pos.x) 1 else 3 }
+    }
+}
+
+private fun connectionPontoForOrganize(
+    elem: SchemaElement,
+    otherElem: SchemaElement,
+    schema: ConceptualSchema,
+    conn: Connection,
+): Int {
+    if (elem is SchemaElement.Attribute) {
+        val ownerPos = schema.elements[elem.ownerId]?.position
+        val ellipseOnLeft = ownerPos?.let { conceptualAttributeAttachPonto(it, elem.position) != 1 } ?: false
+        return if (otherElem is SchemaElement.Attribute && otherElem.ownerId == elem.id) {
+            if (ellipseOnLeft) 3 else 1
+        } else {
+            if (ellipseOnLeft) 1 else 3
+        }
+    }
+    if (otherElem is SchemaElement.Attribute) {
+        val isE1 = conn.elementIdA == elem.id
+        return computeNonAttrPontoForOrganize(
+            elem.position,
+            otherElem.position,
+            conn.orientation,
+            isE1,
+        )
+    }
+    val isE1 = conn.elementIdA == elem.id
+    val effectivePos = if (elem is SchemaElement.AssociativeEntity && otherElem !is SchemaElement.Attribute) {
+        if (associativeConnectionUsesInnerDiamondOrganize(elem, otherElem, conn)) {
+            assocInnerDiamondPosOrganize(elem.position)
+        } else {
+            elem.position
+        }
+    } else {
+        elem.position
+    }
+    val effectiveOtherPos = if (otherElem is SchemaElement.AssociativeEntity && elem !is SchemaElement.Attribute) {
+        if (associativeConnectionUsesInnerDiamondOrganize(otherElem, elem, conn)) {
+            assocInnerDiamondPosOrganize(otherElem.position)
+        } else {
+            otherElem.position
+        }
+    } else {
+        otherElem.position
+    }
+    return computeNonAttrPontoForOrganize(
+        effectivePos,
+        effectiveOtherPos,
+        conn.orientation,
+        isE1,
+    )
+}
+
+private fun connectionIdBetweenOrganize(schema: ConceptualSchema, idA: Int, idB: Int): Int? =
+    schema.connections.firstOrNull { c ->
+        (c.elementIdA == idA && c.elementIdB == idB) || (c.elementIdA == idB && c.elementIdB == idA)
+    }?.id
+
+private data class OrganizeDividaSlot(val connId: Int, val otherId: Int)
+
+private fun collectOrganizeDividaSlots(
+    schema: ConceptualSchema,
+    ownerId: Int,
+    targetPonto: Int,
+): List<OrganizeDividaSlot> {
+    val owner = schema.elements[ownerId] ?: return emptyList()
+    if (owner is SchemaElement.Relationship || owner is SchemaElement.SelfRelationship) return emptyList()
+
+    val slots = ArrayList<OrganizeDividaSlot>()
+    for (conn in schema.connections) {
+        val isA = conn.elementIdA == ownerId
+        val isB = conn.elementIdB == ownerId
+        if (!isA && !isB) continue
+        val otherId = if (isA) conn.elementIdB else conn.elementIdA
+        val otherElem = schema.elements[otherId] ?: continue
+
+        if (otherElem is SchemaElement.Attribute) {
+            if (owner is SchemaElement.Attribute && owner.ownerId == otherId) continue
+            if (owner is SchemaElement.Attribute && otherElem.ownerId == owner.id) continue
+            val p = connectionPontoForOrganize(owner, otherElem, schema, conn)
+            if (p != targetPonto) continue
+            slots.add(OrganizeDividaSlot(conn.id, otherId))
+        } else {
+            if (owner is SchemaElement.Attribute) continue
+            val p = connectionPontoForOrganize(owner, otherElem, schema, conn)
+            if (p != targetPonto) continue
+            slots.add(OrganizeDividaSlot(conn.id, otherId))
+        }
+    }
+    return slots
+}
+
+/**
+ * Maps connection id → coordinate along the owner edge (Y for ponto 1/3, X for 2/4),
+ * matching [games.polyclub.power.brmodelo.ui.canvas.SchemaRenderer]'s Divida pass for
+ * [SchemaElement.Entity] / [SchemaElement.AssociativeEntity].
+ */
+private fun dividaAlongCoordinateByConnectionForOrganize(
+    schema: ConceptualSchema,
+    ownerId: Int,
+    targetPonto: Int,
+): Map<Int, Float> {
+    val owner = schema.elements[ownerId] ?: return emptyMap()
+    val pos = owner.position
+    val slots = collectOrganizeDividaSlots(schema, ownerId, targetPonto)
+    if (slots.isEmpty()) return emptyMap()
+
+    val (anchorStart, edgeLen) = if (targetPonto == 1 || targetPonto == 3) {
+        pos.y.toFloat() to pos.height.toFloat()
+    } else {
+        pos.x.toFloat() to pos.width.toFloat()
+    }
+
+    val sorted = slots.sortedWith(
+        compareBy(
+            { slot ->
+                val op = schema.elements[slot.otherId]?.position ?: ElementPosition(0, 0, 0, 0)
+                when (targetPonto) {
+                    1, 3 -> op.y.toFloat()
+                    else -> op.x.toFloat()
+                }
+            },
+            OrganizeDividaSlot::connId,
+        ),
+    )
+
+    val nTotal = sorted.size
+    val out = HashMap<Int, Float>(nTotal)
+    if (nTotal == 1) {
+        val coord = when (targetPonto) {
+            1, 3 -> pos.y + pos.height / 2f
+            else -> pos.x + pos.width / 2f
+        }
+        out[sorted[0].connId] = coord
+        return out
+    }
+
+    val tam = (edgeLen.toInt()) / (nTotal + 1)
+    for ((idx, slot) in sorted.withIndex()) {
+        out[slot.connId] = anchorStart + (tam * (idx + 1)).toFloat()
+    }
+    return out
+}
+
+private fun rectangleOwnerUsesCanvasDivida(schema: ConceptualSchema, ownerId: Int): Boolean {
+    val o = schema.elements[ownerId] ?: return false
+    return o is SchemaElement.Entity || o is SchemaElement.AssociativeEntity
+}
+
+/**
+ * `TBase.OrganizeAtributos` (mer.pas) walks [FLigacoes] and, for each attribute link, reads `PT`
+ * from `TLigacao` — already Divida-adjusted when non-attribute legs share that edge. When **every**
+ * link on a given `ponto` is attribute→owner, the same procedure still uses `Totais` + fixed
+ * `Width/(n+1)` / `Height/(n+1)` steps in **connection list order**; re-sorting only attributes by
+ * `Top`/`Left` would reshuffle coordinates vs Pascal.
+ */
+private fun ownerEdgeSharesNonAttributeOnPonto(
+    schema: ConceptualSchema,
+    ownerId: Int,
+    targetPonto: Int,
+): Boolean {
+    val owner = schema.elements[ownerId] ?: return false
+    if (owner !is SchemaElement.Entity && owner !is SchemaElement.AssociativeEntity) return false
+    for (conn in schema.connections) {
+        val isA = conn.elementIdA == ownerId
+        val isB = conn.elementIdB == ownerId
+        if (!isA && !isB) continue
+        val otherId = if (isA) conn.elementIdB else conn.elementIdA
+        val other = schema.elements[otherId] ?: continue
+        if (other is SchemaElement.Attribute) continue
+        if (connectionPontoForOrganize(owner, other, schema, conn) == targetPonto) return true
+    }
+    return false
+}
 
 /**
  * Ordered list of canvas attributes linked to [ownerId] via [Connection] (attribute → owner),
@@ -182,6 +439,16 @@ private fun compositeBarAlreadyRelayoutedByOwnerTasks(
  * Repositions direct attributes of [ownerId] following [TBase.OrganizeAtributos] in `mer.pas`
  * (Divida-style spacing on left/right, stacked gaps on top/bottom).
  *
+ * For [SchemaElement.Entity] and [SchemaElement.AssociativeEntity], when a canvas edge (`ponto`
+ * 1–4) also carries **non-attribute** links (relationship, specialization, another entity, …),
+ * attachment coordinates along that edge follow the same Divida pass as the renderer (same
+ * `ponto`, same sort, same `tam`), mirroring Pascal reading `PT` from `TLigacao`. Edges with
+ * **attributes only** keep the legacy `Width/(n+1)` / `Height/(n+1)` spacing in [linked] connection
+ * order, matching `TBase.OrganizeAtributos` without reshuffling by `Top`/`Left`.
+ *
+ * [SchemaElement.Relationship] and [SchemaElement.SelfRelationship] keep the legacy Pascal-style
+ * spacing only (diamond attribute routing does not share the rectangle Divida queue).
+ *
  * When [sideFilter] is non-null, only attributes whose **current** attach side matches are moved;
  * others keep their positions.
  *
@@ -214,6 +481,16 @@ private fun repositionDirectAttributesOfOwner(
     val gh = ConceptualPlacementDefaults.attributeHorizontalGap
     val gv = ConceptualPlacementDefaults.attributeVerticalGapBase
 
+    val useRectDivida = rectangleOwnerUsesCanvasDivida(schema, ownerId)
+    val edgeDiv1 = useRectDivida && ownerEdgeSharesNonAttributeOnPonto(schema, ownerId, 1)
+    val edgeDiv2 = useRectDivida && ownerEdgeSharesNonAttributeOnPonto(schema, ownerId, 2)
+    val edgeDiv3 = useRectDivida && ownerEdgeSharesNonAttributeOnPonto(schema, ownerId, 3)
+    val edgeDiv4 = useRectDivida && ownerEdgeSharesNonAttributeOnPonto(schema, ownerId, 4)
+    val divP1 = if (edgeDiv1) dividaAlongCoordinateByConnectionForOrganize(schema, ownerId, 1) else emptyMap()
+    val divP2 = if (edgeDiv2) dividaAlongCoordinateByConnectionForOrganize(schema, ownerId, 2) else emptyMap()
+    val divP3 = if (edgeDiv3) dividaAlongCoordinateByConnectionForOrganize(schema, ownerId, 3) else emptyMap()
+    val divP4 = if (edgeDiv4) dividaAlongCoordinateByConnectionForOrganize(schema, ownerId, 4) else emptyMap()
+
     var c1 = 0
     var c3 = 0
     var c2h = 0
@@ -228,35 +505,62 @@ private fun repositionDirectAttributesOfOwner(
         if (attributeIdFilter != null && a.id !in attributeIdFilter) continue
 
         val ap = a.position
+        val connId = connectionIdBetweenOrganize(schema, a.id, ownerId)
+        val divCoord = when (p) {
+            1 -> connId?.let { divP1[it] }
+            2 -> connId?.let { divP2[it] }
+            3 -> connId?.let { divP3[it] }
+            4 -> connId?.let { divP4[it] }
+            else -> null
+        }
+
         val newPos = when (p) {
             1 -> {
-                c1++
-                val n = initialTotais[1]
-                val tam = ownerPos.height / (n + 1)
-                val py = ownerPos.y + tam * c1
-                ElementPosition(ownerPos.x - ap.width - gh, py - ap.height / 2, ap.width, ap.height)
+                val cy = divCoord ?: run {
+                    c1++
+                    val n = initialTotais[1]
+                    val tam = ownerPos.height / (n + 1)
+                    (ownerPos.y + tam * c1).toFloat()
+                }
+                val py = (cy - ap.height / 2f).roundToInt()
+                ElementPosition(ownerPos.x - ap.width - gh, py, ap.width, ap.height)
             }
             3 -> {
-                c3++
-                val n = initialTotais[3]
-                val tam = ownerPos.height / (n + 1)
-                val py = ownerPos.y + tam * c3
-                ElementPosition(ownerPos.x + ownerPos.width + gh, py - ap.height / 2, ap.width, ap.height)
+                val cy = divCoord ?: run {
+                    c3++
+                    val n = initialTotais[3]
+                    val tam = ownerPos.height / (n + 1)
+                    (ownerPos.y + tam * c3).toFloat()
+                }
+                val py = (cy - ap.height / 2f).roundToInt()
+                ElementPosition(ownerPos.x + ownerPos.width + gh, py, ap.width, ap.height)
             }
             2 -> {
-                c2h++
-                val n = initialTotais[2]
-                val tam = ownerPos.width / (n + 1)
-                val px = ownerPos.x + tam * c2h
+                // mer.pas: SetBounds(PT.X, …) — PT.X is the attribute *Left*, same as Divida slot on the
+                // top edge (not snap minus half-width; that shifted boxes left vs Pascal / legacy Kotlin).
+                val px = when {
+                    divCoord != null -> divCoord.roundToInt()
+                    else -> {
+                        c2h++
+                        val n = initialTotais[2]
+                        val tam = ownerPos.width / (n + 1)
+                        ownerPos.x + tam * c2h
+                    }
+                }
                 val y = ownerPos.y - (gv + distancia * tb2)
                 tb2--
                 ElementPosition(px, y, ap.width, ap.height)
             }
             4 -> {
-                c4h++
-                val n = initialTotais[4]
-                val tam = ownerPos.width / (n + 1)
-                val px = ownerPos.x + tam * c4h
+                val px = when {
+                    divCoord != null -> divCoord.roundToInt()
+                    else -> {
+                        c4h++
+                        val n = initialTotais[4]
+                        val tam = ownerPos.width / (n + 1)
+                        ownerPos.x + tam * c4h
+                    }
+                }
                 val y = ownerPos.y + ownerPos.height + (gv + distancia * tb4)
                 tb4--
                 ElementPosition(px, y, ap.width, ap.height)
