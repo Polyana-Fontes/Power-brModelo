@@ -780,13 +780,15 @@ internal fun SchemaCanvas(
                     val slop = viewConfiguration.touchSlop
                     var totalDrag = Offset.Zero
                     var isDragging = false
+                    /** True only when this gesture called [onSchemaPreview] (move/resize/cardinality), not canvas pan. */
+                    var didMutateSchemaDuringDrag = false
 
                     while (true) {
                         val event = awaitPointerEvent()
                         val change = event.changes.firstOrNull { it.id == down.id } ?: break
                         if (!change.pressed) {
-                            // Pointer up: commit if we were dragging.
-                            if (isDragging) {
+                            // Pointer up: commit only if the drag changed the model (not pure canvas pan).
+                            if (isDragging && didMutateSchemaDuringDrag) {
                                 val finalSchema = currentSchema
                                 if (finalSchema != null) {
                                     currentOnSchemaCommit(finalSchema)
@@ -838,6 +840,7 @@ internal fun SchemaCanvas(
                                                 startPos = startCardinalityResizePos,
                                                 totalDelta = totalDrag,
                                             )
+                                        didMutateSchemaDuringDrag = true
                                         currentOnSchemaPreview(
                                             s.copy(
                                                 connections = s.connections.map {
@@ -863,6 +866,7 @@ internal fun SchemaCanvas(
                                             )
                                         val elem = s.elements[dragElementId]
                                         if (elem != null) {
+                                            didMutateSchemaDuringDrag = true
                                             val schemaResized = s.withElement(elem.withPosition(newPos))
                                             currentOnSchemaPreview(
                                                 schemaResized.withRecalculatedFloatingCardinalityPositions(
@@ -875,6 +879,7 @@ internal fun SchemaCanvas(
 
                                     // ── Move element(s) — entire selection translates together ─────
                                     multiElementDragSnapshot != null -> {
+                                        didMutateSchemaDuringDrag = true
                                         val movingSchema: ConceptualSchema = schemaSnapshot
                                         val (ids, startPositions) = multiElementDragSnapshot
                                         val dx = totalDrag.x.toInt()
@@ -923,6 +928,7 @@ internal fun SchemaCanvas(
                                                 } else null
                                             }
                                             if (basePos != null) {
+                                                didMutateSchemaDuringDrag = true
                                                 val newPos = basePos.copy(
                                                     x = basePos.x + totalDrag.x.toInt(),
                                                     y = basePos.y + totalDrag.y.toInt(),
