@@ -133,7 +133,8 @@ private fun conceptualRelToEntityLegCount(schema: ConceptualSchema, relId: Int, 
  * Whether another [Connection] with `elementIdA == relId` and `elementIdB == entityId` would be invalid.
  * - [SchemaElement.SelfRelationship]: up to two legs to the same entity (Pascal `Relacione(Self)` × 2).
  * - [SchemaElement.Relationship]: normally one leg per entity; a **second** leg to the **same** entity is allowed
- *   only when that diamond still links exclusively to that entity (manual auto-rel: E–R then R–E).
+ *   only when that diamond still links exclusively to that entity (manual auto-rel: E–R then R–E), even if the entity
+ *   already owns one or more [SchemaElement.SelfRelationship] diamonds.
  */
 internal fun isDuplicateConceptualRelEntityConnection(schema: ConceptualSchema, relId: Int, entityId: Int): Boolean {
     val n = conceptualRelToEntityLegCount(schema, relId, entityId)
@@ -144,7 +145,6 @@ internal fun isDuplicateConceptualRelEntityConnection(schema: ConceptualSchema, 
         is SchemaElement.Relationship -> {
             if (n >= 2) return true
             // n == 1: allow second (rel, entityId) only if this rel still has a single distinct entity end
-            if (schema.selfRelationships.any { it.ownerEntityId == entityId }) return true
             val distinctEntityEnds =
                 schema.connections
                     .filter { it.elementIdA == relId }
@@ -204,13 +204,15 @@ private fun selfRelationshipXCenteredOnEntity(ep: ElementPosition, diamondW: Int
     return ideal.coerceIn(minLeft, maxLeft)
 }
 
-private fun selfRelationshipPositionFromOwningEntity(entityPosition: ElementPosition): ElementPosition {
+private fun selfRelationshipPositionFromOwningEntity(entityPosition: ElementPosition, stackIndex: Int): ElementPosition {
     val h = entityPosition.height
     val third = h / 3
     val diamondW = 2 * (h - third)
     val diamondH = h - third
+    val gap = 30
+    val stackStepX = diamondW + 24
     return ElementPosition(
-        x = entityPosition.x + entityPosition.width + 30,
+        x = entityPosition.x + entityPosition.width + gap + stackIndex * stackStepX,
         y = selfRelationshipYCenteredOnEntity(entityPosition, diamondH),
         width = diamondW,
         height = diamondH,
@@ -226,40 +228,56 @@ private fun selfRelationshipDiamondMetrics(entityPosition: ElementPosition): Pai
 }
 
 /**
+ * Owner edge where [selfDiamondPosition] sits relative to [ownerPosition], using the same rules as
+ * conceptual attributes ([conceptualAttributeAttachPonto]) so stacking counts only peers on that side.
+ */
+private fun conceptualSelfRelationshipAttachSide(
+    ownerPosition: ElementPosition,
+    selfDiamondPosition: ElementPosition,
+): ConceptualAttributeAttachPonto {
+    val code = conceptualAttributeAttachPonto(ownerPosition, selfDiamondPosition)
+    return ConceptualAttributeAttachPonto.fromPascalCode(code)
+        ?: ConceptualAttributeAttachPonto.RIGHT
+}
+
+/**
  * Places the self-relationship diamond from a schema-space [clickSchema]: the **side** is chosen by
  * [closestConceptualAttributeAttachPonto]; along the orthogonal axis the diamond is **centred** on the
- * entity (same as [selfRelationshipPositionFromOwningEntity] for the default right side).
+ * entity. [stackIndex] offsets additional diamonds along that edge so they do not overlap.
  */
 internal fun selfRelationshipPositionFromClickOnOwner(
     entityPosition: ElementPosition,
     clickSchema: Offset,
+    stackIndex: Int = 0,
 ): ElementPosition {
     val ep = entityPosition
     val (diamondW, diamondH) = selfRelationshipDiamondMetrics(ep)
     val gap = 30
+    val stackStepX = diamondW + 24
+    val stackStepY = diamondH + 20
     val side = closestConceptualAttributeAttachPonto(ep, clickSchema)
     return when (side) {
         ConceptualAttributeAttachPonto.RIGHT -> ElementPosition(
-            x = ep.x + ep.width + gap,
+            x = ep.x + ep.width + gap + stackIndex * stackStepX,
             y = selfRelationshipYCenteredOnEntity(ep, diamondH),
             width = diamondW,
             height = diamondH,
         )
         ConceptualAttributeAttachPonto.LEFT -> ElementPosition(
-            x = ep.x - diamondW - gap,
+            x = ep.x - diamondW - gap - stackIndex * stackStepX,
             y = selfRelationshipYCenteredOnEntity(ep, diamondH),
             width = diamondW,
             height = diamondH,
         )
         ConceptualAttributeAttachPonto.TOP -> ElementPosition(
             x = selfRelationshipXCenteredOnEntity(ep, diamondW),
-            y = ep.y - diamondH - gap,
+            y = ep.y - diamondH - gap - stackIndex * stackStepY,
             width = diamondW,
             height = diamondH,
         )
         ConceptualAttributeAttachPonto.BOTTOM -> ElementPosition(
             x = selfRelationshipXCenteredOnEntity(ep, diamondW),
-            y = ep.y + ep.height + gap,
+            y = ep.y + ep.height + gap + stackIndex * stackStepY,
             width = diamondW,
             height = diamondH,
         )
@@ -276,15 +294,20 @@ private fun buildEntityAutoSelfRelationship(
     autoSelfRelationshipClickSchema: Offset?,
 ): ConceptualLinkValidationResult {
     require(entityPick.elementId == ownerElement.id)
-    if (schema.selfRelationships.any { it.ownerEntityId == ownerElement.id }) {
-        return ConceptualLinkValidationResult.Error(
-            "Esta entidade já possui um auto-relacionamento.",
-        )
+    val ownerEp = ownerElement.position
+    val targetSide = when (autoSelfRelationshipClickSchema) {
+        null -> ConceptualAttributeAttachPonto.RIGHT
+        else -> closestConceptualAttributeAttachPonto(ownerEp, autoSelfRelationshipClickSchema)
     }
+    val stackIndex =
+        schema.selfRelationships.count { sr ->
+            sr.ownerEntityId == ownerElement.id &&
+                conceptualSelfRelationshipAttachSide(ownerEp, sr.position) == targetSide
+        }
     val name = schema.nextUnusedSelfRelationshipName()
     val pos = when (autoSelfRelationshipClickSchema) {
-        null -> selfRelationshipPositionFromOwningEntity(ownerElement.position)
-        else -> selfRelationshipPositionFromClickOnOwner(ownerElement.position, autoSelfRelationshipClickSchema)
+        null -> selfRelationshipPositionFromOwningEntity(ownerElement.position, stackIndex)
+        else -> selfRelationshipPositionFromClickOnOwner(ownerElement.position, autoSelfRelationshipClickSchema, stackIndex)
     }
     val style = ConceptualPlacementDefaults.labelStyle
 

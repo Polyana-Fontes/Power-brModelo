@@ -300,7 +300,7 @@ internal object McpServerInstructions {
         append("; or **existing-endpoint wiring** (rejects plain entity–entity auto-diamond; may rewrite entity+associative-outer to inner) via ")
         append(McpProceduralToolsToolNames.LINK_EXISTING_ENDPOINTS)
         append(" — same JSON schema and `dryRun` preview; responses share the same rich success shape (see each tool description), including `linkPattern` when the domain classifies the outcome. ")
-        append("Create an **Auto Relacionar** self-relationship on one entity id with optional `attachSide` (same strings as attribute tools) and the same override knobs for the diamond plus two cardinality legs: ")
+        append("Create **Auto Relacionar** self-relationships on an entity id — **multiple** per owner are allowed; each new diamond stacks along the chosen edge. Optional `attachSide` (same strings as attribute tools) and the same override knobs for the diamond plus two cardinality legs: ")
         append(McpProceduralToolsToolNames.AUTO_SELF_RELATIONSHIP)
         append(". ")
         append("Each placement or specialization call returns JSON for the new primary element (id, bounds, names, style); ")

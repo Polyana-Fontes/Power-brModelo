@@ -22,6 +22,7 @@ import androidx.compose.ui.geometry.Offset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class ConceptualLinkObjectsTest {
@@ -265,7 +266,22 @@ class ConceptualLinkObjectsTest {
     }
 
     @Test
-    fun `second auto-rel on same entity is rejected`() {
+    fun `selfRelationshipPositionFromClickOnOwner right side stacks outward with stackIndex`() {
+        // Arrange
+        val ep = ElementPosition(0, 0, 100, 90)
+        val clickRight = Offset(105f, 45f)
+
+        // Act
+        val p0 = selfRelationshipPositionFromClickOnOwner(ep, clickRight, 0)
+        val p1 = selfRelationshipPositionFromClickOnOwner(ep, clickRight, 1)
+
+        // Assert
+        assertTrue(p1.x > p0.x)
+        assertEquals(p0.y, p1.y)
+    }
+
+    @Test
+    fun `second auto-rel on same entity succeeds with stacked default placement`() {
         // Arrange
         val e1 = SchemaElement.Entity(id = 1, name = "A", position = ElementPosition(0, 0, 50, 60))
         val existing = SchemaElement.SelfRelationship(
@@ -284,8 +300,44 @@ class ConceptualLinkObjectsTest {
         val r = validateAndBuildConceptualLink(schema, pick, pick)
 
         // Assert
-        val err = assertIs<ConceptualLinkValidationResult.Error>(r)
-        assertTrue(err.message.contains("auto-relacionamento", ignoreCase = true))
+        val ok = assertIs<ConceptualLinkValidationResult.Ok>(r)
+        val selfRels = ok.schema.selfRelationships.filter { it.ownerEntityId == 1 }
+        assertEquals(2, selfRels.size)
+        val second = selfRels.single { it.name == "Auto2" }
+        val h = 60
+        val third = h / 3
+        val diamondW = 2 * (h - third)
+        val stackStepX = diamondW + 24
+        val expectedX = 50 + 30 + stackStepX
+        assertEquals(expectedX, second.position.x)
+    }
+
+    @Test
+    fun `auto-rel stacking index counts only self-relationships on the same attach side`() {
+        // Arrange
+        val ep = ElementPosition(200, 100, 100, 80)
+        val e1 = SchemaElement.Entity(id = 1, name = "A", position = ep)
+        val schema = ConceptualSchema(elements = mapOf(1 to e1), nextId = 10)
+        val pick = ConceptualLinkPick(1)
+        val clickTop = Offset(ep.x + ep.width / 2f, ep.y - 1f)
+        val clickBottom = Offset(ep.x + ep.width / 2f, (ep.y + ep.height + 1).toFloat())
+
+        // Act
+        val rTop = validateAndBuildConceptualLink(schema, pick, pick, clickTop)
+        val okTop = assertIs<ConceptualLinkValidationResult.Ok>(rTop)
+        val rBottom = validateAndBuildConceptualLink(okTop.schema, pick, pick, clickBottom)
+        val okBottom = assertIs<ConceptualLinkValidationResult.Ok>(rBottom)
+        val bottomAuto = okBottom.schema.selfRelationships.single { it.name == "Auto2" }
+        val rRight = validateAndBuildConceptualLink(okBottom.schema, pick, pick)
+        val okRight = assertIs<ConceptualLinkValidationResult.Ok>(rRight)
+        val rightAuto = okRight.schema.selfRelationships.single { it.name == "Auto3" }
+
+        // Assert
+        val gap = 30
+        assertEquals(ep.y + ep.height + gap, bottomAuto.position.y)
+        val diamondW = 2 * (ep.height - ep.height / 3)
+        assertEquals(ep.x + ep.width + gap, rightAuto.position.x)
+        assertEquals(diamondW, rightAuto.position.width)
     }
 
     @Test
@@ -362,7 +414,7 @@ class ConceptualLinkObjectsTest {
     }
 
     @Test
-    fun `second leg on loose relationship rejected when entity already has self-relationship`() {
+    fun `second leg on loose relationship upgrades to self when entity already has self-relationship`() {
         // Arrange
         val e = SchemaElement.Entity(id = 1, name = "A", position = ElementPosition(0, 0, 80, 60))
         val existingSelf = SchemaElement.SelfRelationship(
@@ -413,8 +465,13 @@ class ConceptualLinkObjectsTest {
         )
 
         // Assert
-        val err = assertIs<ConceptualLinkValidationResult.Error>(r)
-        assertTrue(err.message.contains("Já existe", ignoreCase = true))
+        val ok = assertIs<ConceptualLinkValidationResult.Ok>(r)
+        val owners = ok.schema.selfRelationships.filter { it.ownerEntityId == 1 }
+        assertEquals(2, owners.size)
+        val promoted = ok.schema.elements[3] as? SchemaElement.SelfRelationship
+        assertNotNull(promoted)
+        assertEquals("Relacao2", promoted.name)
+        assertEquals(2, ok.schema.connections.count { it.elementIdA == 3 && it.elementIdB == 1 })
     }
 
     @Test

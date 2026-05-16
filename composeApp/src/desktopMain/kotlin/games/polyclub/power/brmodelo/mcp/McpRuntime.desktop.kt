@@ -1814,7 +1814,7 @@ internal actual class McpRuntime {
                 name = McpProceduralToolsToolNames.AUTO_SELF_RELATIONSHIP,
                 title = "Create entity auto-relationship (Auto Relacionar)",
                 description = "Creates a self-relationship on a plain entity or the outer rectangle of an associative entity, " +
-                    "same rules as the **Auto Relacionar** canvas tool. " +
+                    "same rules as the **Auto Relacionar** canvas tool. **Multiple** self-relationships on the same owner stack automatically along the chosen edge. " +
                     "Optional `attachSide` (`left`, `top`, `right`, `bottom` or codes 1–4) chooses which side of the owner box receives the diamond, matching attribute-tool edge semantics; omit for the legacy right-side placement. " +
                     "Optional `relationshipOverrides` and `connection` / `connectionOverrides` (exactly **two** patches, ascending new connection id) adjust the new self-relationship and both cardinality legs at creation time — same fields as ${McpProceduralToolsToolNames.LINK_OBJECTS} / ${McpProceduralToolsToolNames.LINK_EXISTING_ENDPOINTS}. " +
                     "Returns `newConnections` and `newSelfRelationship` JSON. Does **not** switch the user's active canvas tool. " +
@@ -1912,7 +1912,7 @@ internal actual class McpRuntime {
                 jsonMapper,
                 name = McpAttributeToolsToolNames.APPLY_ATTRIBUTE,
                 title = "Place simple conceptual attribute",
-                description = "Adds a non-composite attribute to an entity, relationship, associative entity, or composite attribute (same rules as the canvas attribute tool). " +
+                description = "Adds a non-composite attribute to an entity, relationship, associative entity, self-relationship, or composite attribute (same rules as the canvas attribute tool). " +
                     "Optional attachSide selects the owner edge; omit to auto-pick the least crowded side (tie-break right), then the editor runs organize on that side only. " +
                     "Prefer keeping siblings on the same side (often right); if that side would obscure diagram objects, choose another side — see MCP server instructions for density heuristics. " +
                     "Does **not** switch the active canvas tool. " +
@@ -1936,6 +1936,7 @@ internal actual class McpRuntime {
                 name = McpAttributeToolsToolNames.APPLY_COMPOSITE_ATTRIBUTE,
                 title = "Place composite conceptual attribute with leaf children",
                 description = "Creates a composite attribute with one or more **simple** canvas children in one step (no nested composite children in this call). " +
+                    "Target may be an entity, relationship, associative entity, self-relationship, or composite attribute. " +
                     "Optional attachSide follows the same rules as apply_attribute (default least crowded, tie-break right; prefer same side / avoid covering diagram objects). " +
                     "Optional nestedHiddenAttributes attach to the new composite parent. " +
                     "Does **not** switch the active canvas tool. " +
