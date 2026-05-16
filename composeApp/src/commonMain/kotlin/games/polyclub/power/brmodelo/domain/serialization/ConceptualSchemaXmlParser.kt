@@ -361,6 +361,10 @@ object ConceptualSchemaXmlParser {
         val labelStyle = parseFont(node)
         val arrowDirection = ArrowDirection.fromCode(node.intValor("SetaDirecao"))
 
+        node.child("Atributos")?.children("Atributo")?.forEach { attrNode ->
+            parseAtributo(attrNode, ownerId = id, elements, connections)
+        }
+
         node.child("Ligacoes")?.children("Ligacao")?.forEach { ligNode ->
             parseLigacao(ligNode, elementIdA = id, connections)
         }

@@ -351,7 +351,7 @@ object ConceptualSchemaXmlSerializer {
             "id" to sr.id
         ) {
             addAll(buildBaseFields(sr))
-            add(xmlNode("Atributos"))
+            add(buildAtributos(schema.attributesOf(sr.id), schema, ctx))
             add(buildAtributosOcultos(sr.hiddenAttributes))
             textNode("Dicionario", sr.dictionary)
             boolValor("Nula", false)

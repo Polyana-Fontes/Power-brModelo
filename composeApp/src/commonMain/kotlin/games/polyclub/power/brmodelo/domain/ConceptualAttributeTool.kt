@@ -268,7 +268,7 @@ sealed class ConceptualAttributeToolResult {
     data class Ok(
         val schema: ConceptualSchema,
         val newPrimaryAttributeId: Int,
-        /** Immediate owner receiving the new attribute (entity, relationship, associative, or composite attribute). */
+        /** Immediate owner receiving the new attribute (entity, relationship, associative, self-relationship, or composite attribute). */
         val ownerElementId: Int,
         /** Edge of [ownerElementId] used for placement (same as Pascal `MePonto` / organize cases). */
         val attachSide: ConceptualAttributeAttachPonto,
@@ -291,6 +291,7 @@ fun applyConceptualAttributeTool(
         is SchemaElement.Entity,
         is SchemaElement.Relationship,
         is SchemaElement.AssociativeEntity,
+        is SchemaElement.SelfRelationship,
         ->
             placeAttributeOnOwner(schema, rawOwner.position, ownerElementId, clickSchema, variant)
 
@@ -577,6 +578,7 @@ fun applyConceptualSimpleAttributeTool(
         is SchemaElement.Entity,
         is SchemaElement.Relationship,
         is SchemaElement.AssociativeEntity,
+        is SchemaElement.SelfRelationship,
         -> {
             val ownerPos = rawOwner.position
             val side = attachSide ?: preferredAttachSideForConceptualOwner(schema, ownerElementId)

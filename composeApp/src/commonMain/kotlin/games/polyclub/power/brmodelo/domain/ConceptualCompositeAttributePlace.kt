@@ -257,6 +257,7 @@ fun applyConceptualCompositeAttributeWithLeafChildren(
         is SchemaElement.Entity,
         is SchemaElement.Relationship,
         is SchemaElement.AssociativeEntity,
+        is SchemaElement.SelfRelationship,
         -> placeCompositeOnBigOwner(
             schema,
             rawOwner.position,

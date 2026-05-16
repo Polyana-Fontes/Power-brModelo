@@ -257,4 +257,31 @@ class ConceptualAttributeToolTest {
         val updatedHost = ok.schema.elements[2] as SchemaElement.Attribute
         assertTrue(ok.newPrimaryAttributeId in updatedHost.childAttributeIds)
     }
+
+    @Test
+    fun `basic attribute on self-relationship links to diamond owner id`() {
+        // Arrange
+        val ent = SchemaElement.Entity(id = 1, name = "E", position = ElementPosition(0, 0, 100, 80))
+        val selfRel = SchemaElement.SelfRelationship(
+            id = 2,
+            name = "Auto1",
+            position = ElementPosition(200, 10, 88, 44),
+            ownerEntityId = 1,
+        )
+        val schema = ConceptualSchema(elements = mapOf(1 to ent, 2 to selfRel), nextId = 10)
+        val click = Offset(295f, 32f)
+
+        // Act
+        val r = applyConceptualAttributeTool(schema, 2, click, ConceptualAttributeToolVariant.Basic)
+
+        // Assert
+        val ok = assertIs<ConceptualAttributeToolResult.Ok>(r)
+        assertEquals(2, ok.ownerElementId)
+        val attr = ok.schema.elements[ok.newPrimaryAttributeId] as SchemaElement.Attribute
+        assertEquals(2, attr.ownerId)
+        assertTrue(
+            ok.schema.connections.any { it.elementIdA == attr.id && it.elementIdB == 2 },
+            "attribute→self-rel Connection required for canvas line",
+        )
+    }
 }
