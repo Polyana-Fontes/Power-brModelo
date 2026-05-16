@@ -36,8 +36,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.focusable
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -128,6 +131,8 @@ internal fun MainCanvasPanel(
     val desktopAwtModifierRemapVerticalScroll = rememberDesktopModifierKeysRemapVerticalScrollToHorizontal()
     val keyboardRemapVerticalScrollPan = isDesktopTarget && desktopAwtModifierRemapVerticalScroll
 
+    var canvasZoom by remember(canvasKey) { mutableFloatStateOf(1f) }
+
     Column(
         modifier = modifier
             .fillMaxHeight()
@@ -164,6 +169,18 @@ internal fun MainCanvasPanel(
                                 }
                                 event.key == Key.Y -> {
                                     onRedoRequest()
+                                    return@onPreviewKeyEvent true
+                                }
+                                event.key == Key.Zero -> {
+                                    canvasZoom = 1f
+                                    return@onPreviewKeyEvent true
+                                }
+                                event.key == Key.Equals || event.key == Key.Plus -> {
+                                    canvasZoom = (canvasZoom * 1.12f).coerceAtMost(4f)
+                                    return@onPreviewKeyEvent true
+                                }
+                                event.key == Key.Minus -> {
+                                    canvasZoom = (canvasZoom / 1.12f).coerceAtLeast(0.25f)
                                     return@onPreviewKeyEvent true
                                 }
                             }
@@ -276,6 +293,8 @@ internal fun MainCanvasPanel(
                     onSelectionBandUiChange = onSelectionBandUiChange,
                     editorTabSessionId = selectedTab?.id ?: -1L,
                     keyboardRemapVerticalScrollPanToHorizontal = keyboardRemapVerticalScrollPan,
+                    zoom = canvasZoom,
+                    onZoomChange = { canvasZoom = it },
                     toolCursorModifier = toolCursorModifier,
                     canvasFocusRequester = focusRequester,
                     onViewStateChange = onCanvasViewStateChange,

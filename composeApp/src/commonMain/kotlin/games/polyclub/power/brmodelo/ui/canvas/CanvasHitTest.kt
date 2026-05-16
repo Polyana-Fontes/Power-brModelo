@@ -42,8 +42,8 @@ enum class ResizeHandle { TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT }
 // ── Main hit-test entry point ─────────────────────────────────────────────────
 
 /**
- * Performs a hit-test at [point] (in schema/canvas coordinates — not screen coordinates;
- * the caller must subtract the pan offset before invoking this function).
+ * Performs a hit-test at [point] in **model** (schema) coordinates — the caller must map from view
+ * pixels with [games.polyclub.power.brmodelo.ui.canvas.viewOffsetToModel] (subtract pan, divide by zoom).
  *
  * Priority order — highest to lowest, matching the Pascal z-order:
  * 1. Cardinality labels (topmost layer).

@@ -581,6 +581,7 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                 layoutHeightPx = viewSnapshot.layoutHeightPx,
                 panX = viewSnapshot.panX,
                 panY = viewSnapshot.panY,
+                zoom = viewSnapshot.zoom,
                 pointerModelX = viewSnapshot.pointerModelX(),
                 pointerModelY = viewSnapshot.pointerModelY(),
                 isPointerOverCanvas = viewSnapshot.isPointerOverCanvas,

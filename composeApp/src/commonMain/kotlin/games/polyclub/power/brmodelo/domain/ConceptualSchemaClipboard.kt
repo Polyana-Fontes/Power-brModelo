@@ -50,6 +50,8 @@ internal data class ConceptualPasteContext(
     val layoutHeightPx: Float,
     val panX: Float,
     val panY: Float,
+    /** Canvas zoom (1 = 100%); used with [panX]/[panY] to map viewport centre to model space. */
+    val zoom: Float = 1f,
     /** Model-space point under the pointer when [isPointerOverCanvas] is true. */
     val pointerModelX: Float?,
     val pointerModelY: Float?,
@@ -244,8 +246,8 @@ private fun pasteTranslationPx(
     if (sourceEditorTabId >= 0L && ctx.targetEditorTabId == sourceEditorTabId) {
         return Pair(PASTE_SAME_TAB_NUDGE_PX, PASTE_SAME_TAB_NUDGE_PX)
     }
-    val modelCx = (ctx.layoutWidthPx / 2f - ctx.panX).roundToInt()
-    val modelCy = (ctx.layoutHeightPx / 2f - ctx.panY).roundToInt()
+    val modelCx = ((ctx.layoutWidthPx / 2f - ctx.panX) / ctx.zoom.coerceAtLeast(1e-4f)).roundToInt()
+    val modelCy = ((ctx.layoutHeightPx / 2f - ctx.panY) / ctx.zoom.coerceAtLeast(1e-4f)).roundToInt()
     return Pair(
         modelCx - fragmentBounds.centerX,
         modelCy - fragmentBounds.centerY,

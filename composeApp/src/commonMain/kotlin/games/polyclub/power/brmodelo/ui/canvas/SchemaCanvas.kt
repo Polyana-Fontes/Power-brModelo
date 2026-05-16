@@ -23,6 +23,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
 import games.polyclub.power.brmodelo.domain.ConceptualBulkDeleteBand
@@ -55,6 +56,8 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.input.pointer.changedToDown
 import androidx.compose.ui.input.pointer.changedToDownIgnoreConsumed
 import androidx.compose.ui.input.pointer.isPrimaryPressed
@@ -101,6 +104,7 @@ import games.polyclub.power.brmodelo.ui.invertCanvasPointerScrollPan
 import games.polyclub.power.brmodelo.ui.isDesktopTarget
 import games.polyclub.power.brmodelo.ui.toPlacementKindOrNull
 import kotlin.math.abs
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -111,12 +115,14 @@ internal data class SchemaCanvasViewState(
     val layoutHeightPx: Float = 0f,
     val panX: Float = 0f,
     val panY: Float = 0f,
+    /** View scale applied to model coordinates (1 = 100%). */
+    val zoom: Float = 1f,
     val pointerViewX: Float? = null,
     val pointerViewY: Float? = null,
     val isPointerOverCanvas: Boolean = false,
 ) {
-    fun pointerModelX(): Float? = pointerViewX?.let { it - panX }
-    fun pointerModelY(): Float? = pointerViewY?.let { it - panY }
+    fun pointerModelX(): Float? = pointerViewX?.let { (it - panX) / zoom.coerceAtLeast(1e-4f) }
+    fun pointerModelY(): Float? = pointerViewY?.let { (it - panY) / zoom.coerceAtLeast(1e-4f) }
 }
 
 // Background colour of the canvas (light grey, matching the original brModelo canvas background)
@@ -124,6 +130,30 @@ private val CANVAS_BG = Color(0xFFE8E8E8)
 // Dot-grid colour (subtle)
 private val GRID_DOT = Color(0xFFCCCCCC)
 private const val GRID_STEP = 20f
+
+private const val CANVAS_ZOOM_MIN = 0.25f
+private const val CANVAS_ZOOM_MAX = 4f
+private const val CANVAS_ZOOM_KEYBOARD_STEP = 1.12f
+private const val CANVAS_ZOOM_WHEEL_FACTOR = 1.09f
+
+/** Converts a point in the canvas view to conceptual model coordinates ([pan] + model×[zoom]). */
+internal fun viewOffsetToModel(view: Offset, pan: Offset, zoom: Float): Offset {
+    val z = zoom.coerceAtLeast(1e-4f)
+    return Offset((view.x - pan.x) / z, (view.y - pan.y) / z)
+}
+
+private fun panKeepingModelUnderViewPoint(
+    viewFocus: Offset,
+    pan: Offset,
+    oldZoom: Float,
+    newZoom: Float,
+): Offset {
+    val z0 = oldZoom.coerceAtLeast(1e-4f)
+    val z1 = newZoom.coerceAtLeast(1e-4f)
+    val mx = (viewFocus.x - pan.x) / z0
+    val my = (viewFocus.y - pan.y) / z0
+    return Offset(viewFocus.x - mx * z1, viewFocus.y - my * z1)
+}
 private val BULK_BAND_FILL = Color(0x40FF3B3B)
 private val BULK_BAND_STROKE = Color(0xFFCC0000)
 private val SELECTION_BAND_FILL = Color(0x402E7DFF)
@@ -171,6 +201,9 @@ private val SELECTION_BAND_STROKE = Color(0xFF0060C0)
  * @param editorTabSessionId [games.polyclub.power.brmodelo.ui.EditorTabSession.id] for the canvas tab (for "Ligar objetos" second-click validation).
  * @param keyboardRemapVerticalScrollPanToHorizontal Desktop only: when true, vertical scroll maps to horizontal pan;
  *   fed from AWT (Shift only).
+ * @param zoom View scale for model coordinates (1 = 100%). Updated by pinch and Ctrl+wheel; keyboard shortcuts
+ *   are handled in [games.polyclub.power.brmodelo.ui.MainCanvasPanel] and passed via [onZoomChange].
+ * @param onZoomChange Notifies parent when [zoom] should change (pinch / Ctrl+scroll).
  * @param onViewStateChange Optional hook for layout, pan, and hover pointer (view coordinates) —
  *   used to anchor clipboard paste in model space.
  * @param requestCenterOnModelBounds When non-null, recentres the viewport on these model-space bounds
@@ -192,6 +225,8 @@ internal fun SchemaCanvas(
     onSelectionBandUiChange: (SelectionBandUiState?) -> Unit = {},
     editorTabSessionId: Long = -1L,
     keyboardRemapVerticalScrollPanToHorizontal: Boolean = false,
+    zoom: Float = 1f,
+    onZoomChange: (Float) -> Unit = {},
     toolCursorModifier: Modifier = Modifier,
     canvasFocusRequester: FocusRequester? = null,
     onViewStateChange: ((SchemaCanvasViewState) -> Unit)? = null,
@@ -208,6 +243,7 @@ internal fun SchemaCanvas(
     var hiddenAttributesTooltipAnchor by remember { mutableStateOf<Pair<Offset, String>?>(null) }
     val hoverSchemaForTooltip by rememberUpdatedState(schema)
     val hoverPanForTooltip by rememberUpdatedState(panOffset)
+    val hoverZoomForTooltip by rememberUpdatedState(zoom)
 
     // rememberUpdatedState lets the gesture handler always see the latest values
     // without restarting the gesture on every recomposition.
@@ -228,10 +264,12 @@ internal fun SchemaCanvas(
     val currentLayoutDirection by rememberUpdatedState(layoutDirection)
     val currentEditorTabSessionId by rememberUpdatedState(editorTabSessionId)
     val currentKeyboardRemapVerticalScrollPan by rememberUpdatedState(keyboardRemapVerticalScrollPanToHorizontal)
+    val currentZoom by rememberUpdatedState(zoom)
+    val onZoomChangeCb by rememberUpdatedState(onZoomChange)
     val onViewStateChangeCb by rememberUpdatedState(onViewStateChange)
     val onCenterBoundsConsumed by rememberUpdatedState(onRequestCenterOnModelBoundsConsumed)
 
-    LaunchedEffect(requestCenterOnModelBounds, layoutSize.width, layoutSize.height) {
+    LaunchedEffect(requestCenterOnModelBounds, layoutSize.width, layoutSize.height, zoom) {
         val bounds = requestCenterOnModelBounds ?: return@LaunchedEffect
         val w = layoutSize.width
         val h = layoutSize.height
@@ -239,7 +277,8 @@ internal fun SchemaCanvas(
         val b = bounds.coercedToMinimumDimensions()
         val cx = b.x + b.width * 0.5f
         val cy = b.y + b.height * 0.5f
-        panOffset = Offset(w * 0.5f - cx, h * 0.5f - cy)
+        val z = zoom.coerceAtLeast(1e-4f)
+        panOffset = Offset(w * 0.5f - cx * z, h * 0.5f - cy * z)
         onCenterBoundsConsumed()
     }
 
@@ -251,6 +290,7 @@ internal fun SchemaCanvas(
                 layoutHeightPx = currentLayoutSize.height,
                 panX = currentPanOffset.x,
                 panY = currentPanOffset.y,
+                zoom = currentZoom,
                 pointerViewX = pointerLocal?.x,
                 pointerViewY = pointerLocal?.y,
                 isPointerOverCanvas = over,
@@ -265,6 +305,7 @@ internal fun SchemaCanvas(
                 layoutHeightPx = layoutSize.height,
                 panX = panOffset.x,
                 panY = panOffset.y,
+                zoom = zoom,
                 pointerViewX = pointerView?.x,
                 pointerViewY = pointerView?.y,
                 isPointerOverCanvas = pointerOverCanvas,
@@ -285,7 +326,12 @@ internal fun SchemaCanvas(
             .background(CANVAS_BG)
             // This block is the OUTER pointerInput so scroll/multitouch runs without starving the inner
             // gesture detector (middle/right-button pan uses [awaitCanvasGestureFirstDown] in the inner block).
-            .pointerInput(invertCanvasPointerScrollPan, canvasPointerScrollPanGain) {
+            .pointerInput(
+                invertCanvasPointerScrollPan,
+                canvasPointerScrollPanGain,
+                currentZoom,
+                currentPanOffset,
+            ) {
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent()
@@ -296,15 +342,26 @@ internal fun SchemaCanvas(
                                 currentOnBulkDeleteUiChange(null)
                             }
                             currentOnSelectionBandUiChange(null)
-                            val panBase = panOffset
-                            val centroidStart = centroidOfOffsets(pressedForPan.map { it.position })
+                            val pr0 = pressedForPan.take(2)
+                            val p0a = pr0[0].position
+                            val p0b = pr0[1].position
+                            val dist0 = (p0b - p0a).getDistance().coerceAtLeast(1f)
+                            val cent0 = centroidOfOffsets(listOf(p0a, p0b))
+                            val pan0 = currentPanOffset
+                            val zoom0 = currentZoom
                             event.changes.forEach { it.consume() }
                             while (true) {
                                 val inner = awaitPointerEvent()
                                 val pr = inner.changes.filter { it.pressed }
                                 if (pr.size < 2) break
-                                val cNow = centroidOfOffsets(pr.map { it.position })
-                                panOffset = panBase + (cNow - centroidStart)
+                                val p1a = pr[0].position
+                                val p1b = pr[1].position
+                                val dist = (p1b - p1a).getDistance().coerceAtLeast(1f)
+                                val cent = centroidOfOffsets(listOf(p1a, p1b))
+                                val newZoom = (zoom0 * dist / dist0).coerceIn(CANVAS_ZOOM_MIN, CANVAS_ZOOM_MAX)
+                                val model = viewOffsetToModel(cent0, pan0, zoom0)
+                                panOffset = Offset(cent.x - model.x * newZoom, cent.y - model.y * newZoom)
+                                onZoomChangeCb(newZoom)
                                 inner.changes.forEach { it.consume() }
                             }
                             continue
@@ -316,14 +373,44 @@ internal fun SchemaCanvas(
                                 rawScroll += change.scrollDelta
                             }
                             if (rawScroll != Offset.Zero) {
-                                val panDelta = scrollDeltaForCanvasPan(
-                                    rawScroll,
-                                    pointerShiftPressed = event.keyboardModifiers.isShiftPressed,
-                                    keyboardRemapVerticalToHorizontal = currentKeyboardRemapVerticalScrollPan,
-                                )
-                                if (panDelta != Offset.Zero) {
-                                    panOffset += panDelta
+                                val ctrlZoom =
+                                    event.keyboardModifiers.isCtrlPressed ||
+                                        event.keyboardModifiers.isMetaPressed
+                                if (ctrlZoom) {
+                                    var wheel = rawScroll.y
+                                    if (abs(rawScroll.x) > abs(rawScroll.y)) {
+                                        wheel = rawScroll.x
+                                    }
+                                    if (invertCanvasPointerScrollPan) {
+                                        wheel = -wheel
+                                    }
+                                    val factor = if (wheel < 0f) {
+                                        CANVAS_ZOOM_WHEEL_FACTOR
+                                    } else {
+                                        1f / CANVAS_ZOOM_WHEEL_FACTOR
+                                    }
+                                    val newZ = (currentZoom * factor).coerceIn(CANVAS_ZOOM_MIN, CANVAS_ZOOM_MAX)
+                                    if (abs(newZ - currentZoom) > 1e-4f) {
+                                        val focal = centroidOfOffsets(event.changes.map { it.position })
+                                        panOffset = panKeepingModelUnderViewPoint(
+                                            focal,
+                                            currentPanOffset,
+                                            currentZoom,
+                                            newZ,
+                                        )
+                                        onZoomChangeCb(newZ)
+                                    }
                                     event.changes.forEach { ch -> ch.consume() }
+                                } else {
+                                    val panDelta = scrollDeltaForCanvasPan(
+                                        rawScroll,
+                                        pointerShiftPressed = event.keyboardModifiers.isShiftPressed,
+                                        keyboardRemapVerticalToHorizontal = currentKeyboardRemapVerticalScrollPan,
+                                    )
+                                    if (panDelta != Offset.Zero) {
+                                        panOffset += panDelta
+                                        event.changes.forEach { ch -> ch.consume() }
+                                    }
                                 }
                             }
                         }
@@ -369,6 +456,7 @@ internal fun SchemaCanvas(
                     }
 
                     val panAtGestureStart = currentPanOffset
+                    val zoomAtGestureStart = currentZoom
                     val schemaAtGestureStart = currentSchema
                     val selAtGestureStart = currentSelection
 
@@ -389,11 +477,11 @@ internal fun SchemaCanvas(
                                 lastPointer = change.position
                                 if (!change.pressed) {
                                     if (isDraggingBand) {
-                                        val band = ConceptualBulkDeleteBand.fromCorners(
-                                            startPointer.x - panAtGestureStart.x,
-                                            startPointer.y - panAtGestureStart.y,
-                                            lastPointer.x - panAtGestureStart.x,
-                                            lastPointer.y - panAtGestureStart.y,
+                                        val band = conceptualBulkDeleteBandFromViewDiagonal(
+                                            startPointer,
+                                            lastPointer,
+                                            panAtGestureStart,
+                                            zoomAtGestureStart,
                                         )
                                         val ids = bulkDeleteResolvedIds(schemaAtGestureStart, band)
                                         if (ids.isNotEmpty()) {
@@ -413,11 +501,11 @@ internal fun SchemaCanvas(
                             lastPointer = change.position
                             if (!change.pressed) {
                                 if (isDraggingBand) {
-                                    val band = ConceptualBulkDeleteBand.fromCorners(
-                                        startPointer.x - panAtGestureStart.x,
-                                        startPointer.y - panAtGestureStart.y,
-                                        lastPointer.x - panAtGestureStart.x,
-                                        lastPointer.y - panAtGestureStart.y,
+                                    val band = conceptualBulkDeleteBandFromViewDiagonal(
+                                        startPointer,
+                                        lastPointer,
+                                        panAtGestureStart,
+                                        zoomAtGestureStart,
                                     )
                                     val ids = bulkDeleteResolvedIds(schemaAtGestureStart, band)
                                     if (ids.isNotEmpty()) {
@@ -437,11 +525,11 @@ internal fun SchemaCanvas(
                             }
                             if (isDraggingBand) {
                                 change.consume()
-                                val band = ConceptualBulkDeleteBand.fromCorners(
-                                    startPointer.x - panAtGestureStart.x,
-                                    startPointer.y - panAtGestureStart.y,
-                                    lastPointer.x - panAtGestureStart.x,
-                                    lastPointer.y - panAtGestureStart.y,
+                                val band = conceptualBulkDeleteBandFromViewDiagonal(
+                                    startPointer,
+                                    lastPointer,
+                                    panAtGestureStart,
+                                    zoomAtGestureStart,
                                 )
                                 val marked = bulkDeleteResolvedIds(schemaAtGestureStart, band)
                                 val counts = bulkDeleteCategoryCounts(schemaAtGestureStart, marked)
@@ -461,6 +549,7 @@ internal fun SchemaCanvas(
                         runRectangleSelectionGesture(
                             down = down,
                             panAtGestureStart = panAtGestureStart,
+                            zoomAtGestureStart = zoomAtGestureStart,
                             schema = schemaAtGestureStart,
                             selectionAtStart = selAtGestureStart,
                             additive = shiftHeldOnPrimary,
@@ -480,6 +569,7 @@ internal fun SchemaCanvas(
                         runRectangleSelectionGesture(
                             down = down,
                             panAtGestureStart = panAtGestureStart,
+                            zoomAtGestureStart = zoomAtGestureStart,
                             schema = schemaAtGestureStart,
                             selectionAtStart = selAtGestureStart,
                             additive = true,
@@ -491,7 +581,7 @@ internal fun SchemaCanvas(
                         return@awaitEachGesture
                     }
 
-                    val schemaPoint = down.position - panAtGestureStart
+                    val schemaPoint = viewOffsetToModel(down.position, panAtGestureStart, zoomAtGestureStart)
                     val shiftHeldAtGestureStart = currentEvent.keyboardModifiers.isShiftPressed
 
                     val autoRelTool = currentConceptualTool as? ConceptualCanvasTool.AutoSelfRelationship
@@ -829,6 +919,7 @@ internal fun SchemaCanvas(
                                 panOffset = panAtGestureStart + totalDrag
                             } else {
                                 val s = schemaSnapshot
+                                val zInv = 1f / zoomAtGestureStart.coerceAtLeast(1e-4f)
                                 when {
                                     // ── Resize cardinality label (manual size) ────────
                                     hitHandle != null &&
@@ -838,7 +929,7 @@ internal fun SchemaCanvas(
                                             applyResize(
                                                 handle = hitHandle,
                                                 startPos = startCardinalityResizePos,
-                                                totalDelta = totalDrag,
+                                                totalDelta = Offset(totalDrag.x * zInv, totalDrag.y * zInv),
                                             )
                                         didMutateSchemaDuringDrag = true
                                         currentOnSchemaPreview(
@@ -862,7 +953,7 @@ internal fun SchemaCanvas(
                                             applyResize(
                                                 handle = hitHandle,
                                                 startPos = startElementPos,
-                                                totalDelta = totalDrag,
+                                                totalDelta = Offset(totalDrag.x * zInv, totalDrag.y * zInv),
                                             )
                                         val elem = s.elements[dragElementId]
                                         if (elem != null) {
@@ -882,8 +973,8 @@ internal fun SchemaCanvas(
                                         didMutateSchemaDuringDrag = true
                                         val movingSchema: ConceptualSchema = schemaSnapshot
                                         val (ids, startPositions) = multiElementDragSnapshot
-                                        val dx = totalDrag.x.toInt()
-                                        val dy = totalDrag.y.toInt()
+                                        val dx = (totalDrag.x * zInv).toInt()
+                                        val dy = (totalDrag.y * zInv).toInt()
                                         var schemaMoved: ConceptualSchema = movingSchema
                                         for ((id, startPos) in startPositions) {
                                             val el = schemaMoved.elements[id] ?: continue
@@ -930,8 +1021,8 @@ internal fun SchemaCanvas(
                                             if (basePos != null) {
                                                 didMutateSchemaDuringDrag = true
                                                 val newPos = basePos.copy(
-                                                    x = basePos.x + totalDrag.x.toInt(),
-                                                    y = basePos.y + totalDrag.y.toInt(),
+                                                    x = basePos.x + (totalDrag.x * zInv).toInt(),
+                                                    y = basePos.y + (totalDrag.y * zInv).toInt(),
                                                 )
                                                 val newConn = conn.copy(cardinalityPosition = newPos)
                                                 val newConns = s.connections.map {
@@ -952,7 +1043,7 @@ internal fun SchemaCanvas(
                     }
                 }
             }
-            .pointerInput(hoverSchemaForTooltip, hoverPanForTooltip) {
+            .pointerInput(hoverSchemaForTooltip, hoverPanForTooltip, hoverZoomForTooltip) {
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent()
@@ -969,7 +1060,7 @@ internal fun SchemaCanvas(
                                     hiddenAttributesTooltipAnchor = null
                                     continue
                                 }
-                                val schemaPoint = pos - hoverPanForTooltip
+                                val schemaPoint = viewOffsetToModel(pos, hoverPanForTooltip, hoverZoomForTooltip)
                                 val hit = hitTestElement(sch, schemaPoint)
                                 val id = (hit as? CanvasSelection.Element)?.id
                                 if (id == null) {
@@ -998,41 +1089,43 @@ internal fun SchemaCanvas(
             },
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            // Optional dot grid (subtle background reference grid)
-            val cols = (size.width / GRID_STEP).toInt() + 2
-            val rows = (size.height / GRID_STEP).toInt() + 2
-            val offsetX = panOffset.x % GRID_STEP
-            val offsetY = panOffset.y % GRID_STEP
-            for (col in 0..cols) {
-                for (row in 0..rows) {
-                    drawCircle(
-                        GRID_DOT,
-                        radius = 1f,
-                        center = Offset(offsetX + col * GRID_STEP, offsetY + row * GRID_STEP),
-                    )
-                }
-            }
-
-            if (schema != null) {
-                translate(panOffset.x, panOffset.y) {
-                    val linkHighlightId =
-                        when (val t = conceptualCanvasTool) {
-                            is ConceptualCanvasTool.LinkObjects.AwaitingSecond -> t.first.elementId
-                            else -> null
+            val z = zoom.coerceAtLeast(1e-4f)
+            translate(panOffset.x, panOffset.y) {
+                scale(z, z, Offset.Zero) {
+                    val vpMinX = (-panOffset.x) / z
+                    val vpMaxX = (size.width - panOffset.x) / z
+                    val vpMinY = (-panOffset.y) / z
+                    val vpMaxY = (size.height - panOffset.y) / z
+                    var gx = floor(vpMinX / GRID_STEP) * GRID_STEP
+                    while (gx <= vpMaxX + GRID_STEP) {
+                        var gy = floor(vpMinY / GRID_STEP) * GRID_STEP
+                        while (gy <= vpMaxY + GRID_STEP) {
+                            drawCircle(GRID_DOT, radius = 1f, center = Offset(gx, gy))
+                            gy += GRID_STEP
                         }
-                    val bulkHighlightIds = bulkDeleteUiState?.markedElementIds ?: emptySet()
-                    val selectionBandHighlightIds = selectionBandUiState?.markedElementIds ?: emptySet()
-                    val selectionBandCardinalityIds =
-                        selectionBandUiState?.markedCardinalityConnectionIds ?: emptySet()
-                    drawSchema(
-                        schema,
-                        textMeasurer,
-                        selection,
-                        linkHighlightId,
-                        bulkHighlightIds,
-                        selectionBandHighlightIds,
-                        selectionBandHighlightCardinalityConnectionIds = selectionBandCardinalityIds,
-                    )
+                        gx += GRID_STEP
+                    }
+
+                    if (schema != null) {
+                        val linkHighlightId =
+                            when (val t = conceptualCanvasTool) {
+                                is ConceptualCanvasTool.LinkObjects.AwaitingSecond -> t.first.elementId
+                                else -> null
+                            }
+                        val bulkHighlightIds = bulkDeleteUiState?.markedElementIds ?: emptySet()
+                        val selectionBandHighlightIds = selectionBandUiState?.markedElementIds ?: emptySet()
+                        val selectionBandCardinalityIds =
+                            selectionBandUiState?.markedCardinalityConnectionIds ?: emptySet()
+                        drawSchema(
+                            schema,
+                            textMeasurer,
+                            selection,
+                            linkHighlightId,
+                            bulkHighlightIds,
+                            selectionBandHighlightIds,
+                            selectionBandHighlightCardinalityConnectionIds = selectionBandCardinalityIds,
+                        )
+                    }
                 }
             }
 
@@ -1110,6 +1203,7 @@ internal fun SchemaCanvas(
 private suspend fun AwaitPointerEventScope.runRectangleSelectionGesture(
     down: PointerInputChange,
     panAtGestureStart: Offset,
+    zoomAtGestureStart: Float,
     schema: ConceptualSchema,
     selectionAtStart: CanvasSelection,
     additive: Boolean,
@@ -1119,12 +1213,7 @@ private suspend fun AwaitPointerEventScope.runRectangleSelectionGesture(
     onSelectionChange: (CanvasSelection) -> Unit,
 ) {
     fun commitBandSelection(start: Offset, end: Offset) {
-        val band = ConceptualBulkDeleteBand.fromCorners(
-            start.x - panAtGestureStart.x,
-            start.y - panAtGestureStart.y,
-            end.x - panAtGestureStart.x,
-            end.y - panAtGestureStart.y,
-        )
+        val band = conceptualBulkDeleteBandFromViewDiagonal(start, end, panAtGestureStart, zoomAtGestureStart)
         val pick = selectionBandGeometricPick(schema, band, textMeasurer)
         onSelectionChange(
             mergeCanvasBandPick(additive, selectionAtStart, pick.elementIds, pick.cardinalityConnectionIds),
@@ -1157,7 +1246,7 @@ private suspend fun AwaitPointerEventScope.runRectangleSelectionGesture(
             if (isDraggingBand) {
                 commitBandSelection(startPointer, lastPointer)
             } else {
-                val schemaPoint = down.position - panAtGestureStart
+                val schemaPoint = viewOffsetToModel(down.position, panAtGestureStart, zoomAtGestureStart)
                 val hit = hitTest(schema, schemaPoint, textMeasurer)
                 if (additive) {
                     when (hit) {
@@ -1188,11 +1277,11 @@ private suspend fun AwaitPointerEventScope.runRectangleSelectionGesture(
         }
         if (isDraggingBand) {
             change.consume()
-            val band = ConceptualBulkDeleteBand.fromCorners(
-                startPointer.x - panAtGestureStart.x,
-                startPointer.y - panAtGestureStart.y,
-                lastPointer.x - panAtGestureStart.x,
-                lastPointer.y - panAtGestureStart.y,
+            val band = conceptualBulkDeleteBandFromViewDiagonal(
+                startPointer,
+                lastPointer,
+                panAtGestureStart,
+                zoomAtGestureStart,
             )
             val pick = selectionBandGeometricPick(schema, band, textMeasurer)
             val (e0, c0) = selectionAtStart.toMultiPickSets()
@@ -1292,6 +1381,17 @@ private fun normalizedBulkDeleteViewRect(a: Offset, b: Offset): Rect {
     val right = max(a.x, b.x)
     val bottom = max(a.y, b.y)
     return Rect(left, top, right, bottom)
+}
+
+private fun conceptualBulkDeleteBandFromViewDiagonal(
+    viewA: Offset,
+    viewB: Offset,
+    pan: Offset,
+    zoom: Float,
+): ConceptualBulkDeleteBand {
+    val ma = viewOffsetToModel(viewA, pan, zoom)
+    val mb = viewOffsetToModel(viewB, pan, zoom)
+    return ConceptualBulkDeleteBand.fromCorners(ma.x, ma.y, mb.x, mb.y)
 }
 
 private fun processSpecializationToolTap(
