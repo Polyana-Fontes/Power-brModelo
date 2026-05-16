@@ -39,6 +39,7 @@ import games.polyclub.power.brmodelo.domain.CanvasSelectionRectangleMergeMode
 import games.polyclub.power.brmodelo.domain.serialization.ConceptualSchemaXmlSerializer
 import games.polyclub.power.brmodelo.domain.tryBuildCanvasSelectionFromMcpPickLists
 import games.polyclub.power.brmodelo.domain.elementIdsForClipboard
+import games.polyclub.power.brmodelo.domain.expandElementIdsForSubsetRasterExport
 import games.polyclub.power.brmodelo.domain.selectedPickCount
 import games.polyclub.power.brmodelo.domain.toMultiPickSets
 import games.polyclub.power.brmodelo.ui.ConceptualSubsetRasterFormat
@@ -1046,6 +1047,10 @@ internal actual class McpRuntime {
             """{"type":"object","properties":{$tabUri,"imageFormat":{"type":"string","enum":["png","jpg","jpeg"],"description":"Omit for JSON-only. When set, the tool result also includes MCP image content (base64) of the selected subgraph — same expansion as Ctrl+C / """ +
                 McpExportToolNames.SUBSET_RASTER +
                 """."}},"required":["resourceUri"],"additionalProperties":false}"""
+        val canvasElementsDetailSchema =
+            """{"type":"object","properties":{$tabUri,"elementIds":{"type":"array","items":{"type":"integer"},"minItems":1,"description":"One or more canvas element ids (order preserved in the response)."},"imageFormat":{"type":"string","enum":["png","jpg","jpeg"],"description":"Omit for JSON-only. When set, the tool result also includes MCP image content (base64) for the expanded subgraph — same expansion as Ctrl+C / """ +
+                McpExportToolNames.SUBSET_RASTER +
+                """."}},"required":["resourceUri","elementIds"],"additionalProperties":false}"""
         return listOf(
             syncTool(
                 jsonMapper,
@@ -1150,6 +1155,86 @@ internal actual class McpRuntime {
                             return@syncTool okJsonPlusMcpImage(json, imageMime, imageBytes)
                         }
                         return@syncTool okText(json)
+                    }
+                }
+            },
+            syncTool(
+                jsonMapper,
+                name = McpExportToolNames.CANVAS_ELEMENTS_DETAIL,
+                title = "Get canvas element details by id",
+                description = "Returns structured JSON for each requested canvas `elementId` on a conceptual tab (`elementKind`, geometry, names, and kind-specific fields — same shape as procedural placement tool element JSON). " +
+                    "Missing ids are reported with `found`: false. " +
+                    "`incidentConnections` lists every diagram leg that touches **at least one** resolved id from the request (both connection endpoints exist in the tab schema). " +
+                    "`elementIdsExpanded` is the Ctrl+C-style id closure used when rasterizing (attribute trees on included holders). " +
+                    "Omit `imageFormat` for JSON-only. When `imageFormat` is `png`, `jpg`, or `jpeg`, the result also includes MCP image content (base64) for that subgraph — transparent PNG vs opaque JPEG styling matches " +
+                    McpExportToolNames.SUBSET_RASTER +
+                    " / Ctrl+C clipboard preview. " +
+                    "Pass `resourceUri` from tabs__list_open. " +
+                    McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
+                schema = canvasElementsDetailSchema,
+            ) { _, req ->
+                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
+                val requested = intListFromMcpAny(req.arguments()["elementIds"])
+                if (requested.isEmpty()) {
+                    return@syncTool err("elementIds_required_or_invalid")
+                }
+                val imageFmtRaw = stringArg(req, "imageFormat")
+                val wantRaster = imageFmtRaw != null
+                val encFormat = when (imageFmtRaw?.lowercase()?.trim()) {
+                    null -> null
+                    "png" -> ConceptualSubsetRasterFormat.PngTransparentBackground
+                    "jpg", "jpeg" -> ConceptualSubsetRasterFormat.JpegOpaqueCanvasGrayBackground
+                    else -> return@syncTool err("imageFormat_must_be_png_jpg_jpeg_or_omit")
+                }
+                val outcome = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt CanvasElementsDetailOutcome.Failed("bindings_unavailable")
+                    val snap = b.current()
+                    if (idx !in snap.sessions.indices) return@runOnEdt CanvasElementsDetailOutcome.Failed("invalid_tab_index")
+                    val tab = snap.sessions[idx]
+                    val schema = tab.schema
+                    val expanded = expandElementIdsForSubsetRasterExport(schema, requested).sorted()
+                    val elementsJson = requested.joinToString(separator = ",", prefix = "[", postfix = "]") { id ->
+                        val el = schema.elements[id]
+                        if (el != null) {
+                            """{"elementId":$id,"found":true,"element":${McpConceptualToolElementResponseJson.elementSummary(el)}}"""
+                        } else {
+                            """{"elementId":$id,"found":false}"""
+                        }
+                    }
+                    val foundIds = requested.filter { it in schema.elements.keys }.toSet()
+                    val incidentConns = schema.connections
+                        .filter { it.elementIdA in foundIds || it.elementIdB in foundIds }
+                        .sortedBy { it.id }
+                    val connsJson = incidentConns.joinToString(separator = ",", prefix = "[", postfix = "]") { c ->
+                        McpConnectionToolResponseJson.connectionSummary(c)
+                    }
+                    val resourceUriJson = jsonString(modelResourceUriForSession(tab.id))
+                    val requestedJson = jsonIntArray(requested)
+                    val expandedJson = jsonIntArray(expanded)
+                    val imageFormatJson = imageFmtRaw?.trim()?.lowercase()?.let { jsonString(it) } ?: "null"
+                    if (wantRaster) {
+                        if (expanded.isEmpty()) {
+                            return@runOnEdt CanvasElementsDetailOutcome.Failed("no_elements_resolve_for_subset_raster")
+                        }
+                        val enc = b.onEncodeConceptualElementSubsetRaster(idx, expanded, encFormat!!)
+                            ?: return@runOnEdt CanvasElementsDetailOutcome.Failed("subset_raster_encode_failed")
+                        val jsonText =
+                            """{"ok":true,"resourceUri":$resourceUriJson,"elementIdsRequested":$requestedJson,"elements":$elementsJson,"incidentConnections":$connsJson,"elementIdsExpanded":$expandedJson,"imageFormat":$imageFormatJson,"hasRaster":true,"mimeType":${jsonString(enc.mimeType)},"widthPx":${enc.widthPx},"heightPx":${enc.heightPx}}"""
+                        return@runOnEdt CanvasElementsDetailOutcome.Ready(jsonText, enc.bytes, enc.mimeType)
+                    }
+                    val jsonText =
+                        """{"ok":true,"resourceUri":$resourceUriJson,"elementIdsRequested":$requestedJson,"elements":$elementsJson,"incidentConnections":$connsJson,"elementIdsExpanded":$expandedJson,"imageFormat":$imageFormatJson,"hasRaster":false}"""
+                    return@runOnEdt CanvasElementsDetailOutcome.Ready(jsonText, null, null)
+                }
+                when (outcome) {
+                    is CanvasElementsDetailOutcome.Failed -> return@syncTool err(outcome.code)
+                    is CanvasElementsDetailOutcome.Ready -> {
+                        val img = outcome.imageBytes
+                        val mime = outcome.imageMime
+                        if (img != null && mime != null) {
+                            return@syncTool okJsonPlusMcpImage(outcome.jsonText, mime, img)
+                        }
+                        return@syncTool okText(outcome.jsonText)
                     }
                 }
             },
@@ -1372,6 +1457,8 @@ internal actual class McpRuntime {
         return ElementPosition(x, y, w, h)
     }
 
+    private fun resourceUtilityReadToolSuccessPlainText(rawBody: String): String = "OK:\n$rawBody"
+
     private fun buildResourceUtilityTools(
         jsonMapper: io.modelcontextprotocol.json.McpJsonMapper,
     ): List<McpServerFeatures.SyncToolSpecification> {
@@ -1384,6 +1471,7 @@ internal actual class McpRuntime {
                 title = "Read full MCP resource text",
                 description = "Returns the entire UTF-16 text body for a registered resource URI when that URI is plain text (same content as resources/read for tab XML, DTD, and examples). " +
                     "Does not apply to live tab `.png`/`.jpg` resources — use MCP resources/read for those. " +
+                    "On success the tool result is **plain text** (not JSON): the first line is exactly `OK:`, and from the second line onward is the raw resource string. " +
                     "Prefer this when you need the exact serialized string without HTTP resource round-trips.",
                 schema = """{"type":"object","properties":{$uriProp},"required":["uri"],"additionalProperties":false}""",
             ) { _, req ->
@@ -1392,16 +1480,15 @@ internal actual class McpRuntime {
                 if (text == null) {
                     return@syncTool err(code ?: "read_failed")
                 }
-                okText(
-                    """{"ok":true,"uri":${jsonString(uri)},"characterLength":${text.length},"content":${jsonString(text)}}""",
-                )
+                okText(resourceUtilityReadToolSuccessPlainText(text))
             },
             syncTool(
                 jsonMapper,
                 name = McpResourceUtilityToolNames.READ_LINES,
                 title = "Read MCP resource text by line range",
                 description = "Returns a slice of the resource text using 1-based line numbers inclusive on both ends (newline character is `\\n`). " +
-                    "If endLine is past EOF, the slice ends at the last line.",
+                    "If endLine is past EOF, the slice ends at the last line. " +
+                    "On success the tool result is **plain text** (not JSON): the first line is exactly `OK:`, and from the second line onward is the raw slice.",
                 schema = """{"type":"object","properties":{$uriProp,"startLine":{"type":"integer","minimum":1},"endLine":{"type":"integer","minimum":1}},"required":["uri","startLine","endLine"],"additionalProperties":false}""",
             ) { _, req ->
                 val uri = stringArg(req, "uri") ?: return@syncTool err("uri required")
@@ -1415,16 +1502,15 @@ internal actual class McpRuntime {
                 if (slice == null) {
                     return@syncTool err(err ?: "line_slice_failed")
                 }
-                okText(
-                    """{"ok":true,"uri":${jsonString(uri)},"startLine":$startLine,"endLine":$endLine,"content":${jsonString(slice)}}""",
-                )
+                okText(resourceUtilityReadToolSuccessPlainText(slice))
             },
             syncTool(
                 jsonMapper,
                 name = McpResourceUtilityToolNames.READ_RANGE,
                 title = "Read MCP resource text by character index range",
                 description = "Returns text.substring(startIndex, endIndex) using Kotlin/Java semantics: startIndex is inclusive, " +
-                    "endIndex is exclusive, both are 0-based UTF-16 code unit indices.",
+                    "endIndex is exclusive, both are 0-based UTF-16 code unit indices. " +
+                    "On success the tool result is **plain text** (not JSON): the first line is exactly `OK:`, and from the second line onward is the raw substring.",
                 schema = """{"type":"object","properties":{$uriProp,"startIndex":{"type":"integer","minimum":0},"endIndex":{"type":"integer","minimum":0}},"required":["uri","startIndex","endIndex"],"additionalProperties":false}""",
             ) { _, req ->
                 val uri = stringArg(req, "uri") ?: return@syncTool err("uri required")
@@ -1438,9 +1524,7 @@ internal actual class McpRuntime {
                 if (slice == null) {
                     return@syncTool err(err ?: "range_slice_failed")
                 }
-                okText(
-                    """{"ok":true,"uri":${jsonString(uri)},"startIndex":$startIndex,"endIndex":$endIndex,"content":${jsonString(slice)}}""",
-                )
+                okText(resourceUtilityReadToolSuccessPlainText(slice))
             },
             syncTool(
                 jsonMapper,
@@ -1519,6 +1603,16 @@ internal actual class McpRuntime {
         }
         val dryRun = boolArg(req, "dryRun") == true
         return null to ParsedLinkObjectsToolCall(idx, endA, endB, relO, connList, dryRun)
+    }
+
+    private sealed class CanvasElementsDetailOutcome {
+        data class Ready(
+            val jsonText: String,
+            val imageBytes: ByteArray?,
+            val imageMime: String?,
+        ) : CanvasElementsDetailOutcome()
+
+        data class Failed(val code: String) : CanvasElementsDetailOutcome()
     }
 
     private fun buildProceduralTools(

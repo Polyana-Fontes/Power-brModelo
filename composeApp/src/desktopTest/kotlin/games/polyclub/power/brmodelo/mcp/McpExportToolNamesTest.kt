@@ -29,7 +29,10 @@ class McpExportToolNamesTest {
         // (constants under test)
 
         // Act & Assert
+        assertEquals("export", McpExportToolNames.EXPORT_GROUP)
+        assertEquals("__", McpExportToolNames.EXPORT_SEPARATOR)
         assertEquals("export__subset_raster", McpExportToolNames.SUBSET_RASTER)
         assertEquals("export__current_canvas_selection", McpExportToolNames.CURRENT_CANVAS_SELECTION)
+        assertEquals("export__canvas_elements_detail", McpExportToolNames.CANVAS_ELEMENTS_DETAIL)
     }
 }

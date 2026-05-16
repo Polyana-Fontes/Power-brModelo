@@ -30,4 +30,7 @@ internal object McpExportToolNames {
 
     /** Snapshot of the user's current canvas selection on a tab (JSON); optional raster like subset_raster when imageFormat is set. */
     val CURRENT_CANVAS_SELECTION = exportTool("current_canvas_selection")
+
+    /** Structured JSON for one or more canvas element ids; optional raster (Ctrl+C-style subgraph) like subset_raster. */
+    val CANVAS_ELEMENTS_DETAIL = exportTool("canvas_elements_detail")
 }
