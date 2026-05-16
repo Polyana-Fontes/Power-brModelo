@@ -532,11 +532,13 @@ object ConceptualSchemaXmlSerializer {
 
     private fun buildFont(style: LabelStyle): XmlNode =
         xmlNode("Fonte", "default" to 0) {
-            add(xmlNode("FonteNome", "Valor" to "Tahoma"))
-            add(xmlNode("FonteTamanho", "Valor" to 8))
+            add(xmlNode("FonteNome", "Valor" to (style.fontFamilyName ?: "Tahoma")))
+            add(xmlNode("FonteTamanho", "Valor" to (style.fontSizePoints ?: 8)))
             val styleStr = buildList {
                 if (style.bold) add("fsBold")
                 if (style.italic) add("fsItalic")
+                if (style.underline) add("fsUnderline")
+                if (style.strikeThrough) add("fsStrikeOut")
             }.joinToString(",").let { if (it.isEmpty()) "[]" else "[$it]" }
             add(xmlNode("FonteEstilo", "Valor" to styleStr))
             add(

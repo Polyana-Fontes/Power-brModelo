@@ -498,6 +498,8 @@ object ConceptualSchemaBrmParser {
             color = parseColorRef(fontColorStr),
             bold = "fsBold" in fontStyles,
             italic = "fsItalic" in fontStyles,
+            underline = "fsUnderline" in fontStyles,
+            strikeThrough = "fsStrikeOut" in fontStyles,
         )
     }
 

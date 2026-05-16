@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import games.polyclub.power.brmodelo.ui.AttributeToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.ClipboardRibbonBinding
+import games.polyclub.power.brmodelo.ui.SelectFontRibbonBinding
 import games.polyclub.power.brmodelo.ui.BulkDeleteObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.RectangleSelectionToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
@@ -141,6 +142,7 @@ internal fun RibbonEsquemaConceitual(
 @Composable
 internal fun RibbonOpcoes(
     clipboardRibbonBinding: ClipboardRibbonBinding? = null,
+    selectFontRibbonBinding: SelectFontRibbonBinding? = null,
     ribbonMcp: RibbonMcpUi? = null,
     onRibbonUserMessage: (String) -> Unit = {},
 ) {
@@ -202,7 +204,8 @@ internal fun RibbonOpcoes(
                 MenuEntry(
                     "Selecionar\nFonte",
                     Res.drawable.fonte_l,
-                    enabled = false,
+                    onClick = selectFontRibbonBinding?.onSelectFont,
+                    enabled = selectFontRibbonBinding?.enabled == true,
                 )
             )
         )

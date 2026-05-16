@@ -190,6 +190,12 @@ internal data class ClipboardRibbonBinding(
     val onPaste: () -> Unit,
 )
 
+/** Ribbon **Selecionar Fonte** (Pascal `Exibir_fonte` / `CfgFonte` + `TFontDialog`). */
+internal data class SelectFontRibbonBinding(
+    val enabled: Boolean,
+    val onSelectFont: () -> Unit,
+)
+
 /** Desktop MCP ribbon controls; null on Wasm (snackbar-only MCP messaging). */
 internal data class RibbonMcpUi(
     val onOpenSettings: () -> Unit,

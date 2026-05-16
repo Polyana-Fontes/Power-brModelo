@@ -112,9 +112,11 @@ import games.polyclub.power.brmodelo.domain.expandCanvasSelectionWithAttributeTr
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.domain.ConceptualSearchOutcome
 import games.polyclub.power.brmodelo.domain.searchConceptualModel
+import games.polyclub.power.brmodelo.domain.singleSelectedElementId
 import games.polyclub.power.brmodelo.domain.organizeAttributesOnOwnerSide
 import games.polyclub.power.brmodelo.domain.relayoutCompositeSubtree
 import games.polyclub.power.brmodelo.domain.ElementPosition
+import games.polyclub.power.brmodelo.domain.LabelStyle
 import games.polyclub.power.brmodelo.domain.SchemaElement
 import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolResult
 import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolVariant
@@ -178,6 +180,9 @@ import games.polyclub.power.brmodelo.ui.MainMenuType
 import games.polyclub.power.brmodelo.ui.PickedFile
 import games.polyclub.power.brmodelo.ui.QuitApplicationUnsavedDialog
 import games.polyclub.power.brmodelo.ui.RibbonMcpUi
+import games.polyclub.power.brmodelo.ui.ConceptualLabelFontChooserDialog
+import games.polyclub.power.brmodelo.ui.ConceptualLabelFontChooserRequest
+import games.polyclub.power.brmodelo.ui.SelectFontRibbonBinding
 import games.polyclub.power.brmodelo.ui.RibbonTab
 import games.polyclub.power.brmodelo.ui.consumeWindowDropFile
 import games.polyclub.power.brmodelo.ui.isDesktopTarget
@@ -214,6 +219,8 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
     var canvasCenterOnBoundsRequest by remember { mutableStateOf<ElementPosition?>(null) }
     var inspectorTabRequest by remember { mutableStateOf<InspectorTab?>(null) }
     var conceptualSearchDialogOpen by remember { mutableStateOf(false) }
+    var conceptualLabelFontChooserNonce by remember { mutableLongStateOf(0L) }
+    var conceptualLabelFontRequest by remember { mutableStateOf<ConceptualLabelFontChooserRequest?>(null) }
 
     LaunchedEffect(conceptualCanvasTool) {
         if (conceptualCanvasTool !is ConceptualCanvasTool.BulkDeleteObjects) {
@@ -617,6 +624,27 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         onCopy = onCopyConceptualClipboard,
         onCut = onCutConceptualClipboard,
         onPaste = onPasteConceptualClipboard,
+    )
+
+    val selectFontRibbonBinding = SelectFontRibbonBinding(
+        enabled = sel.selection.singleSelectedElementId() != null,
+        onSelectFont = {
+            val idx = selectedTabIdxState.value
+            val tab = tabsState.value.getOrNull(idx) ?: return@SelectFontRibbonBinding
+            val eid = tab.selection.singleSelectedElementId() ?: run {
+                scope.launch { snackbarHostState.showSnackbar("Selecione um objeto no diagrama.") }
+                return@SelectFontRibbonBinding
+            }
+            val el = tab.schema.elements[eid] ?: return@SelectFontRibbonBinding
+            conceptualCanvasTool = ConceptualCanvasTool.None
+            conceptualLabelFontChooserNonce += 1L
+            conceptualLabelFontRequest = ConceptualLabelFontChooserRequest(
+                editorTabId = tab.id,
+                elementId = eid,
+                initial = el.labelStyle,
+                openNonce = conceptualLabelFontChooserNonce,
+            )
+        },
     )
 
     val (entityTitle, entityIcon) = entityVariantRibbonPresentation(entityToolVariant)
@@ -1637,6 +1665,7 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                     },
                     onRevealHiddenAttributeInModel = onRevealHiddenAttribute,
                     clipboardRibbonBinding = clipboardRibbonBinding,
+                    selectFontRibbonBinding = selectFontRibbonBinding,
                     onCanvasViewStateChange = { schemaCanvasViewState = it },
                     onCopyRequest = onCopyConceptualClipboard,
                     onCutRequest = onCutConceptualClipboard,
@@ -1663,6 +1692,36 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                         onNavigate = { action ->
                             applyConceptualSearchNavigateAction(action)
                             conceptualSearchDialogOpen = false
+                        },
+                    )
+                }
+
+                conceptualLabelFontRequest?.let { fontReq ->
+                    fun commitLabelFont(chosen: LabelStyle) {
+                        val tabIdx = tabSessions.indexOfFirst { it.id == fontReq.editorTabId }
+                        if (tabIdx < 0) return
+                        val tab = tabSessions[tabIdx]
+                        if (tab.schema.elements[fontReq.elementId] == null) return
+                        val normalized = tab.schema
+                            .withElementLabelStyle(fontReq.elementId, chosen)
+                            .withNormalizedAttributeMultiValuedCounts()
+                        tab.history.push(normalized)
+                        val committed = tab.history.current ?: return
+                        replaceTabAt(
+                            tabIdx,
+                            tab.copy(
+                                schema = committed,
+                                inspectorCommittedSchema = committed,
+                            ),
+                        )
+                    }
+                    ConceptualLabelFontChooserDialog(
+                        request = fontReq,
+                        onDismiss = { conceptualLabelFontRequest = null },
+                        onApply = { chosen -> commitLabelFont(chosen) },
+                        onConfirm = { chosen ->
+                            commitLabelFont(chosen)
+                            conceptualLabelFontRequest = null
                         },
                     )
                 }

@@ -64,7 +64,19 @@ sealed class CanvasSelection {
 fun CanvasSelection.Multiple.totalPickCount(): Int =
     elementIds.size + cardinalityConnectionIds.size
 
-/** Count of selected canvas picks (0, 1, or multi total). Used by the inspector summary. */
+/**
+ * When exactly one [SchemaElement] is selected (single pick or multi with one element and no cardinality picks),
+ * returns its id — same notion as Pascal `TModelo.Selecionado` for ribbon font commands.
+ */
+fun CanvasSelection.singleSelectedElementId(): Int? =
+    when (this) {
+        is CanvasSelection.Element -> id
+        is CanvasSelection.Multiple ->
+            if (cardinalityConnectionIds.isEmpty() && elementIds.size == 1) elementIds.first() else null
+        else -> null
+    }
+
+/** Count of selected canvas picks (0, 1, or multi total). Used for the inspector summary. */
 fun CanvasSelection.selectedPickCount(): Int = when (this) {
     CanvasSelection.None -> 0
     is CanvasSelection.Element,

@@ -75,6 +75,23 @@ private fun mergeLabelStyle(base: LabelStyle, patch: Map<String, Any?>): LabelSt
     }
     parseBoolean(patch["labelBold"])?.let { s = s.copy(bold = it) }
     parseBoolean(patch["labelItalic"])?.let { s = s.copy(italic = it) }
+    parseBoolean(patch["labelUnderline"])?.let { s = s.copy(underline = it) }
+    parseBoolean(patch["labelStrikeThrough"])?.let { s = s.copy(strikeThrough = it) }
+    if (containsKey(patch, "labelFontFamilyName")) {
+        val t = parseTrimmedString(patch["labelFontFamilyName"])
+        s = when {
+            t == null -> s.copy(fontFamilyName = null)
+            t.isEmpty() -> s.copy(fontFamilyName = null)
+            else -> s.copy(fontFamilyName = t)
+        }
+    }
+    if (containsKey(patch, "labelFontSizePoints")) {
+        val raw = patch["labelFontSizePoints"]
+        s = when (raw) {
+            null -> s.copy(fontSizePoints = null)
+            else -> parseInt(raw)?.let { s.copy(fontSizePoints = it) } ?: s
+        }
+    }
     return s
 }
 

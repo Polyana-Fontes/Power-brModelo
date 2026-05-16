@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.sp
+import games.polyclub.power.brmodelo.domain.LabelStyle
 import games.polyclub.power.brmodelo.domain.AnnotationBackgroundColorPresets
 import games.polyclub.power.brmodelo.domain.AnnotationType
 import games.polyclub.power.brmodelo.domain.ArrowDirection
@@ -45,6 +46,7 @@ import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.domain.conceptualAttributeAttachPonto
 import games.polyclub.power.brmodelo.domain.ElementPosition
 import games.polyclub.power.brmodelo.domain.SchemaElement
+import games.polyclub.power.brmodelo.ui.mergeOntoCanvasTextStyle
 import games.polyclub.power.brmodelo.ui.vclColorRefToCompose
 import games.polyclub.power.brmodelo.ui.canvas.drawAnnotation
 import games.polyclub.power.brmodelo.ui.canvas.drawAssociativeEntity
@@ -217,6 +219,7 @@ fun DrawScope.drawSchema(
             assoc.relationshipName,
             showName = true,
             textMeasurer,
+            assoc.labelStyle,
         )
         // Bulk-delete tint was drawn on the outer rect in step 2; the inner diamond is redrawn here
         // with opaque fill on top of those lines, so it must be tinted again (same idea as step 4b).
@@ -228,7 +231,7 @@ fun DrawScope.drawSchema(
     }
     // 4b. Self-relationship diamonds on top of lines (outline + fill), like VCL z-order.
     schema.elements.values.filterIsInstance<SchemaElement.SelfRelationship>().forEach { selfRel ->
-        drawRelationshipDiamond(selfRel.position, selfRel.name, showName = true, textMeasurer)
+        drawRelationshipDiamond(selfRel.position, selfRel.name, showName = true, textMeasurer, selfRel.labelStyle)
         if (selfRel.id in bulkDeleteHighlightIds) {
             drawBulkDeleteThreatHighlight(selfRel.position)
         } else if (selfRel.id in selectionBandHighlightIds) {
@@ -468,7 +471,7 @@ private fun DrawScope.drawElement(
 private fun DrawScope.drawEntity(entity: SchemaElement.Entity, textMeasurer: TextMeasurer) {
     val p = entity.position
     drawEntityRectangle(p, isWeak = entity.isWeak)
-    drawCenteredLabel(entity.name, p, textMeasurer, entity.labelStyle.bold, entity.labelStyle.italic)
+    drawCenteredLabel(entity.name, p, textMeasurer, entity.labelStyle)
 }
 
 /**
@@ -516,8 +519,7 @@ internal fun DrawScope.drawEntityRectangle(p: ElementPosition, isWeak: Boolean =
  * - Centred text label
  */
 private fun DrawScope.drawRelationship(rel: SchemaElement.Relationship, textMeasurer: TextMeasurer) {
-    drawRelationshipDiamond(rel.position, rel.name, showName = rel.showName, textMeasurer,
-        rel.labelStyle.bold, rel.labelStyle.italic)
+    drawRelationshipDiamond(rel.position, rel.name, showName = rel.showName, textMeasurer, rel.labelStyle)
     drawDirectionArrow(rel.arrowDirection, rel.position)
 }
 
@@ -526,8 +528,7 @@ internal fun DrawScope.drawRelationshipDiamond(
     name: String,
     showName: Boolean,
     textMeasurer: TextMeasurer,
-    bold: Boolean = false,
-    italic: Boolean = false,
+    labelStyle: LabelStyle = LabelStyle(),
 ) {
     val x = p.x.toFloat()
     val y = p.y.toFloat()
@@ -551,7 +552,7 @@ internal fun DrawScope.drawRelationshipDiamond(
     drawLine(SHADOW_LIGHT, Offset(x + w, cy), Offset(cx, y + h))
 
     if (showName) {
-        drawCenteredLabel(name, p, textMeasurer, bold, italic)
+        drawCenteredLabel(name, p, textMeasurer, labelStyle)
     }
 }
 
@@ -677,7 +678,7 @@ private fun DrawScope.drawAssociativeEntity(assoc: SchemaElement.AssociativeEnti
         width = (p.width - 30).coerceAtLeast(10),
         height = (p.height - 30).coerceAtLeast(10),
     )
-    drawRelationshipDiamond(innerPos, assoc.relationshipName, showName = true, textMeasurer)
+    drawRelationshipDiamond(innerPos, assoc.relationshipName, showName = true, textMeasurer, assoc.labelStyle)
     drawDirectionArrow(assoc.arrowDirection, innerPos)
 
     // Entity name is drawn right-aligned at top (DT_RIGHT | DT_WORDBREAK in original)
@@ -685,7 +686,7 @@ private fun DrawScope.drawAssociativeEntity(assoc: SchemaElement.AssociativeEnti
         val maxW = (p.width - 8).coerceAtLeast(1)
         val layout = textMeasurer.measure(
             assoc.name,
-            style = CANVAS_TEXT_STYLE.copy(textAlign = TextAlign.Right),
+            style = assoc.labelStyle.mergeOntoCanvasTextStyle(CANVAS_TEXT_STYLE).copy(textAlign = TextAlign.Right),
             constraints = Constraints(maxWidth = maxW),
         )
         drawText(layout, topLeft = Offset(p.x + p.width - 4f - layout.size.width, p.y + 2f))
@@ -739,6 +740,8 @@ private fun DrawScope.drawAttribute(
     val y = p.y.toFloat()
     val w = p.width.toFloat()
     val h = p.height.toFloat()
+
+    val attrTextStyle = attr.labelStyle.mergeOntoCanvasTextStyle(CANVAS_TEXT_STYLE)
 
     val diameter = attributeEllipseDiameterPx(p.height)
     val meio = attributeStubCenterlineOffsetY(p.height)
@@ -798,7 +801,7 @@ private fun DrawScope.drawAttribute(
         if (textLabel.isNotBlank() && textMaxW > 0) {
             val layout = textMeasurer.measure(
                 textLabel,
-                style = CANVAS_TEXT_STYLE,
+                style = attrTextStyle,
                 constraints = Constraints(maxWidth = textMaxW),
                 softWrap = false,
             )
@@ -808,7 +811,7 @@ private fun DrawScope.drawAttribute(
 
         // Composite asterisk at top-left (clBlue in original)
         if (attr.isComposite) {
-            val asterisk = textMeasurer.measure("*", style = CANVAS_TEXT_STYLE.copy(color = Color.Blue))
+            val asterisk = textMeasurer.measure("*", style = attrTextStyle.copy(color = Color.Blue))
             drawText(asterisk, topLeft = Offset(x, y))
         }
 
@@ -841,7 +844,7 @@ private fun DrawScope.drawAttribute(
         if (textLabel.isNotBlank() && textMaxW > 0) {
             val layout = textMeasurer.measure(
                 textLabel,
-                style = CANVAS_TEXT_STYLE.copy(textAlign = TextAlign.Right),
+                style = attrTextStyle.copy(textAlign = TextAlign.Right),
                 constraints = Constraints(maxWidth = textMaxW),
                 softWrap = false,
             )
@@ -851,7 +854,7 @@ private fun DrawScope.drawAttribute(
 
         // Composite asterisk at top-right
         if (attr.isComposite) {
-            val asterisk = textMeasurer.measure("*", style = CANVAS_TEXT_STYLE.copy(color = Color.Blue))
+            val asterisk = textMeasurer.measure("*", style = attrTextStyle.copy(color = Color.Blue))
             val asteriskX = x + w - asterisk.size.width
             drawText(asterisk, topLeft = Offset(asteriskX, y))
         }
@@ -923,7 +926,7 @@ private fun DrawScope.drawSpecialization(
 
     // 'p' label for partial specialization (italic+bold, teal colour, Font.Color = 32896)
     if (spec.isPartial) {
-        val pStyle = CANVAS_TEXT_STYLE.copy(
+        val pStyle = spec.labelStyle.mergeOntoCanvasTextStyle(CANVAS_TEXT_STYLE).copy(
             fontStyle = FontStyle.Italic,
             fontWeight = FontWeight.Bold,
             color = SPEC_LABEL_COLOR,
@@ -994,9 +997,10 @@ private fun DrawScope.drawAnnotation(ann: SchemaElement.Annotation, textMeasurer
         // Tighter line height to match Windows GDI Tahoma 8pt spacing (~13 px/line).
         // Compose default (~1.25×fontSize ≈ 13.75 sp) causes text to overflow the
         // box height that Pascal stored via DT_CALCRECT with the original font metrics.
+        val lineHeightSp = ((ann.labelStyle.fontSizePoints ?: 8) * 13f / 8f).sp
         val layout = textMeasurer.measure(
             displayText,
-            style = CANVAS_TEXT_STYLE.copy(textAlign = align, lineHeight = 13.sp),
+            style = ann.labelStyle.mergeOntoCanvasTextStyle(CANVAS_TEXT_STYLE).copy(textAlign = align, lineHeight = lineHeightSp),
             constraints = Constraints(maxWidth = textArea.width.toInt().coerceAtLeast(1)),
         )
         drawText(layout, topLeft = Offset(textArea.left, textArea.top))
@@ -2718,8 +2722,7 @@ private fun DrawScope.drawCenteredLabel(
     text: String,
     bounds: ElementPosition,
     textMeasurer: TextMeasurer,
-    bold: Boolean = false,
-    italic: Boolean = false,
+    labelStyle: LabelStyle,
 ) {
     if (text.isBlank()) return
     val x = bounds.x.toFloat()
@@ -2727,11 +2730,7 @@ private fun DrawScope.drawCenteredLabel(
     val w = bounds.width.toFloat()
     val h = bounds.height.toFloat()
 
-    val style = CANVAS_TEXT_STYLE.copy(
-        textAlign = TextAlign.Center,
-        fontWeight = if (bold) FontWeight.Black else null,
-        fontStyle = if (italic) FontStyle.Italic else null,
-    )
+    val style = labelStyle.mergeOntoCanvasTextStyle(CANVAS_TEXT_STYLE).copy(textAlign = TextAlign.Center)
     val maxW = (w - 4f).toInt().coerceAtLeast(1)
     val layout = textMeasurer.measure(text, style = style, constraints = Constraints(maxWidth = maxW))
     val textX = x + (w - layout.size.width) / 2f

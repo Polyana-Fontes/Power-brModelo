@@ -48,6 +48,14 @@ internal fun colorRefBgrToCompose(colorRef: Int): Color {
 private fun rgbToColorRefBgr(r: Int, g: Int, b: Int): Int =
     ((b and 0xFF) shl 16) or ((g and 0xFF) shl 8) or (r and 0xFF)
 
+/** Compose sRGB [Color] → absolute Windows COLORREF (lower 24 bits BGR), for MER `FonteCor` and similar. */
+internal fun composeColorToVclAbsoluteRef(color: Color): Int {
+    val r = (color.red * 255f).toInt().coerceIn(0, 255)
+    val g = (color.green * 255f).toInt().coerceIn(0, 255)
+    val b = (color.blue * 255f).toInt().coerceIn(0, 255)
+    return rgbToColorRefBgr(r, g, b)
+}
+
 /**
  * Default RGB values from Wine `dlls/win32u/sysparams.c` (`system_colors[]`), converted to COLORREF BGR.
  * Index 25 is reserved on Windows; [COLOR_FORM] (31) uses a neutral form background.

@@ -57,7 +57,7 @@ import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.OperationsMenuRibbonBinding
 import games.polyclub.power.brmodelo.ui.PickedFile
 import games.polyclub.power.brmodelo.ui.RectangleSelectionToolRibbonBinding
-import games.polyclub.power.brmodelo.ui.RibbonMcpUi
+import games.polyclub.power.brmodelo.ui.SelectFontRibbonBinding
 import games.polyclub.power.brmodelo.ui.RibbonTab
 import games.polyclub.power.brmodelo.ui.SelectionBandUiState
 import games.polyclub.power.brmodelo.ui.SpecializationToolRibbonBinding
@@ -119,6 +119,7 @@ internal fun BrModeloScreen(
     onHiddenAttributeRevealPathChange: (List<Int>?) -> Unit = {},
     onRevealHiddenAttributeInModel: () -> Unit = {},
     clipboardRibbonBinding: ClipboardRibbonBinding? = null,
+    selectFontRibbonBinding: SelectFontRibbonBinding? = null,
     onCanvasViewStateChange: (SchemaCanvasViewState) -> Unit = {},
     onCopyRequest: () -> Unit = {},
     onCutRequest: () -> Unit = {},
@@ -165,6 +166,7 @@ internal fun BrModeloScreen(
                 rectangleSelectionToolBinding = rectangleSelectionToolBinding,
                 operationsMenuBinding = operationsMenuBinding,
                 clipboardRibbonBinding = clipboardRibbonBinding,
+                selectFontRibbonBinding = selectFontRibbonBinding,
                 ribbonMcp = ribbonMcp,
                 onRibbonUserMessage = { msg ->
                     scope.launch {

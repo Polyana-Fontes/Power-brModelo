@@ -485,10 +485,16 @@ object ConceptualSchemaXmlParser {
     private fun parseFont(node: XmlNode): LabelStyle {
         val fonte = node.child("Fonte") ?: return LabelStyle()
         val style = fonte.strValor("FonteEstilo")
+        val nome = fonte.child("FonteNome")?.attr("Valor")?.trim()?.takeIf { it.isNotEmpty() }
+        val tamanho = fonte.child("FonteTamanho")?.attr("Valor")?.toIntOrNull()
         return LabelStyle(
             color = fonte.child("FonteCor")?.attr("Valor")?.toIntOrNull(),
             bold = style.contains("fsBold"),
             italic = style.contains("fsItalic"),
+            underline = style.contains("fsUnderline"),
+            strikeThrough = style.contains("fsStrikeOut"),
+            fontFamilyName = nome,
+            fontSizePoints = tamanho,
         )
     }
 

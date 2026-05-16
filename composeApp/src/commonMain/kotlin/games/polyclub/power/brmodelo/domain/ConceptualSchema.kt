@@ -115,6 +115,22 @@ data class ConceptualSchema(
         )
     }
 
+    /** Updates [SchemaElement.labelStyle] for one canvas element (Pascal `TBase.Font` / `CfgFonte`). */
+    fun withElementLabelStyle(elementId: Int, labelStyle: LabelStyle): ConceptualSchema {
+        val el = elements[elementId] ?: return this
+        val updated =
+            when (el) {
+                is SchemaElement.Entity -> el.copy(labelStyle = labelStyle)
+                is SchemaElement.Relationship -> el.copy(labelStyle = labelStyle)
+                is SchemaElement.AssociativeEntity -> el.copy(labelStyle = labelStyle)
+                is SchemaElement.Attribute -> el.copy(labelStyle = labelStyle)
+                is SchemaElement.Specialization -> el.copy(labelStyle = labelStyle)
+                is SchemaElement.SelfRelationship -> el.copy(labelStyle = labelStyle)
+                is SchemaElement.Annotation -> el.copy(labelStyle = labelStyle)
+            }
+        return copy(elements = elements + (elementId to updated))
+    }
+
     /**
      * Enforces minimum element and cardinality label dimensions everywhere (e.g. after loading legacy saves).
      */

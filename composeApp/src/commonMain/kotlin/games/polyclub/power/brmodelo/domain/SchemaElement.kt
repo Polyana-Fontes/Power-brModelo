@@ -21,12 +21,21 @@ package games.polyclub.power.brmodelo.domain
 /**
  * Visual and semantic style applied to element labels.
  *
- * Corresponds to the `FontColor` and `FontStyles` published properties on `TBase`.
+ * Corresponds to the `Font`, `FontColor`, and `FontStyles` published properties on `TBase` in `mer.pas`,
+ * serialized under `<Fonte>` (`FonteNome`, `FonteTamanho`, `FonteEstilo`, `FonteCor`) in MER XML.
  */
 data class LabelStyle(
     val color: Int? = null,
     val bold: Boolean = false,
     val italic: Boolean = false,
+    /** Underline (Delphi `fsUnderline` in `FonteEstilo`). */
+    val underline: Boolean = false,
+    /** Strikethrough (Delphi `fsStrikeOut` in `FonteEstilo`). */
+    val strikeThrough: Boolean = false,
+    /** Windows / logical font family name (e.g. `Tahoma`). `null` = canvas default family. */
+    val fontFamilyName: String? = null,
+    /** Point size as stored in MER (`FonteTamanho`), same as Pascal `TFont.Size`. `null` = legacy canvas default (~11 sp). */
+    val fontSizePoints: Int? = null,
 )
 
 /**

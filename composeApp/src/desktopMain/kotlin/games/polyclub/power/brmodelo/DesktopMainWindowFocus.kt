@@ -33,6 +33,9 @@ internal object DesktopMainWindowFocus {
         windowRef.set(window)
     }
 
+    /** Main Compose window, when registered (used as Swing dialog owner). */
+    fun registeredWindowOrNull(): Window? = windowRef.get()
+
     /**
      * Brings the registered main window to the foreground and requests keyboard focus.
      * Safe to call from any thread; work is marshalled to the EDT.

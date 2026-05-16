@@ -102,15 +102,16 @@ internal object McpResourceTextOps {
 
     /**
      * Regex search; uses [RegexOption.MULTILINE] so `^` / `$` match line starts/ends.
+     *
+     * [dotMatchesAll] is implemented with a leading `(?s)` inline flag instead of
+     * [RegexOption.DOT_MATCHES_ALL], which is not available in Kotlin common metadata (KMP).
      */
     fun findAllRegex(text: String, pattern: String, dotMatchesAll: Boolean): Pair<List<McpTextMatchSpan>, String?> {
         if (pattern.isEmpty()) return emptyList<McpTextMatchSpan>() to "pattern_must_not_be_empty"
-        val opts = buildSet {
-            add(RegexOption.MULTILINE)
-            if (dotMatchesAll) add(RegexOption.DOT_MATCHES_ALL)
-        }
+        val effectivePattern = if (dotMatchesAll) "(?s)$pattern" else pattern
+        val opts = setOf(RegexOption.MULTILINE)
         val regex = try {
-            Regex(pattern, opts)
+            Regex(effectivePattern, opts)
         } catch (e: Exception) {
             return emptyList<McpTextMatchSpan>() to "invalid_regex:${e.message ?: e::class.simpleName}"
         }

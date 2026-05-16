@@ -119,4 +119,20 @@ class McpResourceTextOpsTest {
         assertNotNull(bad)
         assertTrue(bad!!.startsWith("invalid_regex:"))
     }
+
+    @Test
+    fun `findAllRegex dotMatchesAll spans newline`() {
+        // Arrange
+        val text = "start\nend"
+
+        // Act
+        val (matches, err) = McpResourceTextOps.findAllRegex(text, "start.end", dotMatchesAll = true)
+
+        // Assert
+        assertNull(err)
+        val m = assertNotNull(matches.single())
+        assertEquals("start\nend", m.match)
+        assertEquals(0, m.startIndex)
+        assertEquals(9, m.endIndexExclusive)
+    }
 }
