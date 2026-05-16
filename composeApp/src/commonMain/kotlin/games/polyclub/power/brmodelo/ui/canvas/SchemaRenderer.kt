@@ -981,14 +981,8 @@ private fun DrawScope.drawConnectionLine(
         enc[connectionPonto(elemB, elemA, schema, conn)]
     }
 
-    val posA = if (elemA is SchemaElement.AssociativeEntity && elemB !is SchemaElement.Attribute) {
-        if (associativeConnectionUsesInnerDiamond(elemA, elemB, conn)) assocInnerDiamondPos(elemA.position)
-        else elemA.position
-    } else elemA.position
-    val posB = if (elemB is SchemaElement.AssociativeEntity && elemA !is SchemaElement.Attribute) {
-        if (associativeConnectionUsesInnerDiamond(elemB, elemA, conn)) assocInnerDiamondPos(elemB.position)
-        else elemB.position
-    } else elemB.position
+    val posA = drawConnectionRoutingBounds(elemA, elemB, schema, conn)
+    val posB = drawConnectionRoutingBounds(elemB, elemA, schema, conn)
 
     val waypoints = computeConnectionPath(
         ptA,
@@ -1520,6 +1514,68 @@ private fun associativeConnectionUsesInnerDiamond(
     }
 }
 
+/**
+ * Geometry of [TBarraDeAtributos] (`mer.pas` ~9731–9762): a 6×H vertical strip whose bounds are
+ * what [TLigacao.Ative] uses (via `E1`/`E2.Left/Top/Width/Height` after `PrepareToAtive`), not the
+ * parent attribute's ellipse box. Attachment Y follows `PrepareToAtive`:
+ * `Top + (Height div (Atributos.Count - 1)) * idx`.
+ */
+private data class CompositeAttributeBarGeometry(
+    val barCenterX: Float,
+    val barTop: Int,
+    val barH: Int,
+    val childCount: Int,
+    /** Matches `SetBounds(…, 6, H)`; null when there are fewer than two canvas children (no bar). */
+    val routingBounds: ElementPosition?,
+) {
+    fun snapYForChild(childIndex: Int, fallbackCy: Float): Float {
+        if (childCount < 2 || childIndex < 0) return fallbackCy
+        val step = barH / (childCount - 1)
+        return (barTop + step * childIndex).toFloat()
+    }
+}
+
+private fun compositeAttributeBarGeometry(
+    attr: SchemaElement.Attribute,
+    schema: ConceptualSchema,
+): CompositeAttributeBarGeometry? {
+    if (!attr.isComposite) return null
+    val ownerPos = schema.elements[attr.ownerId]?.position ?: return null
+    val p = attr.position
+    val n = attr.childAttributeIds.size
+    if (n == 0) return null
+    val h = p.height
+    val barH = if (n >= 2) (h * n + n * 2 - h).coerceAtLeast(2) else h.coerceAtLeast(2)
+    val ellipseOnLeft = conceptualAttributeAttachPonto(ownerPos, p) != 1
+    val barLeft = if (ellipseOnLeft) p.x + p.width - 5 else p.x - 2
+    val barTop = p.y + h / 2 - barH / 2
+    val barCenterX = (barLeft + 3).toFloat()
+    val routingBounds = if (n >= 2) ElementPosition(x = barLeft, y = barTop, width = 6, height = barH) else null
+    return CompositeAttributeBarGeometry(barCenterX, barTop, barH, n, routingBounds)
+}
+
+/**
+ * Bounding box passed to [computeConnectionPath] for one end of a link — mirrors which
+ * [TBase] instance supplies `Left`/`Top`/`Width`/`Height` in Pascal's `TLigacao.Ative`.
+ */
+private fun drawConnectionRoutingBounds(
+    elem: SchemaElement,
+    other: SchemaElement,
+    schema: ConceptualSchema,
+    conn: Connection,
+): ElementPosition {
+    if (elem is SchemaElement.AssociativeEntity && other !is SchemaElement.Attribute) {
+        return if (associativeConnectionUsesInnerDiamond(elem, other, conn)) assocInnerDiamondPos(elem.position)
+        else elem.position
+    }
+    if (elem is SchemaElement.Attribute && elem.isComposite &&
+        other is SchemaElement.Attribute && other.ownerId == elem.id
+    ) {
+        compositeAttributeBarGeometry(elem, schema)?.routingBounds?.let { return it }
+    }
+    return elem.position
+}
+
 // ── Helper: per-connection encaixe points ─────────────────────────────────────
 
 /**
@@ -1562,8 +1618,17 @@ private fun connectionEncaixes(
         ) != 1 } ?: false
 
         return if (otherElem is SchemaElement.Attribute && otherElem.ownerId == elem.id) {
-            // Connection toward a child attribute → use bar side (opposite of normal)
-            val bar = if (ellipseOnLeft) Offset(right, cy) else Offset(left, cy)
+            // Child connection: encaixe on the composite bar (`TBarraDeAtributos`), not bbox edge.
+            val geom = compositeAttributeBarGeometry(elem, schema)
+            val childIdx = elem.childAttributeIds.indexOf(otherElem.id)
+            val fallbackCy = otherElem.position.y + otherElem.position.height / 2f
+            val bar = if (geom != null) {
+                Offset(geom.barCenterX, geom.snapYForChild(childIdx, fallbackCy))
+            } else {
+                val ellipseOnLeftFallback = ownerPos?.let { conceptualAttributeAttachPonto(it, p) != 1 } ?: false
+                val barLeft = if (ellipseOnLeftFallback) p.x + p.width - 5 else p.x - 2
+                Offset((barLeft + 3).toFloat(), fallbackCy)
+            }
             arrayOf(Offset.Zero, bar, bar, bar, bar)
         } else {
             // Normal attribute connection toward its owner
@@ -2030,8 +2095,9 @@ private fun computeNonAttrPonto(
  * [TBase.OrganizeAtributos] would produce. Using `cy` avoids the floating-point
  * drift that arises when replicating the integer-arithmetic Divida algorithm.
  *
- * For the child–composite-attribute case, the child's `cy` is used for both
- * ends so that the connecting line stays perfectly horizontal.
+ * For the child–composite-attribute case, the composite end uses
+ * [TBarraDeAtributos.PrepareToAtive] (`mer.pas` ~9749): X at the bar centre and Y at
+ * `Top + (Height div (n-1)) * childIndex`, not the child's `cy` after the user moves a child.
  *
  * **Non-attribute connections** — [TBase.Divida] is applied: when N > 1
  * connections share the same edge, the attachment points are evenly spaced:
@@ -2112,21 +2178,28 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                     val childActiveX = if (barIsOnRight) p.x.toFloat() else (p.x + p.width).toFloat()
                     elemResult[conn.id] = Offset(childActiveX, p.y + p.height / 2f)
                 } else if (elem is SchemaElement.Attribute && otherElem.ownerId == elem.id) {
-                    // Composite parent → child attribute: snap on the bar edge of the composite,
-                    // at the child's centre Y so the connection draws as a single horizontal line.
-                    // Children of a composite never participate in `Divida` (the bar is a stub,
-                    // not an actual edge) — bypass the byPonto queue.
-                    val parentOwnerPos = schema.elements[elem.ownerId]?.position
-                    val compPonto = if (parentOwnerPos != null)
-                        conceptualAttributeAttachPonto(
-                            parentOwnerPos,
-                            elem.position
-                        ) else 3
-                    val barIsOnRight = compPonto != 1
-                    val ep = elem.position
-                    val barX = if (barIsOnRight) (ep.x + ep.width).toFloat() else ep.x.toFloat()
-                    val childCy = otherElem.position.y + otherElem.position.height / 2f
-                    elemResult[conn.id] = Offset(barX, childCy)
+                    // Composite parent → child: bar centre X + slot Y (`TBarraDeAtributos.PrepareToAtive`,
+                    // mer.pas ~9749). Children never participate in Divida — bypass the byPonto queue.
+                    val geom = compositeAttributeBarGeometry(elem, schema)
+                    val childIdx = elem.childAttributeIds.indexOf(otherElem.id)
+                    val fallbackCy = otherElem.position.y + otherElem.position.height / 2f
+                    if (geom != null) {
+                        elemResult[conn.id] = Offset(
+                            geom.barCenterX,
+                            geom.snapYForChild(childIdx, fallbackCy),
+                        )
+                    } else {
+                        val parentOwnerPos = schema.elements[elem.ownerId]?.position
+                        val compPonto = if (parentOwnerPos != null)
+                            conceptualAttributeAttachPonto(
+                                parentOwnerPos,
+                                elem.position
+                            ) else 3
+                        val barIsOnRight = compPonto != 1
+                        val ep = elem.position
+                        val barLeft = if (barIsOnRight) ep.x + ep.width - 5 else ep.x - 2
+                        elemResult[conn.id] = Offset((barLeft + 3).toFloat(), fallbackCy)
+                    }
                 } else {
                     // Normal entity/relationship → attribute.
                     // For diamonds we pick the *closest vertex* to the attribute's centre
