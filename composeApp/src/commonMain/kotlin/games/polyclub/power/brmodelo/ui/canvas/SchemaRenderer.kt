@@ -83,13 +83,21 @@ private val CANVAS_TEXT_STYLE = TextStyle(fontSize = 11.sp, color = Color.Black)
 private val MULTIVALUE_CARD_STYLE = TextStyle(fontSize = 11.sp, color = Color.Black)
 
 private val SELECTION_COLOR = Color(0xFF0060C0)
-/** Connection polyline when the cardinality label (or specialization) is selected — darker than [SELECTION_COLOR]. */
-private val SELECTION_CONNECTION_LINE_COLOR = Color(0xFF003060)
+/** Connection polyline when a linked pick is active — matches [SELECTION_COLOR] (2px stroke distinguishes from normal lines). */
+private val SELECTION_CONNECTION_LINE_COLOR = SELECTION_COLOR
 
 /**
  * Connection ids whose link lines should use [SELECTION_CONNECTION_LINE_COLOR]: cardinality picks,
- * and every link touching a selected [SchemaElement.Specialization].
+ * every link touching a selected [SchemaElement.Attribute], and every link touching a selected
+ * [SchemaElement.Specialization].
  */
+private fun connectionsTouchingElementId(schema: ConceptualSchema, elementId: Int): Set<Int> =
+    schema.connections
+        .asSequence()
+        .filter { it.elementIdA == elementId || it.elementIdB == elementId }
+        .map { it.id }
+        .toSet()
+
 private fun connectionIdsForSelectionLinkedLineHighlight(
     selection: CanvasSelection,
     schema: ConceptualSchema,
@@ -97,28 +105,36 @@ private fun connectionIdsForSelectionLinkedLineHighlight(
     CanvasSelection.None -> emptySet()
     is CanvasSelection.Cardinality -> setOf(selection.connectionId)
     is CanvasSelection.Element -> {
-        val el = schema.elements[selection.id]
-        if (el is SchemaElement.Specialization) {
-            schema.connections
-                .asSequence()
-                .filter { it.elementIdA == selection.id || it.elementIdB == selection.id }
-                .map { it.id }
-                .toSet()
-        } else {
-            emptySet()
+        when (schema.elements[selection.id]) {
+            is SchemaElement.Specialization,
+            is SchemaElement.Attribute,
+            -> connectionsTouchingElementId(schema, selection.id)
+            else -> emptySet()
         }
     }
     is CanvasSelection.Multiple -> buildSet {
         addAll(selection.cardinalityConnectionIds)
         for (eid in selection.elementIds) {
-            if (schema.elements[eid] is SchemaElement.Specialization) {
-                schema.connections.forEach { c ->
-                    if (c.elementIdA == eid || c.elementIdB == eid) add(c.id)
-                }
+            when (schema.elements[eid]) {
+                is SchemaElement.Specialization,
+                is SchemaElement.Attribute,
+                -> addAll(connectionsTouchingElementId(schema, eid))
+                else -> Unit
             }
         }
     }
 }
+
+/** Attribute ids whose owner→ellipse stub is drawn in [SELECTION_CONNECTION_LINE_COLOR] (stub is not part of [drawConnectionLine]). */
+private fun attributeIdsForSelectionStubHighlight(selection: CanvasSelection, schema: ConceptualSchema): Set<Int> =
+    when (selection) {
+        is CanvasSelection.Element -> {
+            if (schema.elements[selection.id] is SchemaElement.Attribute) setOf(selection.id) else emptySet()
+        }
+        is CanvasSelection.Multiple ->
+            selection.elementIds.filter { schema.elements[it] is SchemaElement.Attribute }.toSet()
+        else -> emptySet()
+    }
 
 // ── Main entry point ──────────────────────────────────────────────────────────
 
@@ -126,8 +142,11 @@ private fun connectionIdsForSelectionLinkedLineHighlight(
  * Draws the full [games.polyclub.power.brmodelo.domain.ConceptualSchema] into this [DrawScope].
  *
  * Rendering order mirrors VCL z-order (back → front):
- * 1. Non-assoc connection lines — behind all elements (selected cardinality / specialization links use a darker blue stroke).
+ * 1. Non-assoc connection lines — behind all elements (selected cardinality / attribute / specialization
+ *     links use the same blue stroke as the selection outline).
  * 2. All elements (entities, relationships, attributes, AssociativeEntity outer+inner).
+ *    Attribute ellipse→edge stubs use [SELECTION_CONNECTION_LINE_COLOR] when that attribute is
+ *    selected with link highlight (stubs are not part of step 1 polylines).
  * 3. AssociativeEntity connection lines — redrawn on top of outer rect white fill,
  *    faithfully replicating the VCL behaviour where [TLinha] components have a
  *    higher z-order than [TEntidadeAssoss]/[TChildRelacao].
@@ -156,6 +175,7 @@ fun DrawScope.drawSchema(
 ) {
     val dividedPoints = computeDividedPoints(schema)
     val selectionLinkedConnectionIds = connectionIdsForSelectionLinkedLineHighlight(selection, schema)
+    val selectionStubHighlightAttributeIds = attributeIdsForSelectionStubHighlight(selection, schema)
 
     // 1. Connection lines that do NOT involve an AssociativeEntity
     schema.connections.forEach { conn ->
@@ -169,7 +189,14 @@ fun DrawScope.drawSchema(
     }
     // 2. All elements (including AssociativeEntity outer rect + inner diamond)
     schema.elements.values.forEach { element ->
-        drawElement(element, schema, textMeasurer, bulkDeleteHighlightIds, selectionBandHighlightIds)
+        drawElement(
+            element,
+            schema,
+            textMeasurer,
+            bulkDeleteHighlightIds,
+            selectionBandHighlightIds,
+            selectionStubHighlightAttributeIds,
+        )
     }
     // 3. Re-draw connection lines that involve an AssociativeEntity, now on top of the
     //    outer rect white fill — only entity/relationship connections (not attributes),
@@ -402,12 +429,18 @@ private fun DrawScope.drawElement(
     textMeasurer: TextMeasurer,
     bulkDeleteHighlightIds: Set<Int> = emptySet(),
     selectionBandHighlightIds: Set<Int> = emptySet(),
+    selectionStubHighlightAttributeIds: Set<Int> = emptySet(),
 ) {
     when (element) {
         is SchemaElement.Entity -> drawEntity(element, textMeasurer)
         is SchemaElement.Relationship -> drawRelationship(element, textMeasurer)
         is SchemaElement.AssociativeEntity -> drawAssociativeEntity(element, textMeasurer)
-        is SchemaElement.Attribute -> drawAttribute(element, schema, textMeasurer)
+        is SchemaElement.Attribute -> drawAttribute(
+            element,
+            schema,
+            textMeasurer,
+            stubHighlight = element.id in selectionStubHighlightAttributeIds,
+        )
         is SchemaElement.Specialization -> drawSpecialization(element, schema, textMeasurer)
         is SchemaElement.SelfRelationship -> Unit // drawn in drawSchema step 4b on top of lines
         is SchemaElement.Annotation -> drawAnnotation(element, textMeasurer)
@@ -677,11 +710,14 @@ private fun DrawScope.drawAssociativeEntity(assoc: SchemaElement.AssociativeEnti
  * - Identifier attributes: ellipse filled with [games.polyclub.power.brmodelo.ui.canvas.IDENTIFIER_FILL] (#963636).
  * - Multi-valued: cardinality string appended to label.
  * - Optional attributes: ellipse outline drawn with a dashed stroke.
+ * @param stubHighlight When true, draws the owner→ellipse connector stub with [SELECTION_CONNECTION_LINE_COLOR]
+ *   (same as highlighted connection polylines); the stub is not included in [drawConnectionLine].
  */
 private fun DrawScope.drawAttribute(
     attr: SchemaElement.Attribute,
     schema: ConceptualSchema,
     textMeasurer: TextMeasurer,
+    stubHighlight: Boolean = false,
 ) {
     val p = attr.position
     val x = p.x.toFloat()
@@ -721,9 +757,12 @@ private fun DrawScope.drawAttribute(
         Stroke(1f)
     }
 
+    val stubColor = if (stubHighlight) SELECTION_CONNECTION_LINE_COLOR else Color.Black
+    val stubStrokeWidth = if (stubHighlight) 2f else 1f
+
     if (ellipseOnLeft) {
         // Stub: short horizontal line from left edge to x+5
-        drawLine(Color.Black, Offset(x, y + meio), Offset(x + 5f, y + meio))
+        drawLine(stubColor, Offset(x, y + meio), Offset(x + 5f, y + meio), strokeWidth = stubStrokeWidth)
 
         // Ellipse at (x+5, y, x+5+diameter, y+diameter)
         val ellipseTopLeft = Offset(x + 5f, y)
@@ -770,7 +809,7 @@ private fun DrawScope.drawAttribute(
     } else {
         // Ellipse on right side (OrientacaoD): stub goes right, text to the left
         val ellipseLeft = x + w - 5f - diameter
-        drawLine(Color.Black, Offset(x + w - 5f, y + meio), Offset(x + w, y + meio))
+        drawLine(stubColor, Offset(x + w - 5f, y + meio), Offset(x + w, y + meio), strokeWidth = stubStrokeWidth)
 
         val ellipseTopLeft = Offset(ellipseLeft, y)
         drawOval(ellipseFill, topLeft = ellipseTopLeft, size = Size(diameter, diameter))
