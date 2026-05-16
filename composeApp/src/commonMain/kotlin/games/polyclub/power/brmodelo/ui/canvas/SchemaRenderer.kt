@@ -2036,9 +2036,45 @@ private fun computeNonAttrPonto(
  * **Non-attribute connections** — [TBase.Divida] is applied: when N > 1
  * connections share the same edge, the attachment points are evenly spaced:
  * `tam = edgeLength / (N + 1)`, position[i] = anchorStart + tam * (i+1).
+ * On [SchemaElement.AssociativeEntity], legs to canvas attributes (outer rectangle) are never
+ * merged into the same Divida bucket as legs to the inner relationship diamond — both can share
+ * the same numeric `ponto` while referring to different geometry.
  *
  * Returns `Map<elemId, Map<connId, Offset>>`.
  */
+private data class DividaPontoGroup(
+    val ponto: Int,
+    val associativeLane: Int = 0,
+) {
+    companion object {
+        const val LANE_NONE = 0
+        const val LANE_ASSOC_OUTER_WITH_ATTRIBUTE = 1
+        const val LANE_ASSOC_INNER_NON_ATTRIBUTE = 2
+        const val LANE_ASSOC_OUTER_NON_ATTRIBUTE = 3
+    }
+}
+
+private fun associativeDividaLaneForElem(
+    elem: SchemaElement,
+    otherElem: SchemaElement,
+    conn: Connection?,
+): Int {
+    if (elem !is SchemaElement.AssociativeEntity) return DividaPontoGroup.LANE_NONE
+    return when {
+        otherElem is SchemaElement.Attribute -> DividaPontoGroup.LANE_ASSOC_OUTER_WITH_ATTRIBUTE
+        associativeConnectionUsesInnerDiamond(elem, otherElem, conn) -> DividaPontoGroup.LANE_ASSOC_INNER_NON_ATTRIBUTE
+        else -> DividaPontoGroup.LANE_ASSOC_OUTER_NON_ATTRIBUTE
+    }
+}
+
+private fun divPontoGroup(
+    ponto: Int,
+    elem: SchemaElement,
+    otherElem: SchemaElement,
+    conn: Connection?,
+): DividaPontoGroup =
+    DividaPontoGroup(ponto, associativeDividaLaneForElem(elem, otherElem, conn))
+
 private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Offset>> {
     val result = mutableMapOf<Int, MutableMap<Int, Offset>>()
 
@@ -2048,7 +2084,7 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
         // collected here, grouped by `ponto`, so a single Divida pass can space them evenly
         // along the chosen edge of `elem`. Diamond → attribute connections are handled in
         // the inline branch below (Pascal does not apply Divida to TBaseRelacao).
-        val byPonto = mutableMapOf<Int, MutableList<DividaSlot>>()
+        val byPonto = mutableMapOf<DividaPontoGroup, MutableList<DividaSlot>>()
 
         for (conn in schema.connections) {
             val isA = conn.elementIdA == elemId
@@ -2155,7 +2191,7 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                         // Entity/Table: queue for Divida along with non-attr connections so
                         // that all ligações on this `ponto` are evenly spaced (matches Pascal's
                         // TBase.Divida + TLigacao.Ative behaviour from OnBaseMoved).
-                        byPonto.getOrPut(ponto) { mutableListOf() }
+                        byPonto.getOrPut(divPontoGroup(ponto, elem, otherElem, conn)) { mutableListOf() }
                             .add(
                                 DividaSlot(
                                     conn.id,
@@ -2190,7 +2226,7 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                     schema,
                     conn
                 )
-                byPonto.getOrPut(ponto) { mutableListOf() }
+                byPonto.getOrPut(divPontoGroup(ponto, elem, otherElem, conn)) { mutableListOf() }
                     .add(
                         DividaSlot(
                             conn.id,
@@ -2205,20 +2241,18 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
         // along the corresponding edge of [elem]. Replicates `TBase.Divida` + `TLigacao.Ative`
         // (mer.pas ~1614, ~7011) which override `Encaixe[ponto]` with `start + tam*cont`
         // before each [Ative] call when QuantosNestePonto > 1.
-        for ((ponto, slots) in byPonto) {
+        for ((group, slots) in byPonto) {
+            val ponto = group.ponto
             val firstOther = slots.first().otherElem
             val sampleConnId = slots.first().connId
             val sampleConn = schema.connections.firstOrNull { it.id == sampleConnId }
             val enc =
                 connectionEncaixes(elem, firstOther, schema, sampleConn)
-            val pos = if (elem is SchemaElement.AssociativeEntity && firstOther !is SchemaElement.Attribute) {
-                if (associativeConnectionUsesInnerDiamond(elem, firstOther, sampleConn)) {
+            val pos = when {
+                elem !is SchemaElement.AssociativeEntity -> elem.position
+                group.associativeLane == DividaPontoGroup.LANE_ASSOC_INNER_NON_ATTRIBUTE ->
                     assocInnerDiamondPos(elem.position)
-                } else {
-                    elem.position
-                }
-            } else {
-                elem.position
+                else -> elem.position
             }
             val (anchorStart, edgeLen) = if (ponto == 1 || ponto == 3) {
                 pos.y.toFloat() to pos.height.toFloat()
