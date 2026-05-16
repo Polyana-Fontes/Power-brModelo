@@ -208,7 +208,8 @@ class ConceptualLinkObjectsTest {
         assertEquals(1, selfRel.ownerEntityId)
         assertEquals("Auto1", selfRel.name)
         assertEquals(10 + 100 + 30, selfRel.position.x)
-        assertEquals(20 + 90 / 6, selfRel.position.y)
+        // Diamond vertically centred on entity: Top + Height/2 - diamondH/2 (= legacy Top+Height/6 when H=90)
+        assertEquals(20 + 90 / 2 - (90 - 90 / 3) / 2, selfRel.position.y)
         val third = 90 / 3
         assertEquals(2 * (90 - third), selfRel.position.width)
         assertEquals(90 - third, selfRel.position.height)
@@ -244,6 +245,23 @@ class ConceptualLinkObjectsTest {
 
         // Assert
         assertTrue(pos.x + pos.width <= ep.x)
+    }
+
+    @Test
+    fun `selfRelationshipPositionFromClickOnOwner top side centers diamond horizontally on entity`() {
+        // Arrange
+        val ep = ElementPosition(100, 50, 120, 80)
+        val clickAbove = Offset(160f, 49f)
+        val h = ep.height
+        val third = h / 3
+        val diamondW = 2 * (h - third)
+
+        // Act
+        val pos = selfRelationshipPositionFromClickOnOwner(ep, clickAbove)
+
+        // Assert
+        assertEquals(ep.x + ep.width / 2 - diamondW / 2, pos.x)
+        assertTrue(pos.y + pos.height < ep.y)
     }
 
     @Test

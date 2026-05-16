@@ -183,9 +183,27 @@ private fun upgradeRelationshipToSelfIfBinaryAutoPattern(schema: ConceptualSchem
 }
 
 /**
- * Pascal [TBaseEntidade.AutoRelacionar]: `SetBounds(Left + Width + 30, Top + Height div 6,
- * 2 * (Height - Height div 3), Height - Height div 3)`.
+ * Pascal [TBaseEntidade.AutoRelacionar] diamond size: `Width = 2 * (Height - Height div 3)`,
+ * `Height = Height - Height div 3`. Horizontal gap from entity remains 30 model units.
+ *
+ * Vertical position uses the **centre** of the owning entity (`Top + Height/2 - diamondH/2`),
+ * clamped when the diamond is taller than the entity so it stays overlapping the edge — straighter
+ * legs than the legacy `Top + Height div 6` offset when heights do not divide evenly.
  */
+private fun selfRelationshipYCenteredOnEntity(ep: ElementPosition, diamondH: Int): Int {
+    val minTop = ep.y
+    val maxTop = (ep.y + ep.height - diamondH).coerceAtLeast(minTop)
+    val ideal = ep.y + ep.height / 2 - diamondH / 2
+    return ideal.coerceIn(minTop, maxTop)
+}
+
+private fun selfRelationshipXCenteredOnEntity(ep: ElementPosition, diamondW: Int): Int {
+    val minLeft = ep.x
+    val maxLeft = (ep.x + ep.width - diamondW).coerceAtLeast(minLeft)
+    val ideal = ep.x + ep.width / 2 - diamondW / 2
+    return ideal.coerceIn(minLeft, maxLeft)
+}
+
 private fun selfRelationshipPositionFromOwningEntity(entityPosition: ElementPosition): ElementPosition {
     val h = entityPosition.height
     val third = h / 3
@@ -193,7 +211,7 @@ private fun selfRelationshipPositionFromOwningEntity(entityPosition: ElementPosi
     val diamondH = h - third
     return ElementPosition(
         x = entityPosition.x + entityPosition.width + 30,
-        y = entityPosition.y + h / 6,
+        y = selfRelationshipYCenteredOnEntity(entityPosition, diamondH),
         width = diamondW,
         height = diamondH,
     )
@@ -208,8 +226,9 @@ private fun selfRelationshipDiamondMetrics(entityPosition: ElementPosition): Pai
 }
 
 /**
- * Places the self-relationship diamond from a schema-space [clickSchema], using the same closest-edge
- * rule as attribute tools ([closestConceptualAttributeAttachPonto]) and attribute-like insets along that edge.
+ * Places the self-relationship diamond from a schema-space [clickSchema]: the **side** is chosen by
+ * [closestConceptualAttributeAttachPonto]; along the orthogonal axis the diamond is **centred** on the
+ * entity (same as [selfRelationshipPositionFromOwningEntity] for the default right side).
  */
 internal fun selfRelationshipPositionFromClickOnOwner(
     entityPosition: ElementPosition,
@@ -219,29 +238,27 @@ internal fun selfRelationshipPositionFromClickOnOwner(
     val (diamondW, diamondH) = selfRelationshipDiamondMetrics(ep)
     val gap = 30
     val side = closestConceptualAttributeAttachPonto(ep, clickSchema)
-    val cx = clickSchema.x.toInt()
-    val cy = clickSchema.y.toInt()
     return when (side) {
         ConceptualAttributeAttachPonto.RIGHT -> ElementPosition(
             x = ep.x + ep.width + gap,
-            y = (cy - diamondH / 2).coerceIn(ep.y, (ep.y + ep.height - diamondH).coerceAtLeast(ep.y)),
+            y = selfRelationshipYCenteredOnEntity(ep, diamondH),
             width = diamondW,
             height = diamondH,
         )
         ConceptualAttributeAttachPonto.LEFT -> ElementPosition(
             x = ep.x - diamondW - gap,
-            y = (cy - diamondH / 2).coerceIn(ep.y, (ep.y + ep.height - diamondH).coerceAtLeast(ep.y)),
+            y = selfRelationshipYCenteredOnEntity(ep, diamondH),
             width = diamondW,
             height = diamondH,
         )
         ConceptualAttributeAttachPonto.TOP -> ElementPosition(
-            x = (cx - diamondW / 2).coerceIn(ep.x - diamondW, ep.x + ep.width),
+            x = selfRelationshipXCenteredOnEntity(ep, diamondW),
             y = ep.y - diamondH - gap,
             width = diamondW,
             height = diamondH,
         )
         ConceptualAttributeAttachPonto.BOTTOM -> ElementPosition(
-            x = (cx - diamondW / 2).coerceIn(ep.x - diamondW, ep.x + ep.width),
+            x = selfRelationshipXCenteredOnEntity(ep, diamondW),
             y = ep.y + ep.height + gap,
             width = diamondW,
             height = diamondH,
@@ -449,8 +466,9 @@ fun validateAndBuildConceptualLink(
     second: ConceptualLinkPick,
     /**
      * When the same entity is linked to itself to create an auto-relationship, optional schema-space click
-     * (same coordinates as the canvas) chooses the owner side and aligns the diamond like attribute tools.
-     * `null` keeps the legacy Pascal placement (diamond to the right of the entity at a fixed vertical offset).
+     * (same coordinates as the canvas) chooses the **side** of the entity ([closestConceptualAttributeAttachPonto]);
+     * the diamond is then centred on that entity along the orthogonal axis.
+     * `null` places the diamond to the **right** of the entity (30px gap), vertically centred on it.
      */
     autoSelfRelationshipClickSchema: Offset? = null,
 ): ConceptualLinkValidationResult {
