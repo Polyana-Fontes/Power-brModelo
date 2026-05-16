@@ -2277,6 +2277,27 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                 continue
             }
 
+            // Plain relationship diamond: Divida spreads along the full bounding-box edge, but
+            // only the central vertex lies on the diamond outline (horizontal top/bottom and
+            // vertical left/right). Multiple legs on the same ponto must share that vertex so
+            // lines meet the shape; the diamond is drawn above the connection lines in drawSchema.
+            if (elem is SchemaElement.Relationship &&
+                slots.size > 1 &&
+                nonAttrSlots.size == slots.size
+            ) {
+                val encAtVertex = connectionEncaixes(
+                    elem,
+                    nonAttrSlots.first().otherElem,
+                    schema,
+                    sampleConn,
+                )
+                val pt = encAtVertex[ponto]
+                for (slot in slots) {
+                    elemResult[slot.connId] = pt
+                }
+                continue
+            }
+
             val nTotal = slots.size
             if (nTotal == 1) {
                 // Single connection on this edge: use the unmodified central Encaixe (Pascal
