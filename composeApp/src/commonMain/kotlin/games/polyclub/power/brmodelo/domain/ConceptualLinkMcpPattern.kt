@@ -19,7 +19,8 @@
 package games.polyclub.power.brmodelo.domain
 
 /**
- * Classifies the structural outcome of a successful **Ligar Objetos** / MCP `link_objects` apply
+ * Classifies the structural outcome of a successful **Ligar Objetos** / MCP `tools__link_objects` (or
+ * `tools__link_existing_endpoints` when it commits the same shape) apply
  * by diffing [before] vs [after] (post-validation schema, typically after MCP patches and enrichment).
  *
  * Values are stable English snake_case strings for MCP JSON only; they are not persisted in MER XML.

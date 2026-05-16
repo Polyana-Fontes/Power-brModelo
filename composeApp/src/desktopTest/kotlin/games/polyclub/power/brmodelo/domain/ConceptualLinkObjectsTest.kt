@@ -607,4 +607,94 @@ class ConceptualLinkObjectsTest {
         val err = assertIs<ConceptualLinkValidationResult.Error>(r)
         assertTrue(err.message.contains("circular", ignoreCase = true))
     }
+
+    @Test
+    fun `normalize for MCP link existing endpoints rejects two plain entities`() {
+        // Arrange
+        val e1 = SchemaElement.Entity(id = 1, name = "A", position = ElementPosition(0, 0, 100, 80))
+        val e2 = SchemaElement.Entity(id = 2, name = "B", position = ElementPosition(200, 0, 100, 80))
+        val schema = ConceptualSchema(elements = mapOf(1 to e1, 2 to e2), nextId = 10)
+
+        // Act
+        val r = normalizeLinkPicksForMcpLinkExistingEndpointsOnly(
+            schema,
+            ConceptualLinkPick(1),
+            ConceptualLinkPick(2),
+        )
+
+        // Assert
+        val err = assertIs<NormalizeLinkPicksForMcpLinkExistingEndpointsOnlyResult.Err>(r)
+        assertEquals(
+            "link_existing_endpoints_entity_entity_use_link_objects_or_place_relationship_first",
+            err.code,
+        )
+    }
+
+    @Test
+    fun `normalize for MCP link existing endpoints rewrites associative outer paired with plain entity`() {
+        // Arrange
+        val e1 = SchemaElement.Entity(id = 1, name = "E", position = ElementPosition(0, 0, 100, 80))
+        val assoc = SchemaElement.AssociativeEntity(
+            id = 2,
+            name = "EA",
+            position = ElementPosition(200, 0, 100, 80),
+        )
+        val schema = ConceptualSchema(elements = mapOf(1 to e1, 2 to assoc), nextId = 10)
+
+        // Act
+        val forward = normalizeLinkPicksForMcpLinkExistingEndpointsOnly(
+            schema,
+            ConceptualLinkPick(1),
+            ConceptualLinkPick(2, isAssociativeOuterEntitySide = true),
+        )
+        val reverse = normalizeLinkPicksForMcpLinkExistingEndpointsOnly(
+            schema,
+            ConceptualLinkPick(2, isAssociativeOuterEntitySide = true),
+            ConceptualLinkPick(1),
+        )
+
+        // Assert
+        val okF = assertIs<NormalizeLinkPicksForMcpLinkExistingEndpointsOnlyResult.Ok>(forward)
+        assertEquals(ConceptualLinkPick(1), okF.endA)
+        assertEquals(ConceptualLinkPick(2, isAssociativeOuterEntitySide = false), okF.endB)
+        val okR = assertIs<NormalizeLinkPicksForMcpLinkExistingEndpointsOnlyResult.Ok>(reverse)
+        assertEquals(ConceptualLinkPick(2, isAssociativeOuterEntitySide = false), okR.endA)
+        assertEquals(ConceptualLinkPick(1), okR.endB)
+    }
+
+    @Test
+    fun `normalize for MCP link existing endpoints rejects two associative outers`() {
+        // Arrange
+        val a1 = SchemaElement.AssociativeEntity(id = 1, name = "A1", position = ElementPosition(0, 0, 100, 80))
+        val a2 = SchemaElement.AssociativeEntity(id = 2, name = "A2", position = ElementPosition(200, 0, 100, 80))
+        val schema = ConceptualSchema(elements = mapOf(1 to a1, 2 to a2), nextId = 10)
+
+        // Act
+        val r = normalizeLinkPicksForMcpLinkExistingEndpointsOnly(
+            schema,
+            ConceptualLinkPick(1, isAssociativeOuterEntitySide = true),
+            ConceptualLinkPick(2, isAssociativeOuterEntitySide = true),
+        )
+
+        // Assert
+        val err = assertIs<NormalizeLinkPicksForMcpLinkExistingEndpointsOnlyResult.Err>(r)
+        assertEquals("link_existing_endpoints_associative_outer_pair_use_link_objects", err.code)
+    }
+
+    @Test
+    fun `normalize for MCP link existing endpoints leaves entity inner associative picks unchanged`() {
+        // Arrange
+        val e1 = SchemaElement.Entity(id = 1, name = "E", position = ElementPosition(0, 0, 100, 80))
+        val assoc = SchemaElement.AssociativeEntity(id = 2, name = "EA", position = ElementPosition(200, 0, 100, 80))
+        val schema = ConceptualSchema(elements = mapOf(1 to e1, 2 to assoc), nextId = 10)
+        val inner = ConceptualLinkPick(2, isAssociativeOuterEntitySide = false)
+
+        // Act
+        val r = normalizeLinkPicksForMcpLinkExistingEndpointsOnly(schema, ConceptualLinkPick(1), inner)
+
+        // Assert
+        val ok = assertIs<NormalizeLinkPicksForMcpLinkExistingEndpointsOnlyResult.Ok>(r)
+        assertEquals(ConceptualLinkPick(1), ok.endA)
+        assertEquals(inner, ok.endB)
+    }
 }

@@ -24,6 +24,7 @@ import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolKind
 import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolOverrides
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.domain.analyzeConceptualLayoutQuality
+import games.polyclub.power.brmodelo.domain.ConceptualLinkConnectionOverridePatch
 import games.polyclub.power.brmodelo.domain.ConceptualLinkPick
 import games.polyclub.power.brmodelo.domain.syntheticClickOnOwnerSideCenter
 import games.polyclub.power.brmodelo.domain.ConceptualSearchHit
@@ -1494,6 +1495,32 @@ internal actual class McpRuntime {
         )
     }
 
+    private data class ParsedLinkObjectsToolCall(
+        val tabIdx: Int,
+        val endA: ConceptualLinkPick,
+        val endB: ConceptualLinkPick,
+        val relO: ConceptualProceduralToolOverrides?,
+        val connList: List<ConceptualLinkConnectionOverridePatch>?,
+        val dryRun: Boolean,
+    )
+
+    private fun parseLinkObjectsToolCall(req: McpSchema.CallToolRequest): Pair<String?, ParsedLinkObjectsToolCall?> {
+        val idx = tabIndexFromResourceUriArg(req) ?: return "resource_uri_required" to null
+        val args = req.arguments()
+        val endA = McpLinkObjectsToolArgs.parseEndPick(args["endA"]) ?: return "endA_invalid" to null
+        val endB = McpLinkObjectsToolArgs.parseEndPick(args["endB"]) ?: return "endB_invalid" to null
+        val relO = McpLinkObjectsToolArgs.parseRelationshipOverrides(args["relationshipOverrides"])
+        val (connErr, connList) = McpLinkObjectsToolArgs.parseConnectionOverrides(
+            args["connectionOverrides"],
+            args["connection"],
+        )
+        if (connErr != null) {
+            return connErr to null
+        }
+        val dryRun = boolArg(req, "dryRun") == true
+        return null to ParsedLinkObjectsToolCall(idx, endA, endB, relO, connList, dryRun)
+    }
+
     private fun buildProceduralTools(
         jsonMapper: io.modelcontextprotocol.json.McpJsonMapper,
     ): List<McpServerFeatures.SyncToolSpecification> {
@@ -1517,7 +1544,7 @@ internal actual class McpRuntime {
         val specializationChildSchema =
             """{"type":"object","properties":{$tabUri,$baseEntityIdProp,"exclusive":{"type":"boolean"}},"required":["baseEntityId","exclusive"],"additionalProperties":false}"""
         val linkEndPickSchema =
-            """{"type":"object","properties":{"elementId":{"type":"integer","minimum":0},"associativeOuterEntitySide":{"type":"boolean","description":"True when the pick is the outer entity rectangle of an associative entity."}},"required":["elementId"],"additionalProperties":false}"""
+            """{"type":"object","properties":{"elementId":{"type":"integer","minimum":0},"associativeOuterEntitySide":{"type":"boolean","description":"True when the pick is the outer entity rectangle of an associative entity; false targets the inner diamond (relationship / miolo). Tool ${McpProceduralToolsToolNames.LINK_EXISTING_ENDPOINTS} may rewrite entity+outer picks to entity+inner when both ends would otherwise be entity-side."}},"required":["elementId"],"additionalProperties":false}"""
         val relationshipOverridesSchema =
             """{"type":"object","properties":{$textFields,$labelStyle,$relArrow,$allowDuplicateCanvasLabelsProp},"additionalProperties":false}"""
         val connectionPatchSchema =
@@ -1586,6 +1613,8 @@ internal actual class McpRuntime {
                     "then optionally overrides outer/inner names, notes, dictionaries, and inner arrow direction (0–8). " +
                     "The `relationshipName` argument (when overridden) is the **inner** diamond label (Pascal \"realiza\" semantics); " +
                     "external links from other entities may still route through a **separate** intermediate relationship when the editor/domain requires it — same as human **Ligar Objetos** behaviour. " +
+                    "After placement, wire the diagram with ${McpProceduralToolsToolNames.LINK_EXISTING_ENDPOINTS} when you only need legs between **existing** endpoints (inner/miolo vs outer is documented on that tool; it refuses plain entity–entity auto-diamond creation), " +
+                    "or ${McpProceduralToolsToolNames.LINK_OBJECTS} when you need the full editor behaviour including **new** midpoint diamonds (entity–entity, entity–associative outer bridge, etc.). " +
                     "Optional `allowDuplicateCanvasLabels` true allows explicit outer `name` and/or inner `relationshipName` to match existing canvas labels (default false returns `name_conflict` / `relationship_name_conflict`). " +
                     "Does **not** switch the user's active ribbon/canvas tool. " +
                     "Returns the placed element as JSON. " +
@@ -1635,13 +1664,11 @@ internal actual class McpRuntime {
             syncTool(
                 jsonMapper,
                 name = McpProceduralToolsToolNames.LINK_OBJECTS,
-                title = "Link conceptual objects (Ligar Objetos)",
-                description = "Completes one conceptual **Ligar Objetos** action in a single call: provide two diagram endpoints (endA/endB) as element picks, " +
-                    "mirroring two clicks with the editor link tool. Supported pairs follow the same domain rules as the canvas (entity↔relationship, entity↔entity, specialization↔plain entity, etc.). " +
-                    "Linking **two entities** creates a new relationship diamond between them and two legs automatically (same as the ribbon). " +
-                    "**Entity ↔ outer rectangle of an associative entity** follows the same Pascal/editor rules as clicks: the model may introduce an **intermediate** relationship diamond with an **auto-generated** name — " +
-                    "this path does **not** rename or reuse the associative inner diamond (`relationshipName`); treat `linkPattern`=`entity_associative_outer_bridge` as a hint that an extra diamond may exist and may need renaming in the inspector. " +
-                    "**Inner associative / \"miolo\" participation** (entity ↔ inner diamond of an associative entity, like a human click on the inner relationship): set `\"associativeOuterEntitySide\": false` on that pick's `elementId` for the associative entity (use `true` only for the outer entity rectangle). " +
+                title = "Link conceptual objects (full editor / Ligar Objetos)",
+                description = "Full **Ligar Objetos** semantics in one call: same domain rules as the canvas link tool, including **automatic** creation of a new relationship diamond when linking **two plain entities** or when the editor needs an **entity ↔ associative-outer** bridge diamond. " +
+                    "Provide two diagram endpoints (`endA` / `endB`) as element picks. " +
+                    "For **inner associative / \"miolo\"** participation (entity ↔ inner diamond of an associative entity), set `\"associativeOuterEntitySide\": false` on that pick (`true` only for the outer entity rectangle). " +
+                    "When you only want to connect **already placed** elements without creating a new midpoint relationship from a plain entity–entity pair, prefer ${McpProceduralToolsToolNames.LINK_EXISTING_ENDPOINTS} instead (same JSON schema; it rejects those auto-create paths and can rewrite entity+associative-outer to entity+inner). " +
                     "Optional `relationshipOverrides` adjusts any **new** relationship or self-relationship the domain creates (name, notes, arrow, showName, `allowDuplicateCanvasLabels` when you intentionally reuse a canvas label); they do **not** retarget legs onto the inner associative diamond when the editor materialized a separate bridge relationship. " +
                     "Optional `connection` (single leg) or `connectionOverrides` (array) adjusts new connection cardinalities and line metadata; " +
                     "when two new legs are created (entity–entity case), send two patches in order **[endA leg, endB leg]** (ascending new connection id matches this order). " +
@@ -1653,24 +1680,38 @@ internal actual class McpRuntime {
                     McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
                 schema = linkObjectsSchema,
             ) { _, req ->
-                val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
-                val args = req.arguments()
-                val endA = McpLinkObjectsToolArgs.parseEndPick(args["endA"])
-                    ?: return@syncTool err("endA_invalid")
-                val endB = McpLinkObjectsToolArgs.parseEndPick(args["endB"])
-                    ?: return@syncTool err("endB_invalid")
-                val relO = McpLinkObjectsToolArgs.parseRelationshipOverrides(args["relationshipOverrides"])
-                val (connErr, connList) = McpLinkObjectsToolArgs.parseConnectionOverrides(
-                    args["connectionOverrides"],
-                    args["connection"],
-                )
-                if (connErr != null) {
-                    return@syncTool err(connErr)
+                val (parseErr, parsed) = parseLinkObjectsToolCall(req)
+                if (parseErr != null) {
+                    return@syncTool err(parseErr)
                 }
-                val dryRun = boolArg(req, "dryRun") == true
+                val p = parsed!!
                 val outcome = runOnEdt {
                     val b = bindingsRef.get() ?: return@runOnEdt McpProceduralToolApplyOutcome.err("bindings_unavailable")
-                    b.onLinkConceptualObjectsAtTab(idx, endA, endB, relO, connList, null, dryRun)
+                    b.onLinkConceptualObjectsAtTab(p.tabIdx, p.endA, p.endB, p.relO, p.connList, null, p.dryRun, false)
+                }
+                proceduralToolOutcomeToResult(outcome)
+            },
+            syncTool(
+                jsonMapper,
+                name = McpProceduralToolsToolNames.LINK_EXISTING_ENDPOINTS,
+                title = "Link conceptual endpoints already on canvas",
+                description = "Same JSON schema as ${McpProceduralToolsToolNames.LINK_OBJECTS}, but for **wiring existing** diagram pieces: it **refuses** plain **entity ↔ entity** picks that would auto-create a new relationship diamond (error code suggests ${McpProceduralToolsToolNames.LINK_OBJECTS} or placing a relationship first) and **refuses** associative-**outer** ↔ associative-**outer** pairs that need the full bridge tool. " +
+                    "When one end is a plain entity-side pick and the other is an associative **outer** rectangle, the server **rewrites** that associative pick to the **inner** diamond (`associativeOuterEntitySide: false`) so the link targets the associative relationship (miolo), matching the usual agent intent. " +
+                    "To keep true **outer** participation (bridge / extra diamond behaviour), call ${McpProceduralToolsToolNames.LINK_OBJECTS} instead and inspect `linkPattern` (e.g. `entity_associative_outer_bridge`). " +
+                    "All other supported pairs (entity↔relationship, specialization↔plain entity, inner associative legs, etc.) behave like the editor. " +
+                    "Optional `relationshipOverrides`, `connection`, `connectionOverrides`, and `dryRun` match ${McpProceduralToolsToolNames.LINK_OBJECTS}. " +
+                    "Does **not** switch the user's active canvas tool. " +
+                    McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
+                schema = linkObjectsSchema,
+            ) { _, req ->
+                val (parseErr, parsed) = parseLinkObjectsToolCall(req)
+                if (parseErr != null) {
+                    return@syncTool err(parseErr)
+                }
+                val p = parsed!!
+                val outcome = runOnEdt {
+                    val b = bindingsRef.get() ?: return@runOnEdt McpProceduralToolApplyOutcome.err("bindings_unavailable")
+                    b.onLinkConceptualObjectsAtTab(p.tabIdx, p.endA, p.endB, p.relO, p.connList, null, p.dryRun, true)
                 }
                 proceduralToolOutcomeToResult(outcome)
             },
@@ -1681,7 +1722,7 @@ internal actual class McpRuntime {
                 description = "Creates a self-relationship on a plain entity or the outer rectangle of an associative entity, " +
                     "same rules as the **Auto Relacionar** canvas tool. " +
                     "Optional `attachSide` (`left`, `top`, `right`, `bottom` or codes 1–4) chooses which side of the owner box receives the diamond, matching attribute-tool edge semantics; omit for the legacy right-side placement. " +
-                    "Optional `relationshipOverrides` and `connection` / `connectionOverrides` (exactly **two** patches, ascending new connection id) adjust the new self-relationship and both cardinality legs at creation time — same fields as **link_objects**. " +
+                    "Optional `relationshipOverrides` and `connection` / `connectionOverrides` (exactly **two** patches, ascending new connection id) adjust the new self-relationship and both cardinality legs at creation time — same fields as ${McpProceduralToolsToolNames.LINK_OBJECTS} / ${McpProceduralToolsToolNames.LINK_EXISTING_ENDPOINTS}. " +
                     "Returns `newConnections` and `newSelfRelationship` JSON. Does **not** switch the user's active canvas tool. " +
                     McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
                 schema = autoSelfRelationshipSchema,
@@ -1709,7 +1750,7 @@ internal actual class McpRuntime {
                     val ownerEl = snap.sessions[idx].schema.elements[entityId]
                         ?: return@runOnEdt McpProceduralToolApplyOutcome.err("element_not_found")
                     val click = sideOpt?.let { syntheticClickOnOwnerSideCenter(ownerEl.position, it) }
-                    b.onLinkConceptualObjectsAtTab(idx, pick, pick, relO, connList, click, false)
+                    b.onLinkConceptualObjectsAtTab(idx, pick, pick, relO, connList, click, false, false)
                 }
                 proceduralToolOutcomeToResult(outcome)
             },

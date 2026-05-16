@@ -100,6 +100,7 @@ internal expect object McpDesktopSync {
             List<ConceptualLinkConnectionOverridePatch>?,
             Offset?,
             Boolean,
+            Boolean,
         ) -> McpProceduralToolApplyOutcome,
         onApplyEditConceptualModelAtTab: (Int, Map<String, Any?>) -> McpProceduralToolApplyOutcome,
         onApplyEditCanvasElementAtTab: (Int, Int, Map<String, Any?>) -> McpProceduralToolApplyOutcome,

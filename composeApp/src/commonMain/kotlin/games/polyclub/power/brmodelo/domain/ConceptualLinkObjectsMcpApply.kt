@@ -19,7 +19,8 @@
 package games.polyclub.power.brmodelo.domain
 
 /**
- * Optional per-connection field overrides after [validateAndBuildConceptualLink] (MCP **link_objects**).
+ * Optional per-connection field overrides after [validateAndBuildConceptualLink]
+ * (MCP `tools__link_objects` / `tools__link_existing_endpoints`).
  * Patches are applied in **ascending new connection id** order, which matches creation order for two
  * relationship–entity legs from entity–entity linking (endA leg, then endB leg).
  */

@@ -122,6 +122,8 @@ import games.polyclub.power.brmodelo.domain.applyConceptualLinkObjectsMcpPatches
 import games.polyclub.power.brmodelo.domain.applyConceptualSpecializationTool
 import games.polyclub.power.brmodelo.domain.ConceptualLinkObjectsMcpApplyResult
 import games.polyclub.power.brmodelo.domain.ConceptualLinkValidationResult
+import games.polyclub.power.brmodelo.domain.NormalizeLinkPicksForMcpLinkExistingEndpointsOnlyResult
+import games.polyclub.power.brmodelo.domain.normalizeLinkPicksForMcpLinkExistingEndpointsOnly
 import games.polyclub.power.brmodelo.domain.validateAndBuildConceptualLink
 import games.polyclub.power.brmodelo.domain.applyEditCanvasElement
 import games.polyclub.power.brmodelo.domain.applyEditConceptualModel
@@ -1150,13 +1152,27 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                         }
                     }
                 },
-                onLinkConceptualObjectsAtTab = mcpLink@{ tabIdx, endA, endB, relOverrides, connPatches, autoSelfClick, dryRun ->
+                onLinkConceptualObjectsAtTab = mcpLink@{ tabIdx, endA, endB, relOverrides, connPatches, autoSelfClick, dryRun, linkExistingEndpointsOnly ->
                     if (tabIdx !in tabSessions.indices) {
                         return@mcpLink McpProceduralToolApplyOutcome.err("invalid_tab_index")
                     }
                     val tab = tabSessions[tabIdx]
                     val before = tab.schema
-                    when (val link = validateAndBuildConceptualLink(before, endA, endB, autoSelfClick)) {
+                    val (resolvedEndA, resolvedEndB) =
+                        if (linkExistingEndpointsOnly) {
+                            when (
+                                val normalized =
+                                    normalizeLinkPicksForMcpLinkExistingEndpointsOnly(before, endA, endB)
+                            ) {
+                                is NormalizeLinkPicksForMcpLinkExistingEndpointsOnlyResult.Err ->
+                                    return@mcpLink McpProceduralToolApplyOutcome.err(normalized.code)
+                                is NormalizeLinkPicksForMcpLinkExistingEndpointsOnlyResult.Ok ->
+                                    normalized.endA to normalized.endB
+                            }
+                        } else {
+                            endA to endB
+                        }
+                    when (val link = validateAndBuildConceptualLink(before, resolvedEndA, resolvedEndB, autoSelfClick)) {
                         is ConceptualLinkValidationResult.Error ->
                             McpProceduralToolApplyOutcome.err(link.message)
                         is ConceptualLinkValidationResult.Ok -> {

@@ -124,7 +124,12 @@ internal fun mcpJsonStringLiteral(value: String): String {
                 '\n' -> append("\\n")
                 '\r' -> append("\\r")
                 '\t' -> append("\\t")
-                else -> if (ch.code < 32) append("\\u%04x".format(ch.code)) else append(ch)
+                else -> if (ch.code < 32) {
+                    append("\\u")
+                    append(ch.code.toString(16).padStart(4, '0'))
+                } else {
+                    append(ch)
+                }
             }
         }
         append('"')

@@ -67,6 +67,65 @@ fun conceptualLinkEndpointKind(
     }
 }
 
+/** Outcome of [normalizeLinkPicksForMcpLinkExistingEndpointsOnly]. */
+sealed interface NormalizeLinkPicksForMcpLinkExistingEndpointsOnlyResult {
+    data class Ok(val endA: ConceptualLinkPick, val endB: ConceptualLinkPick) :
+        NormalizeLinkPicksForMcpLinkExistingEndpointsOnlyResult
+
+    data class Err(val code: String) : NormalizeLinkPicksForMcpLinkExistingEndpointsOnlyResult
+}
+
+/**
+ * MCP `tools__link_existing_endpoints` guard before [validateAndBuildConceptualLink]:
+ * - Refuses **plain entity ↔ plain entity** (would create a new relationship diamond); agents should call
+ *   `tools__link_objects` or place a relationship first.
+ * - Refuses **associative outer ↔ associative outer** (would need the full editor bridge / midpoint behaviour).
+ * - When exactly one end is the **outer** rectangle of an associative entity and the other end is still
+ *   [ConceptualLinkEndpointKind.ENTITY_SIDE], rewrites that associative pick to the **inner** diamond
+ *   (`associativeOuterEntitySide: false`) so the link targets the associative relationship like a human click on the miolo.
+ *
+ * The full-editor MCP tool `tools__link_objects` does **not** apply this rewrite.
+ */
+fun normalizeLinkPicksForMcpLinkExistingEndpointsOnly(
+    schema: ConceptualSchema,
+    endA: ConceptualLinkPick,
+    endB: ConceptualLinkPick,
+): NormalizeLinkPicksForMcpLinkExistingEndpointsOnlyResult {
+    val elA = schema.elements[endA.elementId]
+        ?: return NormalizeLinkPicksForMcpLinkExistingEndpointsOnlyResult.Err("element_not_found")
+    val elB = schema.elements[endB.elementId]
+        ?: return NormalizeLinkPicksForMcpLinkExistingEndpointsOnlyResult.Err("element_not_found")
+    val kA = conceptualLinkEndpointKind(elA, endA)
+        ?: return NormalizeLinkPicksForMcpLinkExistingEndpointsOnlyResult.Err("unsupported_link_end")
+    val kB = conceptualLinkEndpointKind(elB, endB)
+        ?: return NormalizeLinkPicksForMcpLinkExistingEndpointsOnlyResult.Err("unsupported_link_end")
+
+    if (kA == ConceptualLinkEndpointKind.ENTITY_SIDE && kB == ConceptualLinkEndpointKind.ENTITY_SIDE) {
+        val aIsAssocOuter = elA is SchemaElement.AssociativeEntity && endA.isAssociativeOuterEntitySide
+        val bIsAssocOuter = elB is SchemaElement.AssociativeEntity && endB.isAssociativeOuterEntitySide
+        when {
+            aIsAssocOuter && bIsAssocOuter ->
+                return NormalizeLinkPicksForMcpLinkExistingEndpointsOnlyResult.Err(
+                    "link_existing_endpoints_associative_outer_pair_use_link_objects",
+                )
+            aIsAssocOuter xor bIsAssocOuter -> {
+                val na = if (aIsAssocOuter) endA.copy(isAssociativeOuterEntitySide = false) else endA
+                val nb = if (bIsAssocOuter) endB.copy(isAssociativeOuterEntitySide = false) else endB
+                return NormalizeLinkPicksForMcpLinkExistingEndpointsOnlyResult.Ok(na, nb)
+            }
+            elA is SchemaElement.Entity && elB is SchemaElement.Entity ->
+                return NormalizeLinkPicksForMcpLinkExistingEndpointsOnlyResult.Err(
+                    "link_existing_endpoints_entity_entity_use_link_objects_or_place_relationship_first",
+                )
+            else ->
+                return NormalizeLinkPicksForMcpLinkExistingEndpointsOnlyResult.Err(
+                    "link_existing_endpoints_entity_entity_use_link_objects_or_place_relationship_first",
+                )
+        }
+    }
+    return NormalizeLinkPicksForMcpLinkExistingEndpointsOnlyResult.Ok(endA, endB)
+}
+
 private fun conceptualRelToEntityLegCount(schema: ConceptualSchema, relId: Int, entityId: Int): Int =
     schema.connections.count { it.elementIdA == relId && it.elementIdB == entityId }
 

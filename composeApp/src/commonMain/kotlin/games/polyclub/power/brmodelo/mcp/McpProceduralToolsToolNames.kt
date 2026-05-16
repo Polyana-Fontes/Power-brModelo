@@ -35,8 +35,18 @@ internal object McpProceduralToolsToolNames {
     /** Same as ribbon **Observação** — observation / annotation text box. */
     val PLACE_OBSERVATION = tool("place_observation")
 
-    /** Same rules as the editor **Ligar Objetos** tool (two picks); MCP exposes both ends in one call. */
+    /**
+     * Same rules as the editor **Ligar Objetos** tool (two picks); MCP exposes both ends in one call.
+     * May create a new relationship diamond (plain entity–entity, entity–associative outer bridge, etc.).
+     */
     val LINK_OBJECTS = tool("link_objects")
+
+    /**
+     * Same schema as [LINK_OBJECTS], but refuses paths that would **create** a new relationship diamond from scratch;
+     * optionally rewrites entity ↔ associative-**outer** picks to entity ↔ associative **inner** (miolo).
+     * Prefer this when wiring elements that already exist on the canvas.
+     */
+    val LINK_EXISTING_ENDPOINTS = tool("link_existing_endpoints")
 
     /** Same rules as **Auto Relacionar** on an entity (one pick + side); optional overrides for the new self-relationship and its two cardinality legs. */
     val AUTO_SELF_RELATIONSHIP = tool("auto_self_relationship")

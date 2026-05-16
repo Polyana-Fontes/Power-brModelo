@@ -40,6 +40,7 @@ class McpProceduralToolsToolNamesTest {
         assertEquals("tools__apply_specialization_basic", McpProceduralToolsToolNames.APPLY_SPECIALIZATION_BASIC)
         assertEquals("tools__apply_specialization_tree", McpProceduralToolsToolNames.APPLY_SPECIALIZATION_TREE)
         assertEquals("tools__link_objects", McpProceduralToolsToolNames.LINK_OBJECTS)
+        assertEquals("tools__link_existing_endpoints", McpProceduralToolsToolNames.LINK_EXISTING_ENDPOINTS)
         assertEquals("tools__auto_self_relationship", McpProceduralToolsToolNames.AUTO_SELF_RELATIONSHIP)
     }
 }

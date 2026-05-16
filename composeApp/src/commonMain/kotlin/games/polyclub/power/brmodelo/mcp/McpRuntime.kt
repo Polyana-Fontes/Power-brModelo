@@ -121,6 +121,9 @@ internal class McpUiBindings(
      * schema-space coordinates (same as canvas); `null` uses the legacy right-side diamond placement.
      * When [dryRun] is true, validate and return preview JSON (including merged projected `layoutQuality`) without
      * committing the tab (no undo entry).
+     * When [linkExistingEndpointsOnly] is true (MCP `tools__link_existing_endpoints`), picks are normalized / rejected
+     * before validation so plain entity–entity and associative-outer–outer pairs do not create new diamonds; use
+     * [linkExistingEndpointsOnly] false for the full editor-equivalent `tools__link_objects` tool.
      */
     val onLinkConceptualObjectsAtTab: (
         tabIndex: Int,
@@ -130,6 +133,7 @@ internal class McpUiBindings(
         connectionPatches: List<ConceptualLinkConnectionOverridePatch>?,
         autoSelfRelationshipClickSchema: Offset?,
         dryRun: Boolean,
+        linkExistingEndpointsOnly: Boolean,
     ) -> McpProceduralToolApplyOutcome,
     /** Inspector-aligned model metadata edits (one undo step). */
     val onApplyEditConceptualModelAtTab: (tabIndex: Int, patch: Map<String, Any?>) -> McpProceduralToolApplyOutcome,
