@@ -696,6 +696,23 @@ private fun DrawScope.drawAssociativeEntity(assoc: SchemaElement.AssociativeEnti
 
 // ── Attribute (ellipse) ───────────────────────────────────────────────────────
 
+/** Ellipse outer size; matches [drawAttribute] (`P := Height - 3` in Pascal). */
+private fun attributeEllipseDiameterPx(heightPx: Int): Float =
+    (heightPx.toFloat() - 3f).coerceAtLeast(8f)
+
+/**
+ * Y offset from attribute top to the horizontal stub / ellipse centreline;
+ * must match [drawAttribute] `meio` so polylines meet the stub without a stray micro-segment.
+ */
+private fun attributeStubCenterlineOffsetY(heightPx: Int): Float {
+    val d = attributeEllipseDiameterPx(heightPx)
+    return (d - 1f) / 2f + 2f
+}
+
+/** Model-space Y of the connector on the attribute's active vertical edge (owner-side routing target). */
+private fun attributeActiveEdgeConnectorY(pos: ElementPosition): Float =
+    pos.y.toFloat() + attributeStubCenterlineOffsetY(pos.height)
+
 /**
  * Draws an attribute element: small ellipse + connecting stub + label.
  *
@@ -725,9 +742,8 @@ private fun DrawScope.drawAttribute(
     val w = p.width.toFloat()
     val h = p.height.toFloat()
 
-    // Ellipse diameter = Height - 3, matching "P := Height - 3" in Pascal
-    val diameter = (h - 3f).coerceAtLeast(8f)
-    val meio = (diameter - 1f) / 2f + 2f  // vertical centre of ellipse, matches Pascal
+    val diameter = attributeEllipseDiameterPx(p.height)
+    val meio = attributeStubCenterlineOffsetY(p.height)
 
     // Orientation follows TBase.OrganizeAtributos from mer.pas:
     //   P=1 (owner LEFT side) → OrientacaoD → ellipse on RIGHT
@@ -1670,8 +1686,9 @@ private fun connectionEncaixes(
             }
             arrayOf(Offset.Zero, bar, bar, bar, bar)
         } else {
-            // Normal attribute connection toward its owner
-            val c = if (ellipseOnLeft) Offset(left, cy) else Offset(right, cy)
+            // Normal attribute connection toward its owner — Y matches rendered stub (not bbox centre).
+            val attachY = attributeActiveEdgeConnectorY(elem.position)
+            val c = if (ellipseOnLeft) Offset(left, attachY) else Offset(right, attachY)
             arrayOf(Offset.Zero, c, c, c, c)
         }
     }
@@ -2129,10 +2146,9 @@ private fun computeNonAttrPonto(
 /**
  * Pre-computes per-element, per-connection attachment points.
  *
- * **Attribute connections** — The attachment Y is derived directly from the
- * attribute's stored `cy` (centre-Y), which is already the exact value that
- * [TBase.OrganizeAtributos] would produce. Using `cy` avoids the floating-point
- * drift that arises when replicating the integer-arithmetic Divida algorithm.
+ * **Attribute connections** — The attachment Y matches the rendered stub / ellipse
+ * centreline ([attributeActiveEdgeConnectorY], same as [drawAttribute]), not the raw
+ * bounding-box centre, so orthogonal legs meet the stub without a tiny stray segment.
  *
  * For the child–composite-attribute case, the composite end uses
  * [TBarraDeAtributos.PrepareToAtive] (`mer.pas` ~9749): X at the bar centre and Y at
@@ -2329,7 +2345,7 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                 )
                 val p = elem.position
                 val attrActiveX = if (entityPonto == 1) (p.x + p.width).toFloat() else p.x.toFloat()
-                elemResult[conn.id] = Offset(attrActiveX, p.y + p.height / 2f)
+                elemResult[conn.id] = Offset(attrActiveX, attributeActiveEdgeConnectorY(p))
             } else {
                 // Non-attribute → non-attribute: queue for Divida.
                 val ponto = connectionPonto(
