@@ -98,6 +98,8 @@ internal fun BrModeloScreen(
     onQuitApplication: () -> Unit = {},
     onSave: () -> Unit = {},
     onSaveAs: () -> Unit = {},
+    onOpenSchemaDataDictionary: () -> Unit = {},
+    schemaDataDictionaryEnabled: Boolean = false,
     entityToolBinding: EntityToolRibbonBinding? = null,
     observationToolBinding: ObservationToolRibbonBinding? = null,
     linkObjectsToolBinding: LinkObjectsToolRibbonBinding? = null,
@@ -269,6 +271,11 @@ internal fun BrModeloScreen(
                     exportIsJpeg = false
                     exportCounter++
                 },
+                onOpenSchemaDataDictionary = {
+                    onDismissMenu()
+                    onOpenSchemaDataDictionary()
+                },
+                schemaDataDictionaryEnabled = schemaDataDictionaryEnabled,
                 onSave = {
                     onDismissMenu()
                     onSave()

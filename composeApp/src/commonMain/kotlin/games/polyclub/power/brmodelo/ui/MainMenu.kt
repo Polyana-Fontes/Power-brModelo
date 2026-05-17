@@ -84,6 +84,8 @@ internal fun FunctionalMainMenu(
     onQuitApplication: () -> Unit = {},
     onExportJpeg: () -> Unit = {},
     onExportPng: () -> Unit = {},
+    onOpenSchemaDataDictionary: () -> Unit = {},
+    schemaDataDictionaryEnabled: Boolean = false,
     onSave: () -> Unit = {},
     onSaveAs: () -> Unit = {},
 ) {
@@ -104,7 +106,9 @@ internal fun FunctionalMainMenu(
             MainMenuType.NewModel -> NewModelSubmenu(onNewConceptualModel = onNewConceptualModel)
             MainMenuType.Print    -> PrintSubmenu(
                 onExportJpeg = onExportJpeg,
-                onExportPng = onExportPng
+                onExportPng = onExportPng,
+                onOpenSchemaDataDictionary = onOpenSchemaDataDictionary,
+                schemaDataDictionaryEnabled = schemaDataDictionaryEnabled,
             )
             null                  -> RecentModelsPanel()
         }
@@ -315,6 +319,8 @@ private fun NewModelSubmenu(onNewConceptualModel: () -> Unit = {}) {
 private fun PrintSubmenu(
     onExportJpeg: () -> Unit = {},
     onExportPng: () -> Unit = {},
+    onOpenSchemaDataDictionary: () -> Unit = {},
+    schemaDataDictionaryEnabled: Boolean = false,
 ) {
     Column(
         modifier = Modifier
@@ -337,7 +343,8 @@ private fun PrintSubmenu(
             "Gerar Dicionário do Esquema",
             "Permite gerar o dicionário de dados geral do esquema.",
             Res.drawable.dicionario_dados_3s,
-            enabled = false,
+            enabled = schemaDataDictionaryEnabled,
+            onClick = onOpenSchemaDataDictionary,
         )
         Spacer(modifier = Modifier.height(6.dp))
         SubmenuCard(

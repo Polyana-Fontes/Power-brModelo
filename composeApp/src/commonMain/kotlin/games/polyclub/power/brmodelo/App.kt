@@ -146,6 +146,7 @@ import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.ClipboardRibbonBinding
 import games.polyclub.power.brmodelo.ui.clipboard.BrModeloConceptualClipboardStore
 import games.polyclub.power.brmodelo.ui.ConceptualSearchDialog
+import games.polyclub.power.brmodelo.ui.ConceptualSchemaDictionaryDialog
 import games.polyclub.power.brmodelo.ui.ConceptualSearchNavigateAction
 import games.polyclub.power.brmodelo.ui.conceptualSearchNavigateAction
 import games.polyclub.power.brmodelo.ui.encodeConceptualElementSubsetRasterBlocking
@@ -220,6 +221,7 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
     var canvasCenterOnBoundsRequest by remember { mutableStateOf<ElementPosition?>(null) }
     var inspectorTabRequest by remember { mutableStateOf<InspectorTab?>(null) }
     var conceptualSearchDialogOpen by remember { mutableStateOf(false) }
+    var schemaDataDictionarySchema by remember { mutableStateOf<ConceptualSchema?>(null) }
     var conceptualLabelFontChooserNonce by remember { mutableLongStateOf(0L) }
     var conceptualLabelFontRequest by remember { mutableStateOf<ConceptualLabelFontChooserRequest?>(null) }
 
@@ -1643,6 +1645,10 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                     onQuitApplication = requestApplicationQuit,
                     onSave = { enqueueSave(saveAs = false) },
                     onSaveAs = { enqueueSave(saveAs = true) },
+                    onOpenSchemaDataDictionary = {
+                        sel.schema?.let { schemaDataDictionarySchema = it }
+                    },
+                    schemaDataDictionaryEnabled = sel.schema != null,
                     entityToolBinding = entityToolBinding,
                     observationToolBinding = observationToolBinding,
                     linkObjectsToolBinding = linkObjectsToolBinding,
@@ -1693,6 +1699,18 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                         onNavigate = { action ->
                             applyConceptualSearchNavigateAction(action)
                             conceptualSearchDialogOpen = false
+                        },
+                    )
+                }
+
+                schemaDataDictionarySchema?.let { dictSchema ->
+                    ConceptualSchemaDictionaryDialog(
+                        schema = dictSchema,
+                        onDismiss = { schemaDataDictionarySchema = null },
+                        onTransientUserMessage = { msg ->
+                            scope.launch {
+                                snackbarHostState.showSnackbar(msg)
+                            }
                         },
                     )
                 }
