@@ -22,20 +22,49 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import games.polyclub.power.brmodelo.domain.LabelStyle
+import kotlin.math.roundToInt
 
 /** Default canvas label size (sp) when [LabelStyle.fontSizePoints] is unset — matches legacy Kotlin canvas. */
 internal const val CANVAS_LABEL_FALLBACK_FONT_SP = 11f
 
 /**
+ * Pascal / VCL builds fonts with `MulDiv(PointSize, LOGPIXELSY, 72)` (see `mer.pas` / Windows `CreateFont`).
+ * At the traditional **96 DPI** reference, one stored **point** corresponds to **96/72** “logical px” of height
+ * before hinting — using the same factor for Compose **`sp`** makes diagram text match brModelo 3.x more closely
+ * than mapping `pt` → `sp` 1:1 (which rendered noticeably smaller while geometry stayed correct at 100% zoom).
+ */
+private const val MER_POINTS_TO_COMPOSE_SP_SCALE = 96f / 72f
+
+/**
+ * Negative [androidx.compose.ui.text.TextStyle.letterSpacing] in **em** (fraction of font size) so diagram
+ * labels use slightly less horizontal width while keeping the same [fontSize] — closer to legacy VCL kerning feel.
+ */
+private const val MER_CANVAS_LETTER_TRACKING_EM = -0.0475f
+
+/**
+ * Converts MER / Pascal [LabelStyle.fontSizePoints] to an integer used as Compose **`N.sp`** on the canvas.
+ * [fontSizePoints] null → legacy Kotlin default (unscaled); non-null → scaled by [MER_POINTS_TO_COMPOSE_SP_SCALE].
+ */
+internal fun merFontSizePointsToCanvasSpInt(fontSizePoints: Int?): Int =
+    when (fontSizePoints) {
+        null -> CANVAS_LABEL_FALLBACK_FONT_SP.toInt().coerceIn(4, 144)
+        else -> (fontSizePoints * MER_POINTS_TO_COMPOSE_SP_SCALE).roundToInt().coerceIn(4, 144)
+    }
+
+/**
  * Builds a [TextStyle] for diagram labels from [LabelStyle] and a [base] (typically [CANVAS_TEXT_STYLE]).
  *
  * [LabelStyle.fontFamilyName] maps to a platform-specific [androidx.compose.ui.text.font.FontFamily].
- * [LabelStyle.fontSizePoints] maps to the same integer in **sp** (MER stores point size like Pascal `TFont.Size`).
+ * [LabelStyle.fontSizePoints] is stored like Pascal `TFont.Size` / MER `FonteTamanho` (points); rendering uses
+ * [merFontSizePointsToCanvasSpInt] so **on-screen** size tracks legacy VCL ~96dpi behaviour.
+ * A small negative [androidx.compose.ui.text.TextStyle.letterSpacing] in **em** tightens horizontal extent
+ * without changing body size.
  */
 internal fun LabelStyle.mergeOntoCanvasTextStyle(base: TextStyle): TextStyle {
-    val sizeSp = (fontSizePoints ?: CANVAS_LABEL_FALLBACK_FONT_SP.toInt()).coerceIn(4, 144).sp
+    val sizeSp = merFontSizePointsToCanvasSpInt(fontSizePoints).sp
     val family = fontFamilyName
         ?.trim()
         ?.takeIf { it.isNotEmpty() }
@@ -61,5 +90,6 @@ internal fun LabelStyle.mergeOntoCanvasTextStyle(base: TextStyle): TextStyle {
         fontStyle = if (italic) FontStyle.Italic else base.fontStyle,
         color = fg,
         textDecoration = decoration,
+        letterSpacing = MER_CANVAS_LETTER_TRACKING_EM.em,
     )
 }

@@ -50,6 +50,7 @@ import games.polyclub.power.brmodelo.domain.conceptualAttributeAttachPonto
 import games.polyclub.power.brmodelo.domain.ElementPosition
 import games.polyclub.power.brmodelo.domain.SchemaElement
 import games.polyclub.power.brmodelo.ui.mergeOntoCanvasTextStyle
+import games.polyclub.power.brmodelo.ui.merFontSizePointsToCanvasSpInt
 import games.polyclub.power.brmodelo.ui.vclColorRefToCompose
 import games.polyclub.power.brmodelo.ui.canvas.drawAnnotation
 import games.polyclub.power.brmodelo.ui.canvas.drawAssociativeEntity
@@ -1096,7 +1097,8 @@ private fun DrawScope.drawAnnotation(ann: SchemaElement.Annotation, textMeasurer
         // Tighter line height to match Windows GDI Tahoma 8pt spacing (~13 px/line).
         // Compose default (~1.25×fontSize ≈ 13.75 sp) causes text to overflow the
         // box height that Pascal stored via DT_CALCRECT with the original font metrics.
-        val lineHeightSp = ((ann.labelStyle.fontSizePoints ?: 8) * 13f / 8f).sp
+        val bodySpInt = merFontSizePointsToCanvasSpInt(ann.labelStyle.fontSizePoints ?: 8)
+        val lineHeightSp = (bodySpInt * 13f / 8f).sp
         val layout = textMeasurer.measure(
             displayText,
             style = ann.labelStyle.mergeOntoCanvasTextStyle(CANVAS_TEXT_STYLE).copy(textAlign = align, lineHeight = lineHeightSp),
