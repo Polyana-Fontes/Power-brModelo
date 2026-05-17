@@ -32,6 +32,23 @@ data class ConceptualLinkPick(
     val isAssociativeOuterEntitySide: Boolean = false,
 )
 
+/**
+ * Canvas "Auto relacionamento" tool only: a hit on the associative **inner** diamond (miolo) is treated like
+ * the **outer** rectangle (`isAssociativeOuterEntitySide = true`) so hover, validation, and placement match
+ * clicking the entity frame. The generic link tool keeps raw inner vs outer picks from [hitTestConceptualLinkPick].
+ */
+fun normalizeConceptualLinkPickForAutoSelfRelationshipTool(
+    schema: ConceptualSchema,
+    pick: ConceptualLinkPick,
+): ConceptualLinkPick {
+    val el = schema.elements[pick.elementId] ?: return pick
+    return if (el is SchemaElement.AssociativeEntity && !pick.isAssociativeOuterEntitySide) {
+        pick.copy(isAssociativeOuterEntitySide = true)
+    } else {
+        pick
+    }
+}
+
 /** Semantic role of a link endpoint in the conceptual ER model. */
 enum class ConceptualLinkEndpointKind {
     /** Plain entity or the outer rectangle of an associative entity. */

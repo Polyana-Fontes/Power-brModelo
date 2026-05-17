@@ -18,6 +18,8 @@
 
 package games.polyclub.power.brmodelo.ui
 
+import games.polyclub.power.brmodelo.domain.ConceptualSchemaDictionaryEntry
+import games.polyclub.power.brmodelo.domain.formatConceptualDataDictionaryPlainText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.awt.Font
@@ -37,7 +39,7 @@ import kotlin.math.max
 import kotlin.math.min
 import java.util.concurrent.CountDownLatch
 
-actual suspend fun saveConceptualDataDictionaryTextFile(suggestedBaseFileName: String, plainText: String): Boolean =
+actual suspend fun saveConceptualDataDictionaryTextFile(suggestedBaseFileName: String, markdown: String): Boolean =
     withContext(Dispatchers.IO) {
         val written = AtomicBoolean(false)
         val latch = CountDownLatch(1)
@@ -46,15 +48,17 @@ actual suspend fun saveConceptualDataDictionaryTextFile(suggestedBaseFileName: S
                 val stem = suggestedBaseFileName.ifBlank { "modelo" }
                 val chooser = JFileChooser().apply {
                     dialogTitle = "Salvar dicionário de dados"
-                    selectedFile = File("$stem.txt")
-                    fileFilter = FileNameExtensionFilter("Texto (*.txt)", "txt")
+                    selectedFile = File("$stem.md")
+                    fileFilter = FileNameExtensionFilter("Markdown (*.md)", "md")
                 }
                 if (chooser.showSaveDialog(null) == JFileChooser.APPROVE_OPTION) {
                     var file = chooser.selectedFile
-                    if (!file.name.lowercase().endsWith(".txt")) {
-                        file = File("${file.path}.txt")
+                    if (!file.name.lowercase().endsWith(".md")) {
+                        val parent = file.parentFile
+                        val base = file.nameWithoutExtension.ifBlank { stem }
+                        file = if (parent != null) File(parent, "$base.md") else File("${file.path}.md")
                     }
-                    file.writeText(plainText, Charsets.UTF_8)
+                    file.writeText(markdown, Charsets.UTF_8)
                     written.set(true)
                 }
             } finally {
@@ -65,7 +69,7 @@ actual suspend fun saveConceptualDataDictionaryTextFile(suggestedBaseFileName: S
         written.get()
     }
 
-actual suspend fun printConceptualDataDictionary(plainText: String, documentTitle: String): Boolean =
+actual suspend fun printConceptualDataDictionary(markdown: String, documentTitle: String): Boolean =
     withContext(Dispatchers.IO) {
         val accepted = AtomicBoolean(false)
         val errorRef = AtomicReference<Throwable?>(null)
@@ -74,7 +78,7 @@ actual suspend fun printConceptualDataDictionary(plainText: String, documentTitl
             try {
                 val job = PrinterJob.getPrinterJob()
                 job.jobName = documentTitle
-                val printable = PlainTextPrintable(plainText)
+                val printable = PlainTextPrintable(markdown)
                 job.setPrintable(printable)
                 if (job.printDialog()) {
                     job.print()
@@ -89,6 +93,43 @@ actual suspend fun printConceptualDataDictionary(plainText: String, documentTitl
         latch.await()
         errorRef.get()?.let { throw it }
         accepted.get()
+    }
+
+actual fun conceptualDataDictionaryPdfExportSupported(): Boolean = true
+
+actual suspend fun saveConceptualDataDictionaryPdfFile(
+    suggestedBaseFileName: String,
+    entries: List<ConceptualSchemaDictionaryEntry>,
+    schemaName: String,
+): Boolean =
+    withContext(Dispatchers.IO) {
+        val plain = formatConceptualDataDictionaryPlainText(entries, schemaName)
+        val written = AtomicBoolean(false)
+        val latch = CountDownLatch(1)
+        SwingUtilities.invokeLater {
+            try {
+                val stem = suggestedBaseFileName.ifBlank { "modelo" }
+                val chooser = JFileChooser().apply {
+                    dialogTitle = "Salvar dicionário de dados (PDF)"
+                    selectedFile = File("$stem.pdf")
+                    fileFilter = FileNameExtensionFilter("PDF (*.pdf)", "pdf")
+                }
+                if (chooser.showSaveDialog(null) == JFileChooser.APPROVE_OPTION) {
+                    var file = chooser.selectedFile
+                    if (!file.name.lowercase().endsWith(".pdf")) {
+                        val parent = file.parentFile
+                        val base = file.nameWithoutExtension.ifBlank { stem }
+                        file = if (parent != null) File(parent, "$base.pdf") else File("${file.path}.pdf")
+                    }
+                    ConceptualDataDictionaryPdfWriter.write(file, plain)
+                    written.set(true)
+                }
+            } finally {
+                latch.countDown()
+            }
+        }
+        latch.await()
+        written.get()
     }
 
 /**

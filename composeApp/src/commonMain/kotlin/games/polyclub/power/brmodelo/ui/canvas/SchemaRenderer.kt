@@ -157,6 +157,11 @@ private fun attributeIdsForSelectionStubHighlight(selection: CanvasSelection, sc
  * 4b. Self-relationship diamonds — redrawn on top (same idea as the inner rhombus).
  * 5. Cardinality labels — floating on top of everything.
  * 5b. Link-tool hover highlight (orange) for the target under the cursor (associative inner uses a diamond stroke).
+ * 5c. Attribute-tool hover highlight (orange frame on valid owners; associative miolo: outer frame only, inner
+ *     diamond muted in step 4 — same read as link-tool outer-body hover).
+ * 5d. Specialization-tool hover highlight (orange frame on a plain [SchemaElement.Entity] under the pointer;
+ *     matches [hitTestPlainEntityId], so associative bodies never highlight).
+ * 5e. Auto-self-relationship tool hover (same outline as link-tool hover; [hitTestAutoSelfRelationshipToolHoverPick]).
  * 6. Optional link-tool highlight (orange border, no resize handles) for the first picked element.
  * 7. Selection (blue border; corner resize squares only when the element allows manual resize —
  *    e.g. not for attributes with [SchemaElement.Attribute.autoSize]).
@@ -167,6 +172,11 @@ private fun attributeIdsForSelectionStubHighlight(selection: CanvasSelection, sc
  * @param linkToolHighlightElementId When set, draws a highlight border around that element (used by "Ligar objetos").
  * @param linkToolHoverPick When set, draws a hover highlight for the link target under the pointer (split inner/outer
  *   on [SchemaElement.AssociativeEntity]).
+ * @param attributeToolHoverPick When set, draws attribute-tool hover (see step 5c); associative [isAssociativeOuterEntitySide]
+ *   matches [hitTestConceptualAttributeToolHoverPick].
+ * @param specializationToolHoverPlainEntityId Plain [SchemaElement.Entity] id for specialization-tool hover (step 5d).
+ * @param selfRelationshipToolHoverPick Auto-relationship tool hover ([hitTestAutoSelfRelationshipToolHoverPick]);
+ *     associative miolo uses the same outer-body read as a corner hit (inner diamond muted in step 4, orange frame on the outer rect).
  * @param bulkDeleteHighlightIds When non-empty, draws a strong red overlay on each listed element (bulk-delete preview).
  * @param selectionBandHighlightCardinalityConnectionIds Blue overlay on cardinality labels during rectangle preview.
  */
@@ -176,6 +186,9 @@ fun DrawScope.drawSchema(
     selection: CanvasSelection = CanvasSelection.None,
     linkToolHighlightElementId: Int? = null,
     linkToolHoverPick: ConceptualLinkPick? = null,
+    attributeToolHoverPick: ConceptualLinkPick? = null,
+    specializationToolHoverPlainEntityId: Int? = null,
+    selfRelationshipToolHoverPick: ConceptualLinkPick? = null,
     bulkDeleteHighlightIds: Set<Int> = emptySet(),
     selectionBandHighlightIds: Set<Int> = emptySet(),
     selectionBandHighlightCardinalityConnectionIds: Set<Int> = emptySet(),
@@ -222,8 +235,16 @@ fun DrawScope.drawSchema(
     schema.elements.values.filterIsInstance<SchemaElement.AssociativeEntity>().forEach { assoc ->
         val innerPos = assocInnerDiamondPos(assoc.position)
         val hp = linkToolHoverPick
-        val outerBodyHover = hp != null && hp.elementId == assoc.id && hp.isAssociativeOuterEntitySide
-        val innerRegionHover = hp != null && hp.elementId == assoc.id && !hp.isAssociativeOuterEntitySide
+        val srp = selfRelationshipToolHoverPick
+        val ap = attributeToolHoverPick
+        val attributeMioloHover = ap != null && ap.elementId == assoc.id && !ap.isAssociativeOuterEntitySide
+        val outerBodyHover =
+            (hp != null && hp.elementId == assoc.id && hp.isAssociativeOuterEntitySide) ||
+                (srp != null && srp.elementId == assoc.id && srp.isAssociativeOuterEntitySide) ||
+                attributeMioloHover
+        val innerRegionHover =
+            (hp != null && hp.elementId == assoc.id && !hp.isAssociativeOuterEntitySide) ||
+                (srp != null && srp.elementId == assoc.id && !srp.isAssociativeOuterEntitySide)
         if (outerBodyHover) {
             val ix = innerPos.x.toFloat()
             val iy = innerPos.y.toFloat()
@@ -276,6 +297,26 @@ fun DrawScope.drawSchema(
     }
     // 5b. Link-tool hover (rectangular targets; associative inner-diamond hover is drawn in step 4)
     linkToolHoverPick?.let { pick ->
+        val el = schema.elements[pick.elementId] ?: return@let
+        when {
+            el is SchemaElement.AssociativeEntity && !pick.isAssociativeOuterEntitySide -> Unit
+            else -> drawLinkToolFirstTargetHighlight(el.position)
+        }
+    }
+    // 5c. Attribute-tool hover — always a rectangular outline on the attribute owner bounds (associative miolo:
+    //     outer rect only; inner diamond highlight is intentionally omitted, inner is muted in step 4).
+    attributeToolHoverPick?.let { pick ->
+        schema.elements[pick.elementId]?.let { el ->
+            drawLinkToolFirstTargetHighlight(el.position)
+        }
+    }
+    // 5d. Specialization-tool hover — plain entity only ([hitTestPlainEntityId])
+    specializationToolHoverPlainEntityId?.let { eid ->
+        val el = schema.elements[eid] as? SchemaElement.Entity ?: return@let
+        drawLinkToolFirstTargetHighlight(el.position)
+    }
+    // 5e. Auto-self-relationship tool hover — same outline as link-tool outer targets (associative miolo maps to outer pick).
+    selfRelationshipToolHoverPick?.let { pick ->
         val el = schema.elements[pick.elementId] ?: return@let
         when {
             el is SchemaElement.AssociativeEntity && !pick.isAssociativeOuterEntitySide -> Unit

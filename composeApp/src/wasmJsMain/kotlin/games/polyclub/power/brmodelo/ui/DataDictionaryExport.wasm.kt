@@ -18,22 +18,32 @@
 
 package games.polyclub.power.brmodelo.ui
 
-actual suspend fun saveConceptualDataDictionaryTextFile(suggestedBaseFileName: String, plainText: String): Boolean {
+import games.polyclub.power.brmodelo.domain.ConceptualSchemaDictionaryEntry
+
+actual suspend fun saveConceptualDataDictionaryTextFile(suggestedBaseFileName: String, markdown: String): Boolean {
     val stem = suggestedBaseFileName.ifBlank { "modelo" }
-    val filename = "$stem.txt"
-    triggerUtf8TextDownload(plainText, filename)
+    val filename = "$stem.md"
+    triggerUtf8MarkdownDownload(markdown, filename)
     return true
 }
 
-actual suspend fun printConceptualDataDictionary(plainText: String, documentTitle: String): Boolean {
-    printPlainTextInNewWindow(plainText, documentTitle)
+actual suspend fun printConceptualDataDictionary(markdown: String, documentTitle: String): Boolean {
+    printPlainTextInNewWindow(markdown, documentTitle)
     return true
 }
 
-private fun triggerUtf8TextDownload(text: String, filename: String): Unit = js(
+actual fun conceptualDataDictionaryPdfExportSupported(): Boolean = false
+
+actual suspend fun saveConceptualDataDictionaryPdfFile(
+    suggestedBaseFileName: String,
+    entries: List<ConceptualSchemaDictionaryEntry>,
+    schemaName: String,
+): Boolean = false
+
+private fun triggerUtf8MarkdownDownload(text: String, filename: String): Unit = js(
     """
     (function(t, name) {
-        var blob = new Blob([t], { type: 'text/plain;charset=utf-8' });
+        var blob = new Blob([t], { type: 'text/markdown;charset=utf-8' });
         var url = URL.createObjectURL(blob);
         var link = document.createElement('a');
         link.href = url;

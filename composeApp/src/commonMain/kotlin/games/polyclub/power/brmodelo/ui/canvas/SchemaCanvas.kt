@@ -96,6 +96,7 @@ import games.polyclub.power.brmodelo.domain.ElementPosition
 import games.polyclub.power.brmodelo.domain.organizeAttributesOnOwnerSide
 import games.polyclub.power.brmodelo.domain.relayoutCompositeSubtree
 import games.polyclub.power.brmodelo.domain.placeConceptualItem
+import games.polyclub.power.brmodelo.domain.normalizeConceptualLinkPickForAutoSelfRelationshipTool
 import games.polyclub.power.brmodelo.domain.validateAndBuildConceptualLink
 import games.polyclub.power.brmodelo.ui.BulkDeleteUiState
 import games.polyclub.power.brmodelo.ui.ConceptualCanvasTool
@@ -251,6 +252,9 @@ internal fun SchemaCanvas(
     val layoutDirection = LocalLayoutDirection.current
     var hiddenAttributesTooltipAnchor by remember { mutableStateOf<Pair<Offset, String>?>(null) }
     var linkToolHoverPick by remember { mutableStateOf<ConceptualLinkPick?>(null) }
+    var attributeToolHoverPick by remember { mutableStateOf<ConceptualLinkPick?>(null) }
+    var specializationToolHoverPlainEntityId by remember { mutableStateOf<Int?>(null) }
+    var selfRelationshipToolHoverPick by remember { mutableStateOf<ConceptualLinkPick?>(null) }
     val hoverSchemaForTooltip by rememberUpdatedState(schema)
     val hoverPanForTooltip by rememberUpdatedState(panOffset)
     val hoverZoomForTooltip by rememberUpdatedState(zoom)
@@ -284,6 +288,15 @@ internal fun SchemaCanvas(
     LaunchedEffect(conceptualCanvasTool) {
         if (conceptualCanvasTool !is ConceptualCanvasTool.LinkObjects) {
             linkToolHoverPick = null
+        }
+        if (conceptualCanvasTool !is ConceptualCanvasTool.Attribute) {
+            attributeToolHoverPick = null
+        }
+        if (conceptualCanvasTool !is ConceptualCanvasTool.Specialization) {
+            specializationToolHoverPlainEntityId = null
+        }
+        if (conceptualCanvasTool !is ConceptualCanvasTool.AutoSelfRelationship) {
+            selfRelationshipToolHoverPick = null
         }
     }
 
@@ -1109,6 +1122,9 @@ internal fun SchemaCanvas(
                                 if (sch == null) {
                                     hiddenAttributesTooltipAnchor = null
                                     linkToolHoverPick = null
+                                    attributeToolHoverPick = null
+                                    specializationToolHoverPlainEntityId = null
+                                    selfRelationshipToolHoverPick = null
                                     continue
                                 }
                                 val schemaPoint = viewOffsetToModel(pos, hoverPanForTooltip, hoverZoomForTooltip)
@@ -1119,6 +1135,30 @@ internal fun SchemaCanvas(
                                     }
                                 } else if (linkToolHoverPick != null) {
                                     linkToolHoverPick = null
+                                }
+                                if (currentConceptualTool is ConceptualCanvasTool.Attribute) {
+                                    val ap = hitTestConceptualAttributeToolHoverPick(sch, schemaPoint)
+                                    if (ap != attributeToolHoverPick) {
+                                        attributeToolHoverPick = ap
+                                    }
+                                } else if (attributeToolHoverPick != null) {
+                                    attributeToolHoverPick = null
+                                }
+                                if (currentConceptualTool is ConceptualCanvasTool.Specialization) {
+                                    val se = hitTestPlainEntityId(sch, schemaPoint)
+                                    if (se != specializationToolHoverPlainEntityId) {
+                                        specializationToolHoverPlainEntityId = se
+                                    }
+                                } else if (specializationToolHoverPlainEntityId != null) {
+                                    specializationToolHoverPlainEntityId = null
+                                }
+                                if (currentConceptualTool is ConceptualCanvasTool.AutoSelfRelationship) {
+                                    val ar = hitTestAutoSelfRelationshipToolHoverPick(sch, schemaPoint)
+                                    if (ar != selfRelationshipToolHoverPick) {
+                                        selfRelationshipToolHoverPick = ar
+                                    }
+                                } else if (selfRelationshipToolHoverPick != null) {
+                                    selfRelationshipToolHoverPick = null
                                 }
                                 val hit = hitTestElement(sch, schemaPoint)
                                 val id = (hit as? CanvasSelection.Element)?.id
@@ -1138,6 +1178,9 @@ internal fun SchemaCanvas(
                             PointerEventType.Exit -> {
                                 hiddenAttributesTooltipAnchor = null
                                 linkToolHoverPick = null
+                                attributeToolHoverPick = null
+                                specializationToolHoverPlainEntityId = null
+                                selfRelationshipToolHoverPick = null
                                 pointerOverCanvas = false
                                 pointerView = null
                                 pushClipboardViewStateToParent(pointerLocal = null, over = false)
@@ -1174,6 +1217,20 @@ internal fun SchemaCanvas(
                             }
                         val linkHoverPick =
                             if (conceptualCanvasTool is ConceptualCanvasTool.LinkObjects) linkToolHoverPick else null
+                        val attributeHoverPick =
+                            if (conceptualCanvasTool is ConceptualCanvasTool.Attribute) attributeToolHoverPick else null
+                        val specializationHoverEntityId =
+                            if (conceptualCanvasTool is ConceptualCanvasTool.Specialization) {
+                                specializationToolHoverPlainEntityId
+                            } else {
+                                null
+                            }
+                        val selfRelationshipHoverPick =
+                            if (conceptualCanvasTool is ConceptualCanvasTool.AutoSelfRelationship) {
+                                selfRelationshipToolHoverPick
+                            } else {
+                                null
+                            }
                         val bulkHighlightIds = bulkDeleteUiState?.markedElementIds ?: emptySet()
                         val selectionBandHighlightIds = selectionBandUiState?.markedElementIds ?: emptySet()
                         val selectionBandCardinalityIds =
@@ -1184,6 +1241,9 @@ internal fun SchemaCanvas(
                             selection,
                             linkHighlightId,
                             linkHoverPick,
+                            attributeToolHoverPick = attributeHoverPick,
+                            specializationToolHoverPlainEntityId = specializationHoverEntityId,
+                            selfRelationshipToolHoverPick = selfRelationshipHoverPick,
                             bulkHighlightIds,
                             selectionBandHighlightIds,
                             selectionBandHighlightCardinalityConnectionIds = selectionBandCardinalityIds,
@@ -1560,11 +1620,12 @@ private fun processAutoSelfRelationshipTap(
     onSchemaCommit: (ConceptualSchema) -> Unit,
     onSelectionChange: (CanvasSelection) -> Unit,
 ) {
-    val pick = hitTestConceptualLinkPick(schema, schemaPoint)
-    if (pick == null) {
+    val rawPick = hitTestConceptualLinkPick(schema, schemaPoint)
+    if (rawPick == null) {
         onMessage("Selecione uma entidade.")
         return
     }
+    val pick = normalizeConceptualLinkPickForAutoSelfRelationshipTool(schema, rawPick)
     when (val r = validateAndBuildConceptualLink(schema, pick, pick, schemaPoint)) {
         is ConceptualLinkValidationResult.Ok -> {
             val beforeConnIds = schema.connections.map { it.id }.toSet()

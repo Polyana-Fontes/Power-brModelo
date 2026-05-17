@@ -24,7 +24,10 @@ import androidx.compose.ui.text.TextMeasurer
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.ConceptualBulkDeleteBand
 import games.polyclub.power.brmodelo.domain.ConceptualLinkPick
+import games.polyclub.power.brmodelo.domain.ConceptualLinkValidationResult
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
+import games.polyclub.power.brmodelo.domain.normalizeConceptualLinkPickForAutoSelfRelationshipTool
+import games.polyclub.power.brmodelo.domain.validateAndBuildConceptualLink
 import games.polyclub.power.brmodelo.domain.elementsIntersectingBulkDeleteBand
 import games.polyclub.power.brmodelo.domain.ElementPosition
 import games.polyclub.power.brmodelo.domain.SchemaElement
@@ -239,6 +242,54 @@ fun hitTestConceptualLinkPick(schema: ConceptualSchema, point: Offset): Conceptu
         } ?: continue
     }
     return null
+}
+
+/**
+ * Hover pick for the "Auto relacionamento" tool: same hit geometry as [hitTestConceptualLinkPick], but only
+ * returns a pick when a tap at [point] would succeed ([validateAndBuildConceptualLink] with both ends equal).
+ * Associative miolo hits are normalized to the outer entity pick so hover matches a successful tap.
+ */
+fun hitTestAutoSelfRelationshipToolHoverPick(schema: ConceptualSchema, point: Offset): ConceptualLinkPick? {
+    val raw = hitTestConceptualLinkPick(schema, point) ?: return null
+    val pick = normalizeConceptualLinkPickForAutoSelfRelationshipTool(schema, raw)
+    return when (validateAndBuildConceptualLink(schema, pick, pick, point)) {
+        is ConceptualLinkValidationResult.Ok -> pick
+        is ConceptualLinkValidationResult.Error -> null
+    }
+}
+
+/**
+ * Hit-test for the conceptual attribute tool hover highlight: same topmost element as [hitTestElement]
+ * (the attribute tool click target), with associative inner-vs-outer split matching [hitTestConceptualLinkPick]
+ * geometry so the canvas can mute the inner diamond when the pointer is over the miolo.
+ *
+ * Returns `null` when nothing is hit or the hit element cannot own attributes (e.g. [SchemaElement.Annotation]).
+ */
+fun hitTestConceptualAttributeToolHoverPick(schema: ConceptualSchema, point: Offset): ConceptualLinkPick? {
+    val id = (hitTestElement(schema, point) as? CanvasSelection.Element)?.id ?: return null
+    val el = schema.elements[id] ?: return null
+    return when (el) {
+        is SchemaElement.AssociativeEntity -> {
+            val outer = el.position
+            val inner = ElementPosition(
+                x = outer.x + ASSOCIATIVE_INNER_INSET_PX,
+                y = outer.y + ASSOCIATIVE_INNER_INSET_PX,
+                width = (outer.width - 2 * ASSOCIATIVE_INNER_INSET_PX).coerceAtLeast(10),
+                height = (outer.height - 2 * ASSOCIATIVE_INNER_INSET_PX).coerceAtLeast(10),
+            )
+            if (relationshipDiamondContains(inner, point)) {
+                ConceptualLinkPick(el.id, isAssociativeOuterEntitySide = false)
+            } else {
+                ConceptualLinkPick(el.id, isAssociativeOuterEntitySide = true)
+            }
+        }
+        is SchemaElement.Entity,
+        is SchemaElement.Relationship,
+        is SchemaElement.SelfRelationship,
+        is SchemaElement.Attribute,
+        -> ConceptualLinkPick(el.id, isAssociativeOuterEntitySide = false)
+        else -> null
+    }
 }
 
 /**

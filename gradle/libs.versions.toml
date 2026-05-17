@@ -5,11 +5,13 @@ flatlaf = "3.7"
 mcpJava = "1.1.2"
 jetty = "11.0.24"
 kotlinx-coroutines = "1.9.0"
+pdfbox = "2.0.31"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 flatlaf = { module = "com.formdev:flatlaf", version.ref = "flatlaf" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
+apache-pdfbox = { module = "org.apache.pdfbox:pdfbox", version.ref = "pdfbox" }
 
 [plugins]
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
