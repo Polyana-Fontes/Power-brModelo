@@ -46,7 +46,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.OutlinedButton
@@ -61,6 +60,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -70,6 +71,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import games.polyclub.power.brmodelo.domain.LabelStyle
+import games.polyclub.power.brmodelo.domain.VclTColorTable
 
 /**
  * Opens the conceptual label font dialog for [elementId] on tab [editorTabId].
@@ -116,22 +118,46 @@ private val FONT_STYLE_ROWS = listOf("Normal", "Itálico", "Negrito", "Negrito I
 
 private data class FontColorMenuEntry(val label: String, val colorRef: Int?)
 
+/**
+ * PT-BR labels for the standard Lazarus/VCL [TColorBox] first sixteen (`clBlack` … `clWhite`).
+ * [VclTColorTable.defaultColorBoxPresets] supplies the same integers as Delphi/MER XML (`FonteCor`, etc.).
+ */
+private val FONT_COLOR_STANDARD_LABELS = listOf(
+    "Preto",
+    "Castanho",
+    "Verde",
+    "Verde-oliva",
+    "Azul-marinho",
+    "Roxo",
+    "Azul petróleo",
+    "Cinza",
+    "Prateado",
+    "Vermelho",
+    "Verde limão",
+    "Amarelo",
+    "Azul",
+    "Fúcsia",
+    "Azul-piscina",
+    "Branco",
+)
+
 private val FONT_COLOR_MENU: List<FontColorMenuEntry> = listOf(
     FontColorMenuEntry("Padrão do diagrama", null),
-    FontColorMenuEntry("Preto", composeColorToVclAbsoluteRef(Color.Black)),
-    FontColorMenuEntry("Azul escuro", composeColorToVclAbsoluteRef(Color(0f, 0f, 0.55f))),
-    FontColorMenuEntry("Vermelho", composeColorToVclAbsoluteRef(Color(0.75f, 0f, 0f))),
-    FontColorMenuEntry("Verde", composeColorToVclAbsoluteRef(Color(0f, 0.5f, 0f))),
-    FontColorMenuEntry("Cinza", composeColorToVclAbsoluteRef(Color(0.45f, 0.45f, 0.45f))),
-)
+) + FONT_COLOR_STANDARD_LABELS.zip(
+    VclTColorTable.defaultColorBoxPresets.take(FONT_COLOR_STANDARD_LABELS.size),
+) { label, nc -> FontColorMenuEntry(label, nc.colorRef) }
+
+private fun fontColorMenuLabelForRef(colorRef: Int?): String =
+    FONT_COLOR_MENU.firstOrNull { it.colorRef == colorRef }?.label
+        ?: (colorRef?.toString() ?: FONT_COLOR_MENU.first().label)
 
 /** Classic `TFontDialog` layout using the same grid / typography language as the inspector **Seleção** tab. */
 @Composable
 internal fun ConceptualLabelFontChooserDialog(
     request: ConceptualLabelFontChooserRequest,
     onDismiss: () -> Unit,
-    /** Pascal **Aplicar**: commit to the model but keep the dialog open. */
-    onApply: (LabelStyle) -> Unit,
+    /** Reset element label style to [games.polyclub.power.brmodelo.domain.ConceptualPlacementDefaults.labelStyle] and close. */
+    onResetToDefault: () -> Unit,
     /** **OK**: commit and close. */
     onConfirm: (LabelStyle) -> Unit,
 ) {
@@ -221,6 +247,8 @@ internal fun ConceptualLabelFontChooserDialog(
     }
 
     var colorMenuExpanded by remember { mutableStateOf(false) }
+    val density = LocalDensity.current
+    var colorAnchorWidth by remember { mutableStateOf(0.dp) }
 
     Dialog(onDismissRequest = onDismiss) {
         BoxWithConstraints(
@@ -321,11 +349,11 @@ internal fun ConceptualLabelFontChooserDialog(
                                         Text("Cancelar", style = FD_ROW_TEXT)
                                     }
                                     OutlinedButton(
-                                        onClick = { onApply(buildDraft()) },
+                                        onClick = onResetToDefault,
                                         modifier = Modifier.fillMaxWidth(),
                                         contentPadding = PaddingValues(vertical = 4.dp, horizontal = 8.dp),
                                     ) {
-                                        Text("Aplicar", style = FD_ROW_TEXT)
+                                        Text("Padrão", style = FD_ROW_TEXT)
                                     }
                                 }
                             }
@@ -371,14 +399,16 @@ internal fun ConceptualLabelFontChooserDialog(
                             ) {
                                 Text("Cor:", style = FD_ROW_TEXT.copy(color = FD_LABEL_COLOR))
                                 Box(modifier = Modifier.width(176.dp)) {
-                                    val label = FONT_COLOR_MENU.firstOrNull { it.colorRef == colorRef }?.label
-                                        ?: FONT_COLOR_MENU.first().label
+                                    val label = fontColorMenuLabelForRef(colorRef)
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .border(1.dp, FD_CELL_BORDER)
                                             .background(FD_CELL_VALUE_BG)
                                             .clickable { colorMenuExpanded = true }
+                                            .onGloballyPositioned { coords ->
+                                                colorAnchorWidth = with(density) { coords.size.width.toDp() }
+                                            }
                                             .padding(horizontal = 6.dp, vertical = 4.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -402,26 +432,31 @@ internal fun ConceptualLabelFontChooserDialog(
                                     DropdownMenu(
                                         expanded = colorMenuExpanded,
                                         onDismissRequest = { colorMenuExpanded = false },
+                                        modifier = Modifier.then(
+                                            if (colorAnchorWidth > 0.dp) Modifier.width(colorAnchorWidth) else Modifier,
+                                        ),
                                     ) {
-                                        FONT_COLOR_MENU.forEach { entry ->
-                                            val picked = entry.colorRef == colorRef
-                                            DropdownMenuItem(
-                                                modifier = Modifier.background(
-                                                    if (picked) WIN_SELECTION_BG else Color.Transparent,
-                                                ),
-                                                text = {
-                                                    Text(
-                                                        entry.label,
-                                                        style = FD_ROW_TEXT.copy(
-                                                            color = if (picked) WIN_SELECTION_FG else FD_VALUE_COLOR,
-                                                        ),
+                                        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+                                            FONT_COLOR_MENU.forEachIndexed { index, entry ->
+                                                val picked = entry.colorRef == colorRef
+                                                val sw = entry.colorRef?.let { vclColorRefToCompose(it) }
+                                                    ?: Color.Transparent
+                                                FontDialogColorPresetMenuItem(
+                                                    swatchColor = sw,
+                                                    text = entry.label,
+                                                    selected = picked,
+                                                    onClick = {
+                                                        colorRef = entry.colorRef
+                                                        colorMenuExpanded = false
+                                                    },
+                                                )
+                                                if (index < FONT_COLOR_MENU.lastIndex) {
+                                                    HorizontalDivider(
+                                                        color = FD_CELL_BORDER,
+                                                        thickness = 0.5.dp,
                                                     )
-                                                },
-                                                onClick = {
-                                                    colorRef = entry.colorRef
-                                                    colorMenuExpanded = false
-                                                },
-                                            )
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -447,6 +482,43 @@ internal fun ConceptualLabelFontChooserDialog(
                 }
             }
         }
+    }
+}
+
+/**
+ * One colour preset line in the font dialog menu: same layout as [InspectorPanel]'s colour dropdown rows
+ * (14.dp swatch, 0.5.dp border, 10sp text, compact vertical padding).
+ */
+@Composable
+private fun FontDialogColorPresetMenuItem(
+    swatchColor: Color,
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(if (selected) WIN_SELECTION_BG else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .padding(end = 8.dp)
+                .size(14.dp)
+                .border(width = 0.5.dp, color = FD_CELL_BORDER)
+                .background(swatchColor),
+        )
+        Text(
+            text = text,
+            style = FD_ROW_TEXT.copy(
+                color = if (selected) WIN_SELECTION_FG else FD_VALUE_COLOR,
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

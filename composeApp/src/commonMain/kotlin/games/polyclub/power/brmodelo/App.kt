@@ -64,6 +64,7 @@ import games.polyclub.power.brmodelo.domain.deleteCanvasSelection
 import games.polyclub.power.brmodelo.domain.elementIdsForClipboard
 import games.polyclub.power.brmodelo.domain.extractClipboardFragment
 import games.polyclub.power.brmodelo.domain.ConceptualPasteContext
+import games.polyclub.power.brmodelo.domain.ConceptualPlacementDefaults
 import games.polyclub.power.brmodelo.domain.ConceptualProceduralToolPlacementResult
 import games.polyclub.power.brmodelo.domain.pasteConceptualClipboard
 import games.polyclub.power.brmodelo.domain.placeProceduralConceptualTool
@@ -1718,7 +1719,10 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                     ConceptualLabelFontChooserDialog(
                         request = fontReq,
                         onDismiss = { conceptualLabelFontRequest = null },
-                        onApply = { chosen -> commitLabelFont(chosen) },
+                        onResetToDefault = {
+                            commitLabelFont(ConceptualPlacementDefaults.labelStyle)
+                            conceptualLabelFontRequest = null
+                        },
                         onConfirm = { chosen ->
                             commitLabelFont(chosen)
                             conceptualLabelFontRequest = null
