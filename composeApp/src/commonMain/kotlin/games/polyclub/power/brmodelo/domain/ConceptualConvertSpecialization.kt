@@ -139,7 +139,7 @@ private fun connectionSpecializationToBase(connectionId: Int, specializationId: 
         elementIdB = baseEntityId,
         cardinality = Cardinality.ZERO_TO_MANY,
         showCardinality = false,
-        orientation = LineOrientation.HORIZONTAL,
+        orientation = LineOrientation.VERTICAL,
     )
 
 /**

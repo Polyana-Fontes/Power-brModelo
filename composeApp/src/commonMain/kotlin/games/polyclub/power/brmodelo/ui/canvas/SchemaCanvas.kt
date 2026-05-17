@@ -98,6 +98,7 @@ import games.polyclub.power.brmodelo.domain.placeConceptualItem
 import games.polyclub.power.brmodelo.domain.validateAndBuildConceptualLink
 import games.polyclub.power.brmodelo.ui.BulkDeleteUiState
 import games.polyclub.power.brmodelo.ui.ConceptualCanvasTool
+import games.polyclub.power.brmodelo.ui.InspectorSelectionFieldKeys
 import games.polyclub.power.brmodelo.ui.SelectionBandUiState
 import games.polyclub.power.brmodelo.ui.canvasPointerScrollPanGain
 import games.polyclub.power.brmodelo.ui.invertCanvasPointerScrollPan
@@ -108,6 +109,9 @@ import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 
 /** Latest canvas layout / pan / pointer state for paste anchoring and cross-tab behaviour. */
 internal data class SchemaCanvasViewState(
@@ -208,6 +212,9 @@ private val SELECTION_BAND_STROKE = Color(0xFF0060C0)
  *   used to anchor clipboard paste in model space.
  * @param requestCenterOnModelBounds When non-null, recentres the viewport on these model-space bounds
  *   (after layout size is known); then [onRequestCenterOnModelBoundsConsumed] runs so the parent can clear the request.
+ * @param onConceptualInspectorSelectionFieldEditRequest When the user double-clicks a diagram element or a
+ *   cardinality label while [conceptualCanvasTool] is [ConceptualCanvasTool.None], delivers an inspector grid key
+ *   ([InspectorSelectionFieldKeys]) so the host can open the **Seleção** tab and start inline edit there.
  */
 @Composable
 internal fun SchemaCanvas(
@@ -232,6 +239,7 @@ internal fun SchemaCanvas(
     onViewStateChange: ((SchemaCanvasViewState) -> Unit)? = null,
     requestCenterOnModelBounds: ElementPosition? = null,
     onRequestCenterOnModelBoundsConsumed: () -> Unit = {},
+    onConceptualInspectorSelectionFieldEditRequest: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var panOffset by remember { mutableStateOf(Offset(8f, 8f)) }
@@ -268,6 +276,8 @@ internal fun SchemaCanvas(
     val onZoomChangeCb by rememberUpdatedState(onZoomChange)
     val onViewStateChangeCb by rememberUpdatedState(onViewStateChange)
     val onCenterBoundsConsumed by rememberUpdatedState(onRequestCenterOnModelBoundsConsumed)
+    val onConceptualInspectorSelectionFieldEditCb by rememberUpdatedState(onConceptualInspectorSelectionFieldEditRequest)
+    val selectionDoubleClickMemo = remember { ConceptualSelectionDoubleClickMemo() }
 
     LaunchedEffect(requestCenterOnModelBounds, layoutSize.width, layoutSize.height, zoom) {
         val bounds = requestCenterOnModelBounds ?: return@LaunchedEffect
@@ -785,6 +795,7 @@ internal fun SchemaCanvas(
                         getResizeHandleAt(it, schemaPoint)
                     }
                     val hitHandle = hitHandleElem ?: hitHandleCard
+                    val gestureStartedOnResizeHandle = hitHandle != null
 
                     // Pascal behaviour: select immediately on pointer-down, not on pointer-up.
                     // Only skip if we're about to resize (the selection stays as-is).
@@ -879,11 +890,13 @@ internal fun SchemaCanvas(
                         if (!change.pressed) {
                             // Pointer up: commit only if the drag changed the model (not pure canvas pan).
                             if (isDragging && didMutateSchemaDuringDrag) {
+                                selectionDoubleClickMemo.clear()
                                 val finalSchema = currentSchema
                                 if (finalSchema != null) {
                                     currentOnSchemaCommit(finalSchema)
                                 }
                             } else if (hitResult == CanvasSelection.None) {
+                                selectionDoubleClickMemo.clear()
                                 val placementKind = currentConceptualTool.toPlacementKindOrNull()
                                 val baseSchema = schemaAtGestureStart
                                 if (placementKind != null && baseSchema != null) {
@@ -899,6 +912,35 @@ internal fun SchemaCanvas(
                                 } else if (!shiftHeldAtGestureStart) {
                                     // Tap on empty canvas (no tool or no model) → deselect
                                     currentOnSelectionChange(CanvasSelection.None)
+                                }
+                            } else {
+                                if (isDragging) {
+                                    selectionDoubleClickMemo.clear()
+                                } else {
+                                    when (hitResult) {
+                                        is CanvasSelection.Multiple -> selectionDoubleClickMemo.clear()
+                                        is CanvasSelection.Element,
+                                        is CanvasSelection.Cardinality,
+                                        -> {
+                                            if (schemaAtGestureStart != null &&
+                                                currentConceptualTool == ConceptualCanvasTool.None &&
+                                                !gestureStartedOnResizeHandle
+                                            ) {
+                                                val nowMark = TimeSource.Monotonic.markNow()
+                                                val field = selectionDoubleClickMemo.recordTapUp(
+                                                    hit = hitResult,
+                                                    downPosition = down.position,
+                                                    nowMark = nowMark,
+                                                )
+                                                if (field != null) {
+                                                    onConceptualInspectorSelectionFieldEditCb(field)
+                                                }
+                                            } else {
+                                                selectionDoubleClickMemo.clear()
+                                            }
+                                        }
+                                        CanvasSelection.None -> Unit
+                                    }
                                 }
                             }
                             break
@@ -1557,6 +1599,11 @@ private fun processAttributeToolTap(
             if (placed?.isComposite == true) {
                 committed = relayoutCompositeSubtree(committed, placed.id)
             }
+            committed = committed.syncFloatingCardinalityLayoutAfterMutationFromBaseline(
+                baseline = schema,
+                textMeasurer = textMeasurer,
+                rehomeConnectionsAbsentInBaseline = true,
+            )
             onSchemaCommit(committed)
             onSelectionChange(CanvasSelection.Element(r.newPrimaryAttributeId))
         }
@@ -1608,5 +1655,60 @@ private fun applyResize(
             width = (startPos.width + dx).coerceAtLeast(minSize),
             height = (startPos.height + dy).coerceAtLeast(minSize),
         )
+    }
+}
+
+private val conceptualInspectorDoubleClickMaxGap = 550.milliseconds
+private const val CONCEPTUAL_INSPECTOR_DOUBLE_CLICK_MAX_DISTANCE_PX = 48f
+
+/**
+ * Tracks two quick, close primary taps on the same [CanvasSelection] (element or cardinality label)
+ * to trigger inspector inline edit.
+ */
+private class ConceptualSelectionDoubleClickMemo {
+    private var pendingHit: CanvasSelection? = null
+    private var pendingDownPosition: Offset = Offset.Zero
+    private var pendingTimeMark: TimeMark? = null
+
+    fun clear() {
+        pendingHit = null
+        pendingTimeMark = null
+    }
+
+    /**
+     * @return Inspector row key ([InspectorSelectionFieldKeys]) when this pointer-up completes a double-tap.
+     */
+    fun recordTapUp(
+        hit: CanvasSelection,
+        downPosition: Offset,
+        nowMark: TimeMark,
+    ): String? {
+        when (hit) {
+            is CanvasSelection.Element,
+            is CanvasSelection.Cardinality,
+            -> Unit
+            else -> {
+                clear()
+                return null
+            }
+        }
+        val pHit = pendingHit
+        val pMark = pendingTimeMark
+        if (pHit != null && pMark != null &&
+            pHit == hit &&
+            (downPosition - pendingDownPosition).getDistance() <= CONCEPTUAL_INSPECTOR_DOUBLE_CLICK_MAX_DISTANCE_PX &&
+            pMark.elapsedNow() <= conceptualInspectorDoubleClickMaxGap
+        ) {
+            clear()
+            return when (hit) {
+                is CanvasSelection.Element -> InspectorSelectionFieldKeys.Name
+                is CanvasSelection.Cardinality -> InspectorSelectionFieldKeys.CardinalityRole
+                else -> null
+            }
+        }
+        pendingHit = hit
+        pendingDownPosition = downPosition
+        pendingTimeMark = nowMark
+        return null
     }
 }

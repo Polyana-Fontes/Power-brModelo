@@ -95,7 +95,7 @@ private fun connectionSpecializationToEntity(
         elementIdB = entityId,
         cardinality = Cardinality.ZERO_TO_MANY,
         showCardinality = false,
-        orientation = LineOrientation.HORIZONTAL,
+        orientation = LineOrientation.VERTICAL,
     )
 
 private fun ConceptualSchema.withBaseEntitySpecializationIdsSynced(baseEntityId: Int): ConceptualSchema {

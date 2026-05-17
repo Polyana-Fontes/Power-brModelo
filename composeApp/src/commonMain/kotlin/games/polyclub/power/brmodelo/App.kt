@@ -163,6 +163,7 @@ import games.polyclub.power.brmodelo.ui.canvas.withRecalculatedFloatingCardinali
 import games.polyclub.power.brmodelo.ui.canvas.withConnectionCardinalityInspectorParity
 import games.polyclub.power.brmodelo.ui.canvas.renderSchemaToImageBitmap
 import games.polyclub.power.brmodelo.ui.canvas.selectionBandGeometricPick
+import games.polyclub.power.brmodelo.ui.canvas.syncFloatingCardinalityLayoutAfterMutationFromBaseline
 import games.polyclub.power.brmodelo.ui.canvas.withCardinalityPositionsAfterElementsMovedByDelta
 import games.polyclub.power.brmodelo.ui.BulkDeleteObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.RectangleSelectionToolRibbonBinding
@@ -173,6 +174,7 @@ import games.polyclub.power.brmodelo.ui.ConceptualCanvasTool
 import games.polyclub.power.brmodelo.ui.EditorTabSession
 import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.InspectorTab
+import games.polyclub.power.brmodelo.ui.InspectorSelectionFieldFocusRequest
 import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.OperationsMenuRibbonBinding
@@ -220,6 +222,8 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
 
     var canvasCenterOnBoundsRequest by remember { mutableStateOf<ElementPosition?>(null) }
     var inspectorTabRequest by remember { mutableStateOf<InspectorTab?>(null) }
+    var inspectorSelectionFieldFocusRequest by remember { mutableStateOf<InspectorSelectionFieldFocusRequest?>(null) }
+    var inspectorFieldFocusRevision by remember { mutableLongStateOf(0L) }
     var conceptualSearchDialogOpen by remember { mutableStateOf(false) }
     var schemaDataDictionarySchema by remember { mutableStateOf<ConceptualSchema?>(null) }
     var conceptualLabelFontChooserNonce by remember { mutableLongStateOf(0L) }
@@ -596,12 +600,18 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                 pointerModelY = viewSnapshot.pointerModelY(),
                 isPointerOverCanvas = viewSnapshot.isPointerOverCanvas,
             )
+            val beforePaste = t.schema
             val result = pasteConceptualClipboard(ctx, text) ?: return@launch
-            t.history.push(result.schema)
+            val pasted = result.schema.syncFloatingCardinalityLayoutAfterMutationFromBaseline(
+                baseline = beforePaste,
+                textMeasurer = clipboardPreviewTextMeasurer,
+                rehomeConnectionsAbsentInBaseline = true,
+            )
+            t.history.push(pasted)
             replaceTabAt(
                 idx,
                 t.copy(
-                    schema = result.schema,
+                    schema = pasted,
                     inspectorCommittedSchema = t.history.current,
                     selection = result.selection,
                     hiddenAttributeRevealPath = null,
@@ -787,8 +797,14 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
     val organizeAttrsEnabled = canOrganizeAttributesMenuSelection(sel.schema, sel.selection)
     val onOrganizeAttributes: () -> Unit = organize@{
         val tab = tabSessions.getOrNull(selectedTabIndex) ?: return@organize
-        val updated = applyOrganizeAttributesMenuAction(tab.schema, tab.selection) ?: return@organize
-        pushCommitOnSelected(updated.withNormalizedAttributeMultiValuedCounts())
+        val before = tab.schema
+        val updated = applyOrganizeAttributesMenuAction(before, tab.selection) ?: return@organize
+        val synced = updated.syncFloatingCardinalityLayoutAfterMutationFromBaseline(
+            baseline = before,
+            textMeasurer = clipboardPreviewTextMeasurer,
+            rehomeConnectionsAbsentInBaseline = false,
+        )
+        pushCommitOnSelected(synced.withNormalizedAttributeMultiValuedCounts())
     }
     val selectAttrsEnabled = canSelectAttributeTreeMenu(sel.schema, sel.selection)
     val onSelectAttributes: () -> Unit = {
@@ -1088,7 +1104,8 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                         return@mcpSimpleAttr McpProceduralToolApplyOutcome.err("invalid_tab_index")
                     }
                     val tab = tabSessions[tabIdx]
-                    when (val r = applyConceptualSimpleAttributeTool(tab.schema, targetId, variant, attachSide, overrides)) {
+                    val beforeAttrTool = tab.schema
+                    when (val r = applyConceptualSimpleAttributeTool(beforeAttrTool, targetId, variant, attachSide, overrides)) {
                         is ConceptualAttributeToolResult.Error ->
                             McpProceduralToolApplyOutcome.err(r.message)
                         is ConceptualAttributeToolResult.Ok -> {
@@ -1105,6 +1122,11 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                                 committed,
                                 r.ownerElementId,
                                 r.attachSide,
+                            )
+                            committed = committed.syncFloatingCardinalityLayoutAfterMutationFromBaseline(
+                                baseline = beforeAttrTool,
+                                textMeasurer = clipboardPreviewTextMeasurer,
+                                rehomeConnectionsAbsentInBaseline = true,
                             )
                             val normalized = committed.withNormalizedAttributeMultiValuedCounts()
                             val out = normalized.elements[r.newPrimaryAttributeId]
@@ -1126,9 +1148,10 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                         return@mcpCompAttr McpProceduralToolApplyOutcome.err("invalid_tab_index")
                     }
                     val tab = tabSessions[tabIdx]
+                    val beforeCompAttr = tab.schema
                     when (
                         val r = applyConceptualCompositeAttributeWithLeafChildren(
-                            tab.schema,
+                            beforeCompAttr,
                             targetId,
                             attachSide,
                             leafSpecs,
@@ -1151,6 +1174,11 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                                 committed,
                                 r.ownerElementId,
                                 r.attachSide,
+                            )
+                            committed = committed.syncFloatingCardinalityLayoutAfterMutationFromBaseline(
+                                baseline = beforeCompAttr,
+                                textMeasurer = clipboardPreviewTextMeasurer,
+                                rehomeConnectionsAbsentInBaseline = true,
                             )
                             val normalized = committed.withNormalizedAttributeMultiValuedCounts()
                             val out = normalized.elements[r.newPrimaryAttributeId]
@@ -1313,6 +1341,7 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                             McpProceduralToolApplyOutcome.err(r.code)
                         is ConceptualPropertyEditResult.Ok -> {
                             var s = r.schema
+                            val beforeEdit = tab.schema
                             val touched = s.elements[elementId] as? SchemaElement.Attribute
                             if (touched != null) {
                                 s = s.withAutoSizedAttributeSubtree(
@@ -1325,16 +1354,11 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                                     s = relayoutCompositeSubtree(s, fresh.id)
                                 }
                             }
-                            if (patch.containsKey("position")) {
-                                val prevPos = tab.schema.elements[elementId]?.position
-                                if (prevPos != null) {
-                                    s = s.afterCardinalitySyncForElementBoundsChange(
-                                        elementId,
-                                        prevPos,
-                                        clipboardPreviewTextMeasurer,
-                                    )
-                                }
-                            }
+                            s = s.syncFloatingCardinalityLayoutAfterMutationFromBaseline(
+                                baseline = beforeEdit,
+                                textMeasurer = clipboardPreviewTextMeasurer,
+                                rehomeConnectionsAbsentInBaseline = false,
+                            )
                             pushCommitOnTabAt(tabIdx, s.withNormalizedAttributeMultiValuedCounts())
                             McpProceduralToolApplyOutcome.okFullJson(
                                 """{"ok":true,"resourceUri":${mcpJsonStringLiteral(modelResourceUriForSession(tabSessions[tabIdx].id))}}""",
@@ -1404,9 +1428,15 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                     if (!canOrganizeAttributesMenuSelection(tab.schema, tab.selection)) {
                         return@mcpOrgMenu McpProceduralToolApplyOutcome.err("organize_attributes_not_applicable")
                     }
-                    val updated = applyOrganizeAttributesMenuAction(tab.schema, tab.selection, attributeSides)
+                    val beforeOrg = tab.schema
+                    val updated = applyOrganizeAttributesMenuAction(beforeOrg, tab.selection, attributeSides)
                         ?: return@mcpOrgMenu McpProceduralToolApplyOutcome.err("organize_attributes_not_applicable")
-                    pushCommitOnTabAt(tabIdx, updated.withNormalizedAttributeMultiValuedCounts())
+                    val synced = updated.syncFloatingCardinalityLayoutAfterMutationFromBaseline(
+                        baseline = beforeOrg,
+                        textMeasurer = clipboardPreviewTextMeasurer,
+                        rehomeConnectionsAbsentInBaseline = false,
+                    )
+                    pushCommitOnTabAt(tabIdx, synced.withNormalizedAttributeMultiValuedCounts())
                     McpProceduralToolApplyOutcome.okFullJson(
                         """{"ok":true,"resourceUri":${mcpJsonStringLiteral(modelResourceUriForSession(tab.id))}}""",
                         McpProceduralToolLayoutQualityScan(
@@ -1687,6 +1717,13 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                     onRequestCenterOnModelBoundsConsumed = { canvasCenterOnBoundsRequest = null },
                     requestedInspectorTab = inspectorTabRequest,
                     onInspectorTabRequestConsumed = { inspectorTabRequest = null },
+                    requestedSelectionFieldFocus = inspectorSelectionFieldFocusRequest,
+                    onSelectionFieldFocusRequestConsumed = { inspectorSelectionFieldFocusRequest = null },
+                    onConceptualInspectorSelectionFieldEditRequest = { fieldKey ->
+                        inspectorFieldFocusRevision++
+                        inspectorSelectionFieldFocusRequest =
+                            InspectorSelectionFieldFocusRequest(fieldKey, inspectorFieldFocusRevision)
+                    },
                     onRequestOpenConceptualFind = { conceptualSearchDialogOpen = true },
                     snackbarHostState = snackbarHostState,
                     ribbonMcp = ribbonMcp,

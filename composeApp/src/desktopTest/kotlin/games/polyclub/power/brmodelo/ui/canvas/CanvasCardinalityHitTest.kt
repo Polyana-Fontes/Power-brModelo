@@ -229,4 +229,44 @@ class CanvasCardinalityHitTest {
         assertEquals(expected, c1After.cardinalityPosition)
         assertNotEquals(corrupted, c1After.cardinalityPosition)
     }
+
+    @Test
+    fun syncFloatingCardinalityLayoutAfterMutationFromBaseline_matchesPerElementCardinalitySync() {
+        // Arrange — relationship–entity link with stored floating cardinality; entity moves and label is corrupted
+        val tm = headlessTextMeasurer()
+        val e1 = SchemaElement.Entity(1, "A", ElementPosition(10, 20, 90, 55))
+        val e2 = SchemaElement.Entity(2, "B", ElementPosition(280, 200, 90, 55))
+        val rel = SchemaElement.Relationship(3, "R", ElementPosition(150, 40, 85, 50))
+        val baseline = ConceptualSchema(elements = mapOf(1 to e1, 2 to e2, 3 to rel), nextId = 100)
+        val ok = assertIs<ConceptualLinkValidationResult.Ok>(
+            validateAndBuildConceptualLink(baseline, ConceptualLinkPick(3), ConceptualLinkPick(1)),
+        )
+        var withConn = ok.schema
+        val newConn = withConn.connections.single()
+        val enriched = enrichConnectionWithInitialCardinalityPosition(withConn, newConn, tm)
+        withConn = withConn.copy(
+            connections = withConn.connections.map { if (it.id == newConn.id) enriched else it },
+        )
+        val e1Moved = e1.copy(position = e1.position.copy(x = e1.position.x + 30, y = e1.position.y + 10))
+        val mutated = withConn.withElement(e1Moved).copy(
+            connections = withConn.connections.map { c ->
+                val p = c.cardinalityPosition
+                if (p != null) c.copy(cardinalityPosition = p.copy(x = p.x + 999)) else c
+            },
+        )
+
+        // Act
+        val synced = mutated.syncFloatingCardinalityLayoutAfterMutationFromBaseline(
+            baseline = withConn,
+            textMeasurer = tm,
+            rehomeConnectionsAbsentInBaseline = false,
+        )
+        val sequential = mutated.afterCardinalitySyncForElementBoundsChange(1, e1.position, tm)
+
+        // Assert
+        assertEquals(
+            sequential.connections.single().cardinalityPosition,
+            synced.connections.single().cardinalityPosition,
+        )
+    }
 }

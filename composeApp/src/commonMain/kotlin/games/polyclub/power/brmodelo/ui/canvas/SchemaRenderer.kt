@@ -1524,6 +1524,59 @@ internal fun ConceptualSchema.afterCardinalitySyncForElementBoundsChange(
 }
 
 /**
+ * Keeps floating cardinality label storage aligned with the diagram after batch layout edits
+ * (Pascal: `TBase.SetBounds` → `Realinhe` → `TLigacao.Ative` → `PosicioneCardinalidade` for non-fixed labels).
+ *
+ * 1. When [rehomeConnectionsAbsentInBaseline] is true: clears persisted floating
+ *    [Connection.cardinalityPosition] on every connection whose id is not in [baseline], then runs
+ *    [withRecalculatedFloatingCardinalityPositions] for each element id present in this schema but
+ *    not in [baseline] (clipboard paste, new links from attribute tools, etc.).
+ * 2. For every element id present in both schemas whose [SchemaElement.position] changed, applies
+ *    [afterCardinalitySyncForElementBoundsChange] in stable sorted id order (same outcome as
+ *    sequential single-element updates).
+ */
+internal fun ConceptualSchema.syncFloatingCardinalityLayoutAfterMutationFromBaseline(
+    baseline: ConceptualSchema,
+    textMeasurer: TextMeasurer,
+    rehomeConnectionsAbsentInBaseline: Boolean = false,
+): ConceptualSchema {
+    var s = this
+    if (rehomeConnectionsAbsentInBaseline) {
+        val oldConnIds = baseline.connections.map { it.id }.toSet()
+        val newElemIds = elements.keys.filter { it !in baseline.elements.keys }
+        if (newElemIds.isNotEmpty()) {
+            s = s.copy(
+                connections = s.connections.map { c ->
+                    val isNewConn = c.id !in oldConnIds
+                    if (isNewConn && c.showCardinality && c.cardinality != null && !c.cardinalityFixed) {
+                        c.copy(cardinalityPosition = null)
+                    } else {
+                        c
+                    }
+                },
+            )
+            for (eid in newElemIds.sorted()) {
+                s = s.withRecalculatedFloatingCardinalityPositions(
+                    onlyIncidentToElementId = eid,
+                    textMeasurer = textMeasurer,
+                )
+            }
+        }
+    }
+    val comparedIds = (baseline.elements.keys.asSequence() + s.elements.keys.asSequence())
+        .distinct()
+        .sorted()
+    for (id in comparedIds) {
+        val prev = baseline.elements[id]?.position ?: continue
+        val cur = s.elements[id]?.position ?: continue
+        if (prev != cur) {
+            s = s.afterCardinalitySyncForElementBoundsChange(id, prev, textMeasurer)
+        }
+    }
+    return s
+}
+
+/**
  * Axis-aligned bounds for hit-testing a connection's cardinality label.
  * When [Connection.cardinalityPosition] is null, uses the same fallback placement as
  * [drawCardinalityLabel] so labels from new links (or legacy data without stored coords)

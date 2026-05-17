@@ -31,8 +31,9 @@ enum class LineOrientation(val code: Int) {
     LEFT(3);
 
     companion object {
+        /** Unknown codes default to vertical like `TLigacao.Create` (`FOrientacao := OrientacaoV`) in `mer.pas`. */
         fun fromCode(code: Int): LineOrientation =
-            entries.firstOrNull { it.code == code } ?: HORIZONTAL
+            entries.firstOrNull { it.code == code } ?: VERTICAL
     }
 }
 
@@ -88,7 +89,8 @@ data class Connection(
     val showCardinality: Boolean = true,
     val cardinalityFixed: Boolean = false,
     val isWeak: Boolean = false,
-    val orientation: LineOrientation = LineOrientation.HORIZONTAL,
+    /** Default matches Pascal `TLigacao.Create`: `FOrientacao := OrientacaoV` (inspector **H. Vert.**). */
+    val orientation: LineOrientation = LineOrientation.VERTICAL,
     val cardinalityRole: String = "",
     val cardinalityObservations: String = "",
     val cardinalityDictionary: String = "",

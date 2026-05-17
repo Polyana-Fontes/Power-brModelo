@@ -197,7 +197,7 @@ private fun relationshipToEntityConnection(connectionId: Int, relId: Int, entity
         elementIdB = entityId,
         cardinality = Cardinality.ZERO_TO_MANY,
         showCardinality = true,
-        orientation = LineOrientation.HORIZONTAL,
+        orientation = LineOrientation.VERTICAL,
         useAssociativeOuterForEndA = false,
         useAssociativeOuterForEndB = false,
     )

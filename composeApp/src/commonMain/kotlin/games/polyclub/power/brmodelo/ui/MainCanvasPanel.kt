@@ -114,6 +114,7 @@ internal fun MainCanvasPanel(
     requestCenterOnModelBounds: ElementPosition? = null,
     onRequestCenterOnModelBoundsConsumed: () -> Unit = {},
     onRequestOpenConceptualFind: () -> Unit = {},
+    onConceptualInspectorSelectionFieldEditRequest: (String) -> Unit = {},
     onCopyRequest: () -> Unit = {},
     onCutRequest: () -> Unit = {},
     onPasteRequest: () -> Unit = {},
@@ -300,6 +301,7 @@ internal fun MainCanvasPanel(
                     onViewStateChange = onCanvasViewStateChange,
                     requestCenterOnModelBounds = requestCenterOnModelBounds,
                     onRequestCenterOnModelBoundsConsumed = onRequestCenterOnModelBoundsConsumed,
+                    onConceptualInspectorSelectionFieldEditRequest = onConceptualInspectorSelectionFieldEditRequest,
                     modifier = Modifier.fillMaxSize(),
                 )
             }

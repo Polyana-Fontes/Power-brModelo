@@ -436,7 +436,7 @@ private fun buildSpecializationToPlainEntityLink(
             elementIdB = entitySideElement.id,
             cardinality = Cardinality.ZERO_TO_MANY,
             showCardinality = false,
-            orientation = LineOrientation.HORIZONTAL,
+            orientation = LineOrientation.VERTICAL,
         ),
     )
 
@@ -587,7 +587,7 @@ fun validateAndBuildConceptualLink(
         elementIdB = entPick.elementId,
         cardinality = Cardinality.ZERO_TO_MANY,
         showCardinality = true,
-        orientation = LineOrientation.HORIZONTAL,
+        orientation = LineOrientation.VERTICAL,
         useAssociativeOuterForEndA = false,
         useAssociativeOuterForEndB = useOuterB,
     )
@@ -624,7 +624,7 @@ private fun connectionFromRelationshipToEntity(
         elementIdB = entityPick.elementId,
         cardinality = Cardinality.ZERO_TO_MANY,
         showCardinality = true,
-        orientation = LineOrientation.HORIZONTAL,
+        orientation = LineOrientation.VERTICAL,
         useAssociativeOuterForEndA = false,
         useAssociativeOuterForEndB = useOuterB,
     )

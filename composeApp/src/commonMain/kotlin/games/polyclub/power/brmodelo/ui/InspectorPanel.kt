@@ -256,6 +256,8 @@ internal fun InspectorPanel(
     onRevealHiddenAttributeInModel: () -> Unit = {},
     requestedInspectorTab: InspectorTab? = null,
     onInspectorTabRequestConsumed: () -> Unit = {},
+    requestedSelectionFieldFocus: InspectorSelectionFieldFocusRequest? = null,
+    onSelectionFieldFocusRequestConsumed: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var activeTab by remember { mutableStateOf(InspectorTab.Selecao) }
@@ -266,6 +268,13 @@ internal fun InspectorPanel(
         val tab = requestedInspectorTab ?: return@LaunchedEffect
         activeTab = tab
         onInspectorTabRequestConsumed()
+    }
+
+    LaunchedEffect(requestedSelectionFieldFocus) {
+        val req = requestedSelectionFieldFocus ?: return@LaunchedEffect
+        activeTab = InspectorTab.Selecao
+        focusedKey = req.fieldKey
+        onSelectionFieldFocusRequestConsumed()
     }
 
     CompositionLocalProvider(LocalRevertSchemaPreview provides onRevertSchemaPreview) {
@@ -700,7 +709,13 @@ private fun commitAttributeElement(
     layoutDirection: LayoutDirection,
     onSchemaCommit: (ConceptualSchema) -> Unit,
 ) {
-    onSchemaCommit(schema.withElement(attr.resizedIfAuto(schema, textMeasurer, layoutDirection)))
+    val previousPosition = schema.elements[attr.id]?.position
+    var next = schema.withElement(attr.resizedIfAuto(schema, textMeasurer, layoutDirection))
+    val newPosition = next.elements[attr.id]?.position
+    if (previousPosition != null && newPosition != null && previousPosition != newPosition) {
+        next = next.afterCardinalitySyncForElementBoundsChange(attr.id, previousPosition, textMeasurer)
+    }
+    onSchemaCommit(next)
 }
 
 private fun commitElementBoundsFromInspector(
@@ -1054,7 +1069,7 @@ private fun AssocEntityFields(
     }
     DropdownRow(
         label = "+Direção",
-        selected = element.arrowDirection.assocLabel(),
+        selected = element.arrowDirection.label(),
         options = assocDirectionOptions(),
         key = "RPOSISETA",
         focusedKey = focusedKey,
@@ -1605,14 +1620,14 @@ private fun CardinalityContent(
     DropdownRow(
         label = "Posição da Linha",
         selected = conn.orientation.label(),
-        options = LineOrientation.entries.map { it.label() },
+        options = cardinalityLineOrientationDropdownOptions(conn.orientation),
         key = "CARD_POS_LINHA",
         focusedKey = focusedKey,
         onFocusChange = onFocusChange,
     ) { v ->
         val ori =
             LineOrientation.entries.firstOrNull { it.label() == v }
-                ?: LineOrientation.HORIZONTAL
+                ?: LineOrientation.VERTICAL
         updateConn { it.copy(orientation = ori) }
     }
 
@@ -2691,42 +2706,38 @@ private fun SchemaElement.withDictionary(d: String): SchemaElement = when (this)
     is SchemaElement.Annotation       -> copy(dictionary = d)
 }
 
+/** Labels match `TbrFmPrincipal` combo setup for `TMaxRelacao` / `TLigaTabela` (`uApp.pas`, `SetaDirecao` codes 0–8). */
 private fun ArrowDirection.label(): String = when (this) {
     ArrowDirection.NONE         -> "Não mostrar"
     ArrowDirection.LEFT_UP      -> "A) /\\"
-    ArrowDirection.LEFT_DOWN    -> "A) \\"
-    ArrowDirection.TOP_RIGHT    -> "B) /\\"
-    ArrowDirection.TOP_LEFT     -> "B) \\/"
-    ArrowDirection.RIGHT_DOWN   -> "B) <"
-    ArrowDirection.RIGHT_UP     -> "B) >"
-    ArrowDirection.BOTTOM_LEFT  -> "A) \\/"
-    ArrowDirection.BOTTOM_RIGHT -> "A) >"
-}
-
-// Associative entity direction has a reduced subset (no A)>/< as in original Pascal)
-private fun ArrowDirection.assocLabel(): String = when (this) {
-    ArrowDirection.NONE         -> "Não mostrar"
-    ArrowDirection.LEFT_UP      -> "A) /\\"
-    ArrowDirection.LEFT_DOWN    -> "A) \\"
-    ArrowDirection.TOP_RIGHT    -> "B) /\\"
-    ArrowDirection.TOP_LEFT     -> "B) \\/"
+    ArrowDirection.LEFT_DOWN    -> "A) \\/"
+    ArrowDirection.TOP_RIGHT    -> "A) >"
+    ArrowDirection.TOP_LEFT     -> "A) <"
+    ArrowDirection.RIGHT_DOWN   -> "B) \\/"
+    ArrowDirection.RIGHT_UP     -> "B) /\\"
     ArrowDirection.BOTTOM_LEFT  -> "B) <"
     ArrowDirection.BOTTOM_RIGHT -> "B) >"
-    else                        -> "Não mostrar"
 }
 
+/** Pascal `TEntidadeAssoss` / `SetaDirecao` combo omits codes 3–4 (`uApp.pas`); options match [ArrowDirection.label] strings in UI order. */
 private fun assocDirectionOptions(): List<String> = listOf(
-    "Não mostrar", "A) /\\", "A) \\", "B) /\\", "B) \\/", "B) <", "B) >",
+    "Não mostrar",
+    "A) /\\",
+    "A) \\/",
+    "B) \\/",
+    "B) /\\",
+    "B) <",
+    "B) >",
 )
 
 private fun assocLabelToDirection(label: String): ArrowDirection = when (label) {
-    "A) /\\"  -> ArrowDirection.LEFT_UP
-    "A) \\"   -> ArrowDirection.LEFT_DOWN
-    "B) /\\"  -> ArrowDirection.TOP_RIGHT
-    "B) \\/"  -> ArrowDirection.TOP_LEFT
-    "B) <"    -> ArrowDirection.BOTTOM_LEFT
-    "B) >"    -> ArrowDirection.BOTTOM_RIGHT
-    else      -> ArrowDirection.NONE
+    "A) /\\" -> ArrowDirection.LEFT_UP
+    "A) \\/" -> ArrowDirection.LEFT_DOWN
+    "B) \\/" -> ArrowDirection.RIGHT_DOWN
+    "B) /\\" -> ArrowDirection.RIGHT_UP
+    "B) <" -> ArrowDirection.BOTTOM_LEFT
+    "B) >" -> ArrowDirection.BOTTOM_RIGHT
+    else -> ArrowDirection.NONE
 }
 
 private fun AnnotationType.label(): String = when (this) {
@@ -2746,4 +2757,15 @@ private fun LineOrientation.label(): String = when (this) {
     LineOrientation.HORIZONTAL -> "H. Horz."
     LineOrientation.DIAGONAL   -> "H. Diag."
     LineOrientation.LEFT       -> "H. Esg."
+}
+
+/** Pascal `TCardinalidade` inspector: only vertical / horizontal (`uApp.pas`). */
+private val cardinalityLineInspectorOrientations: List<LineOrientation> =
+    listOf(LineOrientation.VERTICAL, LineOrientation.HORIZONTAL)
+
+/** Keeps legacy diagonal / left values selectable when loading older models. */
+private fun cardinalityLineOrientationDropdownOptions(current: LineOrientation): List<String> {
+    val base = cardinalityLineInspectorOrientations.map { it.label() }
+    val cur = current.label()
+    return if (cur in base) base else base + cur
 }

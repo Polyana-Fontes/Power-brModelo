@@ -64,7 +64,10 @@ internal fun WorkspaceArea(
     onRequestCenterOnModelBoundsConsumed: () -> Unit = {},
     requestedInspectorTab: InspectorTab? = null,
     onInspectorTabRequestConsumed: () -> Unit = {},
+    requestedSelectionFieldFocus: InspectorSelectionFieldFocusRequest? = null,
+    onSelectionFieldFocusRequestConsumed: () -> Unit = {},
     onRequestOpenConceptualFind: () -> Unit = {},
+    onConceptualInspectorSelectionFieldEditRequest: (String) -> Unit = {},
     onCopyRequest: () -> Unit = {},
     onCutRequest: () -> Unit = {},
     onPasteRequest: () -> Unit = {},
@@ -98,6 +101,7 @@ internal fun WorkspaceArea(
             requestCenterOnModelBounds = requestCenterOnModelBounds,
             onRequestCenterOnModelBoundsConsumed = onRequestCenterOnModelBoundsConsumed,
             onRequestOpenConceptualFind = onRequestOpenConceptualFind,
+            onConceptualInspectorSelectionFieldEditRequest = onConceptualInspectorSelectionFieldEditRequest,
             onCopyRequest = onCopyRequest,
             onCutRequest = onCutRequest,
             onPasteRequest = onPasteRequest,
@@ -121,6 +125,8 @@ internal fun WorkspaceArea(
             onRevealHiddenAttributeInModel = onRevealHiddenAttributeInModel,
             requestedInspectorTab = requestedInspectorTab,
             onInspectorTabRequestConsumed = onInspectorTabRequestConsumed,
+            requestedSelectionFieldFocus = requestedSelectionFieldFocus,
+            onSelectionFieldFocusRequestConsumed = onSelectionFieldFocusRequestConsumed,
         )
     }
 }

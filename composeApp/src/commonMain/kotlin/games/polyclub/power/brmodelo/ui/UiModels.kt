@@ -40,6 +40,23 @@ internal enum class InspectorTab {
     AtrOcultos,
 }
 
+/** Row keys in the inspector "Seleção" grid ([games.polyclub.power.brmodelo.ui.InspectorPanel]). */
+internal object InspectorSelectionFieldKeys {
+    const val Name = "NOME"
+    const val CardinalityRole = "PAPEL"
+}
+
+/**
+ * One-shot request to switch to [InspectorTab.Selecao] and focus a single-line editable row
+ * in [games.polyclub.power.brmodelo.ui.InspectorPanel].
+ *
+ * [revision] must change whenever [fieldKey] repeats so [LaunchedEffect] re-runs.
+ */
+internal data class InspectorSelectionFieldFocusRequest(
+    val fieldKey: String,
+    val revision: Long,
+)
+
 /** Ribbon **Operações** dropdown actions (conceptual schema tab). */
 internal enum class ConceptualRibbonOperation {
     OrganizeAttributes,

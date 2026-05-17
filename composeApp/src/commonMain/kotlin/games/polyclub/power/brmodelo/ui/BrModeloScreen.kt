@@ -132,7 +132,10 @@ internal fun BrModeloScreen(
     onRequestCenterOnModelBoundsConsumed: () -> Unit = {},
     requestedInspectorTab: InspectorTab? = null,
     onInspectorTabRequestConsumed: () -> Unit = {},
+    requestedSelectionFieldFocus: InspectorSelectionFieldFocusRequest? = null,
+    onSelectionFieldFocusRequestConsumed: () -> Unit = {},
     onRequestOpenConceptualFind: () -> Unit = {},
+    onConceptualInspectorSelectionFieldEditRequest: (String) -> Unit = {},
     snackbarHostState: SnackbarHostState,
     ribbonMcp: RibbonMcpUi? = null,
 ) {
@@ -219,7 +222,10 @@ internal fun BrModeloScreen(
                 onRequestCenterOnModelBoundsConsumed = onRequestCenterOnModelBoundsConsumed,
                 requestedInspectorTab = requestedInspectorTab,
                 onInspectorTabRequestConsumed = onInspectorTabRequestConsumed,
+                requestedSelectionFieldFocus = requestedSelectionFieldFocus,
+                onSelectionFieldFocusRequestConsumed = onSelectionFieldFocusRequestConsumed,
                 onRequestOpenConceptualFind = onRequestOpenConceptualFind,
+                onConceptualInspectorSelectionFieldEditRequest = onConceptualInspectorSelectionFieldEditRequest,
             )
         }
 

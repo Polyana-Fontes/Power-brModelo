@@ -196,10 +196,19 @@ private fun ConceptualSchema.applyKeyboardResize(
     if (!changed) return null
 
     if (resizedElementIds.isNotEmpty()) {
-        s = s.withRecalculatedFloatingCardinalityPositions(
-            onlyIncidentToElementId = resizedElementIds.singleOrNull(),
-            textMeasurer = textMeasurer,
-        )
+        s = if (resizedElementIds.size == 1) {
+            s.withRecalculatedFloatingCardinalityPositions(
+                onlyIncidentToElementId = resizedElementIds.first(),
+                textMeasurer = textMeasurer,
+            )
+        } else {
+            resizedElementIds.sorted().fold(s) { acc, id ->
+                acc.withRecalculatedFloatingCardinalityPositions(
+                    onlyIncidentToElementId = id,
+                    textMeasurer = textMeasurer,
+                )
+            }
+        }
     }
 
     return s
