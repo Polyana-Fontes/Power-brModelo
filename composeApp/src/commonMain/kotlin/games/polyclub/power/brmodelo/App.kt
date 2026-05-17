@@ -18,7 +18,6 @@
 
 package games.polyclub.power.brmodelo
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -207,6 +206,7 @@ import games.polyclub.power.brmodelo.ui.theme.AppColorPalette
 import games.polyclub.power.brmodelo.ui.theme.ConceptualModelColorPalette
 import games.polyclub.power.brmodelo.ui.theme.LocalAppColorPalette
 import games.polyclub.power.brmodelo.ui.theme.LocalConceptualModelColorPalette
+import games.polyclub.power.brmodelo.ui.theme.rememberApplicationDarkTheme
 import games.polyclub.power.brmodelo.ui.toConceptualTool
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -1644,7 +1644,7 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         null
     }
 
-    val systemDarkTheme = isSystemInDarkTheme()
+    val systemDarkTheme = rememberApplicationDarkTheme()
     val appPalette = remember(systemDarkTheme) {
         if (systemDarkTheme) AppColorPalette.dark() else AppColorPalette.light()
     }

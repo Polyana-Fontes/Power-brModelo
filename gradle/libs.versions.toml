@@ -2,6 +2,7 @@
 kotlin = "2.0.21"
 compose-multiplatform = "1.7.3"
 flatlaf = "3.7"
+jsystem-theme-detector = "3.9"
 mcpJava = "1.1.2"
 jetty = "11.0.24"
 kotlinx-coroutines = "1.9.0"
@@ -10,6 +11,7 @@ pdfbox = "2.0.31"
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 flatlaf = { module = "com.formdev:flatlaf", version.ref = "flatlaf" }
+jsystem-theme-detector = { module = "org.openani.jsystemthemedetector:jSystemThemeDetector", version.ref = "jsystem-theme-detector" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
 apache-pdfbox = { module = "org.apache.pdfbox:pdfbox", version.ref = "pdfbox" }
 
