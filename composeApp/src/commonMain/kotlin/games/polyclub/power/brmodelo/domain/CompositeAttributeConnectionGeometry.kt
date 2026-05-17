@@ -22,15 +22,30 @@ package games.polyclub.power.brmodelo.domain
  * Horizontal model-space X where a **composite child** attribute attaches to the link
  * from the parent's [TBarraDeAtributos] bar (`mer.pas`).
  *
- * [compositeEllipseOnLeft] must be [attributeEllipseOnLeft] evaluated on the **composite parent**
- * (entity owner position, composite box position, composite [SchemaElement.Attribute.labelSide]).
- * When `true`, the bar is on the composite's physical **right** and children sit to the right →
- * use the child's **left** edge; when `false` (OrientacaoD / bullet on the right), the bar is on
- * the composite's **left** → use the child's **right** edge so the segment does not cross the label.
+ * Uses the same active edge as [attributeEllipseOnLeft] with the **composite** as owner
+ * ([composite.position]) and the child's stored [SchemaElement.Attribute.labelSide], so each child
+ * can differ from the parent composite (MER `<Orientacao>` per child). The segment meets the stub
+ * side ([games.polyclub.power.brmodelo.ui.canvas.attributeActiveEdgeConnectorY] in the renderer), not
+ * the opposite bbox edge — otherwise a child with `OrientacaoE` while the bar sits on the composite's
+ * left would get a horizontal leg through the label (Pascal `MER-PousadaSolDaManha-uf-movido2.xml`).
  */
 internal fun compositeChildBarConnectionX(
     childBox: ElementPosition,
-    compositeEllipseOnLeft: Boolean,
+    childEllipseOnLeft: Boolean,
 ): Float =
-    if (compositeEllipseOnLeft) childBox.x.toFloat()
+    if (childEllipseOnLeft) childBox.x.toFloat()
     else (childBox.x + childBox.width).toFloat()
+
+/** Resolves [childEllipseOnLeft] from the composite parent box + child layout (Pascal `TAtributo.Paint`). */
+internal fun compositeChildBarConnectionX(
+    schema: ConceptualSchema,
+    composite: SchemaElement.Attribute,
+    child: SchemaElement.Attribute,
+): Float {
+    val childEllipseOnLeft = attributeEllipseOnLeft(
+        composite.position,
+        child.position,
+        child.labelSide,
+    )
+    return compositeChildBarConnectionX(child.position, childEllipseOnLeft)
+}

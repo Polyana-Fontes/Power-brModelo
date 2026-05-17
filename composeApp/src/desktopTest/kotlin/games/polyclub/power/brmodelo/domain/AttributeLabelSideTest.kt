@@ -62,4 +62,35 @@ class AttributeLabelSideTest {
         // Assert
         assertEquals(stored, effective)
     }
+
+    @Test
+    fun `Pascal MER composite Direito with child Esquerdo bar meets child left stub`() {
+        // Arrange — same pattern as `MER-PousadaSolDaManha-uf-movido2.xml`: parent `<Orientacao Valor="2"/>`,
+        // child `uf` `<Orientacao Valor="3"/>`. Bar→child X must follow the child’s stub, not the opposite bbox edge.
+        val entity = SchemaElement.Entity(1, "Funcionario", ElementPosition(200, 200, 100, 66))
+        val composite = SchemaElement.Attribute(
+            id = 2,
+            name = "endereco",
+            position = ElementPosition(100, 265, 72, 16),
+            ownerId = 1,
+            labelSide = AttributeLabelSide.BULLET_RIGHT,
+            childAttributeIds = listOf(3),
+            autoSize = false,
+        )
+        val uf = SchemaElement.Attribute(
+            id = 3,
+            name = "uf",
+            position = ElementPosition(101, 202, 37, 16),
+            ownerId = 2,
+            labelSide = AttributeLabelSide.BULLET_LEFT,
+            autoSize = false,
+        )
+        val schema = ConceptualSchema(elements = mapOf(1 to entity, 2 to composite, 3 to uf))
+
+        // Act
+        val x = compositeChildBarConnectionX(schema, composite, uf)
+
+        // Assert — stub on the left (Esquerdo): horizontal leg ends at Left, not Right (would cross the label)
+        assertEquals(101f, x)
+    }
 }

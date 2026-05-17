@@ -24,26 +24,26 @@ import kotlin.test.assertEquals
 class CompositeAttributeConnectionGeometryTest {
 
     @Test
-    fun `composite bar on right attaches child link on child left edge`() {
-        // Arrange — composite uses ellipse-left layout (bar on physical right); child box to the right of the bar
+    fun `child OrientacaoE stub left attaches bar polyline at child left edge`() {
+        // Arrange
         val child = ElementPosition(x = 50, y = 10, width = 80, height = 16)
 
         // Act
-        val x = compositeChildBarConnectionX(child, compositeEllipseOnLeft = true)
+        val x = compositeChildBarConnectionX(child, childEllipseOnLeft = true)
 
-        // Assert — segment meets the left edge, not through the label to the right of the ellipse
+        // Assert
         assertEquals(50f, x)
     }
 
     @Test
-    fun `composite bar on left OrientacaoD attaches child link on child right edge`() {
-        // Arrange — bullet-right / "Direito": bar on composite's left; children sit to the left
+    fun `child OrientacaoD stub right attaches bar polyline at child right edge`() {
+        // Arrange
         val child = ElementPosition(x = 10, y = 10, width = 72, height = 16)
 
         // Act
-        val x = compositeChildBarConnectionX(child, compositeEllipseOnLeft = false)
+        val x = compositeChildBarConnectionX(child, childEllipseOnLeft = false)
 
-        // Assert — right edge (ellipse side), facing the bar
+        // Assert
         assertEquals(82f, x)
     }
 }

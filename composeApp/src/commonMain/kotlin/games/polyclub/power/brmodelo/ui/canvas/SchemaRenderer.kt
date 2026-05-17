@@ -744,7 +744,6 @@ private fun DrawScope.drawAttribute(
 
     val diameter = attributeEllipseDiameterPx(p.height)
     val meio = attributeStubCenterlineOffsetY(p.height)
-
     val owner = schema.elements[attr.ownerId]
     val ellipseOnLeft = attributeEllipseOnLeft(owner?.position, p, attr.labelSide)
 
@@ -1741,17 +1740,12 @@ private fun connectionEncaixes(
         ) {
             // Composite child ↔ parent bar: X on the child edge that faces the bar (same as Divida / Pascal).
             val attachY = attributeActiveEdgeConnectorY(elem.position)
-            val parentOwnerPos = schema.elements[otherElem.ownerId]?.position
-            val parentEllipseOnLeft = attributeEllipseOnLeft(
-                parentOwnerPos,
-                otherElem.position,
-                otherElem.labelSide,
+            val attachX = compositeChildBarConnectionX(
+                schema,
+                otherElem,
+                elem,
             )
-            val cx = compositeChildBarConnectionX(
-                elem.position,
-                parentEllipseOnLeft,
-            )
-            val c = Offset(cx, attachY)
+            val c = Offset(attachX, attachY)
             arrayOf(Offset.Zero, c, c, c, c)
         } else {
             // Normal attribute connection toward its owner — Y matches rendered stub (not bbox centre).
@@ -2070,14 +2064,13 @@ private fun connectionPonto(
             otherElem is SchemaElement.Attribute &&
                 otherElem.isComposite &&
                 elem.ownerId == otherElem.id -> {
-                // Child → composite: attach on the edge facing the bar (not the entity-stub side).
-                val parentOwnerPos = schema.elements[otherElem.ownerId]?.position
-                val parentEllipseOnLeft = attributeEllipseOnLeft(
-                    parentOwnerPos,
+                // Child → composite bar: stub edge matches [compositeChildBarConnectionX] (per-child Orientacao).
+                val childEllipseOnLeft = attributeEllipseOnLeft(
                     otherElem.position,
-                    otherElem.labelSide,
+                    elem.position,
+                    elem.labelSide,
                 )
-                if (parentEllipseOnLeft) 1 else 3 // left vs right; collapsed enc matches [compositeChildBarConnectionX]
+                if (childEllipseOnLeft) 1 else 3
             }
             else ->
                 if (ellipseOnLeft) 1 else 3 // owner stub on ellipse side
@@ -2298,16 +2291,10 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                     // Child → composite bar connection.
                     // The composite (otherElem) connects to its entity owner via some ponto;
                     // its bar is on the OPPOSITE side. Children hang off the bar.
-                    val compositeOwnerPos = schema.elements[otherElem.ownerId]?.position
-                    val ellipseOnLeft = attributeEllipseOnLeft(
-                        compositeOwnerPos,
-                        otherElem.position,
-                        otherElem.labelSide,
-                    )
-                    // Bar sits on the composite's physical right iff [ellipseOnLeft] (see [drawAttribute] /
-                    // [compositeAttributeBarGeometry]); child attaches on the edge facing the bar.
+                    // Child stub X from per-child layout vs composite (Pascal MER can store different
+                    // `<Orientacao>` on each child than on the parent composite).
                     val p = elem.position
-                    val childActiveX = compositeChildBarConnectionX(p, ellipseOnLeft)
+                    val childActiveX = compositeChildBarConnectionX(schema, otherElem, elem)
                     elemResult[conn.id] = Offset(
                         childActiveX,
                         attributeActiveEdgeConnectorY(p),
