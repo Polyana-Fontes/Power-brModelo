@@ -22,7 +22,10 @@ package games.polyclub.power.brmodelo.domain
  * Visual and semantic style applied to element labels.
  *
  * Corresponds to the `Font`, `FontColor`, and `FontStyles` published properties on `TBase` in `mer.pas`,
- * serialized under `<Fonte>` (`FonteNome`, `FonteTamanho`, `FonteEstilo`, `FonteCor`) in MER XML.
+ * serialized under `<Fonte>` (`FonteNome`, `FonteTamanho`, `FonteEstilo`, `FonteCor`, optional `FonteScript`) in MER XML.
+ *
+ * [fontScript] stores Delphi `TFont.Charset` as in `.brM` (e.g. `TURKISH_CHARSET`). It is **not** applied to canvas text;
+ * it exists only for round-trip fidelity with legacy files.
  */
 data class LabelStyle(
     val color: Int? = null,
@@ -36,6 +39,8 @@ data class LabelStyle(
     val fontFamilyName: String? = null,
     /** Point size as stored in MER (`FonteTamanho`), same as Pascal `TFont.Size`. `null` = legacy canvas default (~11 sp). */
     val fontSizePoints: Int? = null,
+    /** Delphi `TFont.Charset` identifier or decimal string from `.brM`; optional `<FonteScript>` in MER XML. Not used for rendering. */
+    val fontScript: String? = null,
 )
 
 /**

@@ -185,6 +185,25 @@ class ConceptualSchemaBrmTest {
         assertTrue(schema.connections.isNotEmpty(), "Expected at least one connection in brM model")
     }
 
+    @Test
+    fun `simples brM - label font fields match XML for same model`() {
+        // Arrange
+        val brm = parseBrm("exemplo-simples.brM")
+        val xml = parseXml("exemplo-simples.xml")
+
+        // Act
+        val brmEnt = brm.entities.first { it.id == 1 }
+        val xmlEnt = xml.entities.first { it.id == 1 }
+
+        // Assert
+        assertEquals(xmlEnt.labelStyle.fontFamilyName, brmEnt.labelStyle.fontFamilyName)
+        assertEquals(xmlEnt.labelStyle.fontSizePoints, brmEnt.labelStyle.fontSizePoints)
+        // MER XML example omits <FonteScript>; the same diagram in .brM still carries Font.Charset (e.g. DEFAULT_CHARSET).
+        assertEquals(xmlEnt.labelStyle.color, brmEnt.labelStyle.color)
+        assertEquals(xmlEnt.labelStyle.bold, brmEnt.labelStyle.bold)
+        assertEquals(xmlEnt.labelStyle.italic, brmEnt.labelStyle.italic)
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // COMPLEX brM — MER-PousadaSolDaManha
     // ─────────────────────────────────────────────────────────────────────────

@@ -55,6 +55,7 @@
         <FonteTamanho Valor="28"/>
         <FonteEstilo Valor="[fsBold,fsItalic,fsUnderline,fsStrikeOut]"/>
         <FonteCor Valor="255"/>
+        <FonteScript Valor="TURKISH_CHARSET"/>
       </Fonte>
       <Atributos/>
       <AtributosOcultos/>

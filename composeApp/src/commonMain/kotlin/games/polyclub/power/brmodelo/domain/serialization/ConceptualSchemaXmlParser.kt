@@ -487,6 +487,7 @@ object ConceptualSchemaXmlParser {
         val style = fonte.strValor("FonteEstilo")
         val nome = fonte.child("FonteNome")?.attr("Valor")?.trim()?.takeIf { it.isNotEmpty() }
         val tamanho = fonte.child("FonteTamanho")?.attr("Valor")?.toIntOrNull()
+        val script = fonte.child("FonteScript")?.attr("Valor")?.trim()?.takeIf { it.isNotEmpty() }
         return LabelStyle(
             color = fonte.child("FonteCor")?.attr("Valor")?.toIntOrNull(),
             bold = style.contains("fsBold"),
@@ -495,6 +496,7 @@ object ConceptualSchemaXmlParser {
             strikeThrough = style.contains("fsStrikeOut"),
             fontFamilyName = nome,
             fontSizePoints = tamanho,
+            fontScript = script,
         )
     }
 

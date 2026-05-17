@@ -33,7 +33,9 @@ import games.polyclub.power.brmodelo.domain.SpecializationType
 import games.polyclub.power.brmodelo.domain.TextAlignment
 import games.polyclub.power.brmodelo.domain.VclTColorTable
 import games.polyclub.power.brmodelo.domain.brm.DfmNode
+import games.polyclub.power.brmodelo.domain.brm.DfmValue
 import games.polyclub.power.brmodelo.domain.brm.parseDfmBytes
+import kotlin.math.roundToInt
 
 /**
  * Deserializes a brModelo `.brM` file into a [games.polyclub.power.brmodelo.domain.ConceptualSchema].
@@ -492,15 +494,69 @@ object ConceptualSchemaBrmParser {
 
     private fun parseLabelStyle(node: DfmNode): LabelStyle {
         val fontColorStr = node.strProp("FontColor")
-        val fontStyles = (node.properties["FontStyles"] as? games.polyclub.power.brmodelo.domain.brm.DfmValue.SetVal)
-            ?.identifiers ?: emptyList()
+        val parentFontStyles = (node.properties["FontStyles"] as? DfmValue.SetVal)?.identifiers ?: emptyList()
+        val flatFontStyles = (node.properties["Font.Style"] as? DfmValue.SetVal)?.identifiers ?: emptyList()
+        val fontChild = node.children.firstOrNull { it.className.equals("TFont", ignoreCase = true) }
+        val childFontStyles = (fontChild?.properties["Style"] as? DfmValue.SetVal)?.identifiers ?: emptyList()
+        val fontStyles = when {
+            flatFontStyles.isNotEmpty() -> flatFontStyles
+            childFontStyles.isNotEmpty() -> childFontStyles
+            else -> parentFontStyles
+        }
+        val fontName = node.strProp("Font.Name").trim().takeIf { it.isNotEmpty() }
+            ?: fontChild?.strProp("Name")?.trim()?.takeIf { it.isNotEmpty() }
+        val fontSizePoints = brmFlatOrNestedFontSizePoints(node, fontChild)
+        val fontScript = brmReadDfmRawProperty(node, "Font.Charset")
+            ?: fontChild?.let { brmReadFontCharsetRaw(it) }
         return LabelStyle(
             color = parseColorRef(fontColorStr),
             bold = "fsBold" in fontStyles,
             italic = "fsItalic" in fontStyles,
             underline = "fsUnderline" in fontStyles,
             strikeThrough = "fsStrikeOut" in fontStyles,
+            fontFamilyName = fontName,
+            fontSizePoints = fontSizePoints,
+            fontScript = fontScript,
         )
+    }
+
+    private fun brmFlatOrNestedFontSizePoints(owner: DfmNode, fontChild: DfmNode?): Int? {
+        val szFlat = owner.intProp("Font.Size", 0)
+        if (szFlat > 0) return szFlat.coerceIn(1, 144)
+        val hFlat = owner.intProp("Font.Height", 0)
+        if (hFlat < 0) {
+            return ((-hFlat) * 72.0 / 96.0).roundToInt().coerceIn(1, 144)
+        }
+        return fontChild?.let { brmInferFontSizePoints(it) }
+    }
+
+    /** Reads a DFM property as a raw string (identifiers or decimal ints). */
+    private fun brmReadDfmRawProperty(node: DfmNode, key: String): String? {
+        val raw = node.properties[key] ?: return null
+        return when (raw) {
+            is DfmValue.StrVal -> raw.value.trim().takeIf { it.isNotEmpty() }
+            is DfmValue.IntVal -> raw.value.toString()
+            else -> null
+        }
+    }
+    private fun brmInferFontSizePoints(font: DfmNode): Int? {
+        val sz = font.intProp("Size", 0)
+        if (sz > 0) return sz.coerceIn(1, 144)
+        val h = font.intProp("Height", 0)
+        if (h < 0) {
+            return ((-h) * 72.0 / 96.0).roundToInt().coerceIn(1, 144)
+        }
+        return null
+    }
+
+    /** Raw `TFont.Charset` as stored in DFM (identifier like `TURKISH_CHARSET` or a decimal). */
+    private fun brmReadFontCharsetRaw(font: DfmNode): String? {
+        val raw = font.properties["Charset"] ?: return null
+        return when (raw) {
+            is DfmValue.StrVal -> raw.value.trim().takeIf { it.isNotEmpty() }
+            is DfmValue.IntVal -> raw.value.toString()
+            else -> null
+        }
     }
 
     /**

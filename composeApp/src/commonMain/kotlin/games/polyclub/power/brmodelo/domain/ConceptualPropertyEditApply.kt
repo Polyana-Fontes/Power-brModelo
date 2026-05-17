@@ -92,6 +92,14 @@ private fun mergeLabelStyle(base: LabelStyle, patch: Map<String, Any?>): LabelSt
             else -> parseInt(raw)?.let { s.copy(fontSizePoints = it) } ?: s
         }
     }
+    if (containsKey(patch, "labelFontScript")) {
+        val t = parseTrimmedString(patch["labelFontScript"])
+        s = when {
+            t == null -> s.copy(fontScript = null)
+            t.isEmpty() -> s.copy(fontScript = null)
+            else -> s.copy(fontScript = t)
+        }
+    }
     return s
 }
 
@@ -159,7 +167,11 @@ private fun applyCommonElementPatches(el: SchemaElement, patch: Map<String, Any?
             is SchemaElement.Annotation -> out.copy(position = merged)
         }
     }
-    if (containsKey(patch, "labelColorArgb") || containsKey(patch, "labelBold") || containsKey(patch, "labelItalic")) {
+    if (containsKey(patch, "labelColorArgb") || containsKey(patch, "labelBold") || containsKey(patch, "labelItalic") ||
+        containsKey(patch, "labelUnderline") || containsKey(patch, "labelStrikeThrough") ||
+        containsKey(patch, "labelFontFamilyName") || containsKey(patch, "labelFontSizePoints") ||
+        containsKey(patch, "labelFontScript")
+    ) {
         val ls = mergeLabelStyle(out.labelStyle, patch)
         out = when (out) {
             is SchemaElement.Entity -> out.copy(labelStyle = ls)
@@ -183,6 +195,11 @@ private fun commonElementPatchKeys(): Set<String> =
         "labelColorArgb",
         "labelBold",
         "labelItalic",
+        "labelUnderline",
+        "labelStrikeThrough",
+        "labelFontFamilyName",
+        "labelFontSizePoints",
+        "labelFontScript",
     )
 
 private fun entityExtraKeys(): Set<String> = emptySet()

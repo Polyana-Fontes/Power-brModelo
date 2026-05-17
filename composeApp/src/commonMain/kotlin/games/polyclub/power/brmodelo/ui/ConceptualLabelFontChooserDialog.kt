@@ -196,6 +196,11 @@ internal fun ConceptualLabelFontChooserDialog(
         }
     }
 
+    val fontScriptPassthrough = remember(k) { initial.fontScript }
+    val scriptDisplayText = remember(fontScriptPassthrough) {
+        fontScriptPassthrough?.trim()?.takeIf { it.isNotEmpty() } ?: "—"
+    }
+
     fun buildDraft(): LabelStyle {
         val nm = familyName.trim().ifEmpty { "Tahoma" }
         val sz = sizePoints.coerceIn(4, 144)
@@ -207,6 +212,7 @@ internal fun ConceptualLabelFontChooserDialog(
             strikeThrough = strikeThrough,
             fontFamilyName = nm,
             fontSizePoints = sz,
+            fontScript = fontScriptPassthrough,
         )
     }
 
@@ -422,15 +428,16 @@ internal fun ConceptualLabelFontChooserDialog(
                                 Text("Script:", style = FD_ROW_TEXT.copy(color = FD_LABEL_COLOR))
                                 Box(
                                     modifier = Modifier
-                                        .width(112.dp)
+                                        .weight(1f)
+                                        .widthIn(min = 112.dp)
                                         .border(1.dp, FD_CELL_BORDER)
                                         .background(FD_CELL_LABEL_BG)
                                         .padding(horizontal = 6.dp, vertical = 4.dp),
                                 ) {
                                     Text(
-                                        "Ocidental",
+                                        scriptDisplayText,
                                         style = FD_ROW_TEXT.copy(color = FD_LABEL_COLOR),
-                                        maxLines = 1,
+                                        maxLines = 2,
                                         overflow = TextOverflow.Ellipsis,
                                     )
                                 }

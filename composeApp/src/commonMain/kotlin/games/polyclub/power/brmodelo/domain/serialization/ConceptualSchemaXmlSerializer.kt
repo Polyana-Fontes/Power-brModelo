@@ -547,6 +547,10 @@ object ConceptualSchemaXmlSerializer {
                     "Valor" to (style.color ?: 0)
                 )
             )
+            val script = style.fontScript?.trim().orEmpty()
+            if (script.isNotEmpty()) {
+                add(xmlNode("FonteScript", "Valor" to script))
+            }
         }
 
     private fun buildDefaultFont(): XmlNode = buildFont(LabelStyle())

@@ -387,6 +387,41 @@ class ConceptualSchemaXmlTest {
         assertEquals("dicionario na cardinalidade", cardConn.cardinalityDictionary)
     }
 
+    @Test
+    fun `parse fonte-personalizada - FonteScript and custom font fields`() {
+        // Arrange
+        val schema = parseResource("fonte-personalizada.xml")
+
+        // Act
+        val ent = schema.elements[1] as SchemaElement.Entity
+
+        // Assert
+        assertEquals("DejaVu Sans", ent.labelStyle.fontFamilyName)
+        assertEquals(28, ent.labelStyle.fontSizePoints)
+        assertEquals("TURKISH_CHARSET", ent.labelStyle.fontScript)
+    }
+
+    @Test
+    fun `round-trip fonte-personalizada - FonteScript and fonts preserved`() {
+        // Arrange
+        val original = parseResource("fonte-personalizada.xml")
+
+        // Act
+        val reloaded = ConceptualSchemaXmlParser.parse(
+            ConceptualSchemaXmlSerializer.serialize(original).toByteArray(Charsets.UTF_8),
+        )
+
+        // Assert
+        val e1 = reloaded.elements[1] as SchemaElement.Entity
+        assertEquals("DejaVu Sans", e1.labelStyle.fontFamilyName)
+        assertEquals(28, e1.labelStyle.fontSizePoints)
+        assertEquals("TURKISH_CHARSET", e1.labelStyle.fontScript)
+        val e2 = reloaded.elements[2] as SchemaElement.Entity
+        assertEquals("Ubuntu Sans", e2.labelStyle.fontFamilyName)
+        assertEquals(8, e2.labelStyle.fontSizePoints)
+        assertNull(e2.labelStyle.fontScript)
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // ROUND-TRIP TESTS
     // ─────────────────────────────────────────────────────────────────────────
