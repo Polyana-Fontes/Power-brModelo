@@ -18,13 +18,17 @@
 
 package games.polyclub.power.brmodelo
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -37,7 +41,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -200,6 +203,10 @@ import games.polyclub.power.brmodelo.ui.components.ribbon.specializationVariantR
 import games.polyclub.power.brmodelo.ui.matchesAttributeVariant
 import games.polyclub.power.brmodelo.ui.matchesEntityVariant
 import games.polyclub.power.brmodelo.ui.matchesSpecializationVariant
+import games.polyclub.power.brmodelo.ui.theme.AppColorPalette
+import games.polyclub.power.brmodelo.ui.theme.ConceptualModelColorPalette
+import games.polyclub.power.brmodelo.ui.theme.LocalAppColorPalette
+import games.polyclub.power.brmodelo.ui.theme.LocalConceptualModelColorPalette
 import games.polyclub.power.brmodelo.ui.toConceptualTool
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -1637,8 +1644,25 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
         null
     }
 
-    MaterialTheme {
-        Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFE3E3E3)) {
+    val systemDarkTheme = isSystemInDarkTheme()
+    val appPalette = remember(systemDarkTheme) {
+        if (systemDarkTheme) AppColorPalette.dark() else AppColorPalette.light()
+    }
+    val modelPalette = remember(systemDarkTheme) {
+        if (systemDarkTheme) ConceptualModelColorPalette.dark() else ConceptualModelColorPalette.light()
+    }
+
+    MaterialTheme(
+        colorScheme = if (systemDarkTheme) darkColorScheme() else lightColorScheme(),
+    ) {
+        CompositionLocalProvider(
+            LocalAppColorPalette provides appPalette,
+            LocalConceptualModelColorPalette provides modelPalette,
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = LocalAppColorPalette.current.windowSurface,
+            ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 BrModeloScreen(
                     isMainMenuOpen = isMainMenuOpen,
@@ -1893,6 +1917,7 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                         onCancel = { pendingApplicationQuit = false },
                     )
                 }
+            }
             }
         }
     }

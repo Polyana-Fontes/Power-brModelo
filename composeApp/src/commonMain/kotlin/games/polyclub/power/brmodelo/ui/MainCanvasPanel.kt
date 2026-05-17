@@ -45,7 +45,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -75,17 +74,12 @@ import games.polyclub.power.brmodelo.ui.components.CHROMIUM_TAB_INACTIVE_HEIGHT
 import games.polyclub.power.brmodelo.ui.components.CHROMIUM_TAB_STRIP_HEIGHT
 import games.polyclub.power.brmodelo.ui.components.ChromiumTab
 import games.polyclub.power.brmodelo.ui.components.ChromiumTabShape
+import games.polyclub.power.brmodelo.ui.theme.AppColorPalette
+import games.polyclub.power.brmodelo.ui.theme.LocalAppColorPalette
+import games.polyclub.power.brmodelo.ui.theme.LocalConceptualModelColorPalette
 import games.polyclub.power.brmodelo.generated.resources.Res
 import games.polyclub.power.brmodelo.generated.resources.modelo_conceitual_2s
 import org.jetbrains.compose.resources.painterResource
-
-private val DRAG_OVERLAY_BG     = Color(0x882C7BE8)
-private val DRAG_OVERLAY_BORDER = Color(0xFF1E5CC7)
-
-private val CANVAS_STRIP_BG        = Color(0xFFD7D7D7)
-private val CANVAS_TAB_ACTIVE_BG   = Color(0xFFEEEEEE)
-private val CANVAS_TAB_INACTIVE_BG = Color(0xFFC8C8C8)
-private val CANVAS_STRIP_BORDER    = Color(0xFF888888)
 
 @Composable
 internal fun MainCanvasPanel(
@@ -122,6 +116,8 @@ internal fun MainCanvasPanel(
     onRedoRequest: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val app = LocalAppColorPalette.current
+    val model = LocalConceptualModelColorPalette.current
     val selectedTab = canvasTabs.getOrNull(selectedCanvasTabIndex)
     val canvasKey = selectedTab?.id ?: 0L
 
@@ -137,13 +133,14 @@ internal fun MainCanvasPanel(
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .background(Color(0xFFD7D7D7))
+            .background(app.canvasTabStripBackground)
     ) {
         CanvasTabStrip(
             tabs = canvasTabs,
             selectedIndex = selectedCanvasTabIndex,
             onSelectTab = onSelectCanvasTab,
             onCloseTab = onRequestCloseCanvasTab,
+            app = app,
         )
 
         Box(
@@ -152,7 +149,7 @@ internal fun MainCanvasPanel(
                 .padding(start = 2.dp, end = 2.dp, bottom = 2.dp)
                 .border(
                     width = if (isDragOver) 3.dp else 1.dp,
-                    color = if (isDragOver) DRAG_OVERLAY_BORDER else Color(0xFF7A7A7A),
+                    color = if (isDragOver) model.fileDropOverlayBorder else app.canvasPanelBorderIdle,
                 )
                 .focusRequester(focusRequester)
                 .focusable()
@@ -310,13 +307,13 @@ internal fun MainCanvasPanel(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(DRAG_OVERLAY_BG),
+                        .background(model.fileDropOverlayFill),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = "Solte o arquivo para abrir o modelo",
                         fontSize = 16.sp,
-                        color = Color.White,
+                        color = model.fileDropOverlayPrompt,
                     )
                 }
             }
@@ -330,6 +327,7 @@ private fun CanvasTabStrip(
     selectedIndex: Int,
     onSelectTab: (Int) -> Unit,
     onCloseTab: (Int) -> Unit,
+    app: AppColorPalette,
 ) {
     val modelIcon = painterResource(Res.drawable.modelo_conceitual_2s)
 
@@ -347,7 +345,7 @@ private fun CanvasTabStrip(
         modifier = Modifier
             .fillMaxWidth()
             .height(CHROMIUM_TAB_STRIP_HEIGHT)
-            .background(CANVAS_STRIP_BG),
+            .background(app.canvasTabStripBackground),
     ) {
         Row(
             modifier = Modifier
@@ -370,9 +368,9 @@ private fun CanvasTabStrip(
                     label = tabLabel,
                     selected = selected,
                     tabShape = tabShape,
-                    activeTabBg = CANVAS_TAB_ACTIVE_BG,
-                    inactiveTabBg = CANVAS_TAB_INACTIVE_BG,
-                    borderColor = CANVAS_STRIP_BORDER,
+                    activeTabBg = app.canvasTabActiveBackground,
+                    inactiveTabBg = app.canvasTabInactiveBackground,
+                    borderColor = app.canvasTabStripBorder,
                     leadingIcon = modelIcon,
                     onClose = { onCloseTab(index) },
                     modifier = Modifier

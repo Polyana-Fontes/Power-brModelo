@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.sp
  *
  * Provide [LocalConceptualModelColorPalette] at the boundary where the canvas is composed (e.g. per editor tab)
  * so each tab can switch diagram theming independently from application chrome.
+ * Use [Companion.light] and [Companion.dark] as defaults when persisting per-model theme later.
  */
 data class ConceptualModelColorPalette(
     /** Main canvas area behind the diagram ([SchemaCanvas]). */
@@ -113,6 +114,40 @@ data class ConceptualModelColorPalette(
             diagramElementSelectionBandFill = Color(0x662E7DFF),
             diagramElementSelectionBandStroke = Color(0xFF0060C0),
             exportCanvasBackground = Color(0xFFE8E8E8),
+        )
+
+        /**
+         * Dark diagram palette: light ink on dark canvas, adjusted semantic hues, and scrims that read on dark fills.
+         */
+        fun dark(): ConceptualModelColorPalette = ConceptualModelColorPalette(
+            canvasBackground = Color(0xFF1E1E22),
+            gridDot = Color(0xFF404048),
+            viewRubberBandSelectionFill = Color(0x404DA3FF),
+            viewRubberBandSelectionStroke = Color(0xFF6BA3FF),
+            viewRubberBandBulkDeleteFill = Color(0x40FF5555),
+            viewRubberBandBulkDeleteStroke = Color(0xFFFF6B6B),
+            fileDropOverlayFill = Color(0x884A6FE8),
+            fileDropOverlayBorder = Color(0xFF7B9DFF),
+            fileDropOverlayPrompt = Color.White,
+            emptySchemaMessage = Color(0xFF707078),
+            hiddenAttributeBalloonCard = Color(0xFF3D3830),
+            hiddenAttributeBalloonText = Color(0xFFE8E4DC),
+            diagramEntityFill = Color(0xFF2A2A32),
+            diagramPrimaryInk = Color(0xFFE8E8EC),
+            diagramEntityShadowDark = Color(0xFF101014),
+            diagramEntityShadowLight = Color(0xFF484850),
+            diagramIdentifierAttributeFill = Color(0xFFB84D4D),
+            diagramSpecializationPartialInk = Color(0xFF4DD4D4),
+            diagramAnnotationFrameInk = Color(0xFFB0B0B8),
+            diagramCompositeIndicatorInk = Color(0xFF6BA3FF),
+            diagramSelectionAccent = Color(0xFF4DA3FF),
+            diagramAssociativeInnerMuteScrim = Color.Black.copy(alpha = 0.78f),
+            diagramToolTargetOrange = Color(0xFFFF8833),
+            diagramElementBulkDeleteThreatFill = Color(0x66FF5555),
+            diagramElementBulkDeleteThreatStroke = Color(0xFFFF5555),
+            diagramElementSelectionBandFill = Color(0x664DA3FF),
+            diagramElementSelectionBandStroke = Color(0xFF4DA3FF),
+            exportCanvasBackground = Color(0xFF1E1E22),
         )
     }
 }

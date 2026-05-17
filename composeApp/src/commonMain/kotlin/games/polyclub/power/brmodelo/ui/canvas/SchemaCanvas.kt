@@ -102,6 +102,7 @@ import games.polyclub.power.brmodelo.ui.BulkDeleteUiState
 import games.polyclub.power.brmodelo.ui.ConceptualCanvasTool
 import games.polyclub.power.brmodelo.ui.InspectorSelectionFieldKeys
 import games.polyclub.power.brmodelo.ui.SelectionBandUiState
+import games.polyclub.power.brmodelo.ui.theme.LocalConceptualModelColorPalette
 import games.polyclub.power.brmodelo.ui.canvasPointerScrollPanGain
 import games.polyclub.power.brmodelo.ui.invertCanvasPointerScrollPan
 import games.polyclub.power.brmodelo.ui.isDesktopTarget
@@ -131,10 +132,6 @@ internal data class SchemaCanvasViewState(
     fun pointerModelY(): Float? = pointerViewY?.let { (it - panY) / zoom.coerceAtLeast(1e-4f) }
 }
 
-// Background colour of the canvas (light grey, matching the original brModelo canvas background)
-private val CANVAS_BG = Color(0xFFE8E8E8)
-// Dot-grid colour (subtle)
-private val GRID_DOT = Color(0xFFCCCCCC)
 private const val GRID_STEP = 20f
 
 private const val CANVAS_ZOOM_MIN = 0.25f
@@ -160,10 +157,6 @@ private fun panKeepingModelUnderViewPoint(
     val my = (viewFocus.y - pan.y) / z0
     return Offset(viewFocus.x - mx * z1, viewFocus.y - my * z1)
 }
-private val BULK_BAND_FILL = Color(0x40FF3B3B)
-private val BULK_BAND_STROKE = Color(0xFFCC0000)
-private val SELECTION_BAND_FILL = Color(0x402E7DFF)
-private val SELECTION_BAND_STROKE = Color(0xFF0060C0)
 
 /**
  * Interactive canvas that renders a [games.polyclub.power.brmodelo.domain.ConceptualSchema] using Compose [Canvas].
@@ -244,6 +237,7 @@ internal fun SchemaCanvas(
     onConceptualInspectorSelectionFieldEditRequest: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val modelPalette = LocalConceptualModelColorPalette.current
     var panOffset by remember { mutableStateOf(Offset(8f, 8f)) }
     var layoutSize by remember { mutableStateOf(Size.Zero) }
     var pointerView by remember { mutableStateOf<Offset?>(null) }
@@ -354,7 +348,7 @@ internal fun SchemaCanvas(
             }
             .then(toolCursorModifier)
             .clipToBounds()
-            .background(CANVAS_BG)
+            .background(modelPalette.canvasBackground)
             // This block is the OUTER pointerInput so scroll/multitouch runs without starving the inner
             // gesture detector (middle/right-button pan uses [awaitCanvasGestureFirstDown] in the inner block).
             .pointerInput(
@@ -1203,7 +1197,7 @@ internal fun SchemaCanvas(
                     while (gx <= vpMaxX + GRID_STEP) {
                         var gy = floor(vpMinY / GRID_STEP) * GRID_STEP
                         while (gy <= vpMaxY + GRID_STEP) {
-                            drawCircle(GRID_DOT, radius = 1f, center = Offset(gx, gy))
+                            drawCircle(modelPalette.gridDot, radius = 1f, center = Offset(gx, gy))
                             gy += GRID_STEP
                         }
                         gx += GRID_STEP
@@ -1247,6 +1241,7 @@ internal fun SchemaCanvas(
                             bulkHighlightIds,
                             selectionBandHighlightIds,
                             selectionBandHighlightCardinalityConnectionIds = selectionBandCardinalityIds,
+                            modelPalette = modelPalette,
                         )
                     }
                 }
@@ -1254,12 +1249,12 @@ internal fun SchemaCanvas(
 
             bulkDeleteUiState?.viewSelectionRect?.let { vr ->
                 drawRect(
-                    color = BULK_BAND_FILL,
+                    color = modelPalette.viewRubberBandBulkDeleteFill,
                     topLeft = Offset(vr.left, vr.top),
                     size = Size(vr.width, vr.height),
                 )
                 drawRect(
-                    color = BULK_BAND_STROKE,
+                    color = modelPalette.viewRubberBandBulkDeleteStroke,
                     topLeft = Offset(vr.left, vr.top),
                     size = Size(vr.width, vr.height),
                     style = Stroke(width = 2f),
@@ -1267,12 +1262,12 @@ internal fun SchemaCanvas(
             }
             selectionBandUiState?.viewSelectionRect?.let { vr ->
                 drawRect(
-                    color = SELECTION_BAND_FILL,
+                    color = modelPalette.viewRubberBandSelectionFill,
                     topLeft = Offset(vr.left, vr.top),
                     size = Size(vr.width, vr.height),
                 )
                 drawRect(
-                    color = SELECTION_BAND_STROKE,
+                    color = modelPalette.viewRubberBandSelectionStroke,
                     topLeft = Offset(vr.left, vr.top),
                     size = Size(vr.width, vr.height),
                     style = Stroke(width = 2f),
@@ -1290,7 +1285,7 @@ internal fun SchemaCanvas(
                 properties = PopupProperties(focusable = false),
             ) {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF9C4)),
+                    colors = CardDefaults.cardColors(containerColor = modelPalette.hiddenAttributeBalloonCard),
                     elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
                 ) {
                     Text(
@@ -1298,7 +1293,7 @@ internal fun SchemaCanvas(
                         style = TextStyle(
                             fontFamily = FontFamily.Monospace,
                             fontSize = 11.sp,
-                            color = Color(0xFF1A1A1A),
+                            color = modelPalette.hiddenAttributeBalloonText,
                         ),
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                     )
@@ -1310,7 +1305,7 @@ internal fun SchemaCanvas(
             Text(
                 text = "Abra um arquivo para visualizar o modelo",
                 fontSize = 14.sp,
-                color = Color(0xFF888888),
+                color = modelPalette.emptySchemaMessage,
                 modifier = Modifier
                     .align(Alignment.Center)
                     .padding(16.dp),
