@@ -86,6 +86,7 @@ import games.polyclub.power.brmodelo.domain.toMultiPickSets
 import games.polyclub.power.brmodelo.domain.ConceptualLinkValidationResult
 import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolResult
 import games.polyclub.power.brmodelo.domain.ConceptualAttributeToolVariant
+import games.polyclub.power.brmodelo.domain.ConceptualLinkPick
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.domain.ConceptualSpecializationToolResult
 import games.polyclub.power.brmodelo.domain.SchemaElement
@@ -249,6 +250,7 @@ internal fun SchemaCanvas(
     val textMeasurer = rememberTextMeasurer()
     val layoutDirection = LocalLayoutDirection.current
     var hiddenAttributesTooltipAnchor by remember { mutableStateOf<Pair<Offset, String>?>(null) }
+    var linkToolHoverPick by remember { mutableStateOf<ConceptualLinkPick?>(null) }
     val hoverSchemaForTooltip by rememberUpdatedState(schema)
     val hoverPanForTooltip by rememberUpdatedState(panOffset)
     val hoverZoomForTooltip by rememberUpdatedState(zoom)
@@ -278,6 +280,12 @@ internal fun SchemaCanvas(
     val onCenterBoundsConsumed by rememberUpdatedState(onRequestCenterOnModelBoundsConsumed)
     val onConceptualInspectorSelectionFieldEditCb by rememberUpdatedState(onConceptualInspectorSelectionFieldEditRequest)
     val selectionDoubleClickMemo = remember { ConceptualSelectionDoubleClickMemo() }
+
+    LaunchedEffect(conceptualCanvasTool) {
+        if (conceptualCanvasTool !is ConceptualCanvasTool.LinkObjects) {
+            linkToolHoverPick = null
+        }
+    }
 
     LaunchedEffect(requestCenterOnModelBounds, layoutSize.width, layoutSize.height, zoom) {
         val bounds = requestCenterOnModelBounds ?: return@LaunchedEffect
@@ -1100,9 +1108,18 @@ internal fun SchemaCanvas(
                                 val sch = hoverSchemaForTooltip
                                 if (sch == null) {
                                     hiddenAttributesTooltipAnchor = null
+                                    linkToolHoverPick = null
                                     continue
                                 }
                                 val schemaPoint = viewOffsetToModel(pos, hoverPanForTooltip, hoverZoomForTooltip)
+                                if (currentConceptualTool is ConceptualCanvasTool.LinkObjects) {
+                                    val lp = hitTestConceptualLinkPick(sch, schemaPoint)
+                                    if (lp != linkToolHoverPick) {
+                                        linkToolHoverPick = lp
+                                    }
+                                } else if (linkToolHoverPick != null) {
+                                    linkToolHoverPick = null
+                                }
                                 val hit = hitTestElement(sch, schemaPoint)
                                 val id = (hit as? CanvasSelection.Element)?.id
                                 if (id == null) {
@@ -1120,6 +1137,7 @@ internal fun SchemaCanvas(
                             }
                             PointerEventType.Exit -> {
                                 hiddenAttributesTooltipAnchor = null
+                                linkToolHoverPick = null
                                 pointerOverCanvas = false
                                 pointerView = null
                                 pushClipboardViewStateToParent(pointerLocal = null, over = false)
@@ -1154,6 +1172,8 @@ internal fun SchemaCanvas(
                                 is ConceptualCanvasTool.LinkObjects.AwaitingSecond -> t.first.elementId
                                 else -> null
                             }
+                        val linkHoverPick =
+                            if (conceptualCanvasTool is ConceptualCanvasTool.LinkObjects) linkToolHoverPick else null
                         val bulkHighlightIds = bulkDeleteUiState?.markedElementIds ?: emptySet()
                         val selectionBandHighlightIds = selectionBandUiState?.markedElementIds ?: emptySet()
                         val selectionBandCardinalityIds =
@@ -1163,6 +1183,7 @@ internal fun SchemaCanvas(
                             textMeasurer,
                             selection,
                             linkHighlightId,
+                            linkHoverPick,
                             bulkHighlightIds,
                             selectionBandHighlightIds,
                             selectionBandHighlightCardinalityConnectionIds = selectionBandCardinalityIds,

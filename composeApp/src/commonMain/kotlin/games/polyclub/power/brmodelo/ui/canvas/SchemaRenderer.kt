@@ -42,6 +42,7 @@ import games.polyclub.power.brmodelo.domain.AnnotationType
 import games.polyclub.power.brmodelo.domain.ArrowDirection
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.Connection
+import games.polyclub.power.brmodelo.domain.ConceptualLinkPick
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.domain.attributeEllipseOnLeft
 import games.polyclub.power.brmodelo.domain.compositeChildBarConnectionX
@@ -155,6 +156,7 @@ private fun attributeIdsForSelectionStubHighlight(selection: CanvasSelection, sc
  * 4. Inner diamonds of AssociativeEntity — redrawn on top of those connection lines.
  * 4b. Self-relationship diamonds — redrawn on top (same idea as the inner rhombus).
  * 5. Cardinality labels — floating on top of everything.
+ * 5b. Link-tool hover highlight (orange) for the target under the cursor (associative inner uses a diamond stroke).
  * 6. Optional link-tool highlight (orange border, no resize handles) for the first picked element.
  * 7. Selection (blue border; corner resize squares only when the element allows manual resize —
  *    e.g. not for attributes with [SchemaElement.Attribute.autoSize]).
@@ -163,6 +165,8 @@ private fun attributeIdsForSelectionStubHighlight(selection: CanvasSelection, sc
  *   selected element or cardinality label. Defaults to [games.polyclub.power.brmodelo.domain.CanvasSelection.None] so that
  *   off-screen exporters that call this function without a selection continue to work.
  * @param linkToolHighlightElementId When set, draws a highlight border around that element (used by "Ligar objetos").
+ * @param linkToolHoverPick When set, draws a hover highlight for the link target under the pointer (split inner/outer
+ *   on [SchemaElement.AssociativeEntity]).
  * @param bulkDeleteHighlightIds When non-empty, draws a strong red overlay on each listed element (bulk-delete preview).
  * @param selectionBandHighlightCardinalityConnectionIds Blue overlay on cardinality labels during rectangle preview.
  */
@@ -171,6 +175,7 @@ fun DrawScope.drawSchema(
     textMeasurer: TextMeasurer,
     selection: CanvasSelection = CanvasSelection.None,
     linkToolHighlightElementId: Int? = null,
+    linkToolHoverPick: ConceptualLinkPick? = null,
     bulkDeleteHighlightIds: Set<Int> = emptySet(),
     selectionBandHighlightIds: Set<Int> = emptySet(),
     selectionBandHighlightCardinalityConnectionIds: Set<Int> = emptySet(),
@@ -216,12 +221,28 @@ fun DrawScope.drawSchema(
     //    outline remains visible above lines that enter the outer rect area.
     schema.elements.values.filterIsInstance<SchemaElement.AssociativeEntity>().forEach { assoc ->
         val innerPos = assocInnerDiamondPos(assoc.position)
+        val hp = linkToolHoverPick
+        val outerBodyHover = hp != null && hp.elementId == assoc.id && hp.isAssociativeOuterEntitySide
+        val innerRegionHover = hp != null && hp.elementId == assoc.id && !hp.isAssociativeOuterEntitySide
+        if (outerBodyHover) {
+            val ix = innerPos.x.toFloat()
+            val iy = innerPos.y.toFloat()
+            val iw = innerPos.width.toFloat().coerceAtLeast(1f)
+            val ih = innerPos.height.toFloat().coerceAtLeast(1f)
+            // Mute inner relationship chrome (diamond + direction arrow drawn in step 2) so the outer frame reads as the target.
+            drawRect(
+                color = Color.White.copy(alpha = 0.78f),
+                topLeft = Offset(ix, iy),
+                size = Size(iw, ih),
+            )
+        }
         drawRelationshipDiamond(
             innerPos,
             assoc.relationshipName,
             showName = true,
             textMeasurer,
             assoc.labelStyle,
+            contentAlpha = if (outerBodyHover) 0.32f else 1f,
         )
         // Bulk-delete tint was drawn on the outer rect in step 2; the inner diamond is redrawn here
         // with opaque fill on top of those lines, so it must be tinted again (same idea as step 4b).
@@ -229,6 +250,9 @@ fun DrawScope.drawSchema(
             drawBulkDeleteThreatHighlight(innerPos)
         } else if (assoc.id in selectionBandHighlightIds) {
             drawSelectionBandHighlight(innerPos)
+        }
+        if (innerRegionHover) {
+            drawLinkToolHoverDiamondHighlight(innerPos)
         }
     }
     // 4b. Self-relationship diamonds on top of lines (outline + fill), like VCL z-order.
@@ -248,6 +272,14 @@ fun DrawScope.drawSchema(
         if (conn.id !in selectionBandHighlightCardinalityConnectionIds) continue
         cardinalityLabelHighlightElementPosition(schema, conn, textMeasurer)?.let { pos ->
             drawSelectionBandHighlight(pos)
+        }
+    }
+    // 5b. Link-tool hover (rectangular targets; associative inner-diamond hover is drawn in step 4)
+    linkToolHoverPick?.let { pick ->
+        val el = schema.elements[pick.elementId] ?: return@let
+        when {
+            el is SchemaElement.AssociativeEntity && !pick.isAssociativeOuterEntitySide -> Unit
+            else -> drawLinkToolFirstTargetHighlight(el.position)
         }
     }
     // 6. Link-tool first-target highlight (no corner handles)
@@ -366,6 +398,24 @@ private fun DrawScope.drawLinkToolFirstTargetHighlight(position: ElementPosition
         size = Size(w + 4f, h + 4f),
         style = Stroke(2.5f),
     )
+}
+
+/** Orange stroke on the relationship diamond path (link-tool hover on associative inner / relationship-like targets). */
+private fun DrawScope.drawLinkToolHoverDiamondHighlight(p: ElementPosition) {
+    val x = p.x.toFloat()
+    val y = p.y.toFloat()
+    val w = p.width.toFloat()
+    val h = p.height.toFloat()
+    val cx = x + w / 2f
+    val cy = y + h / 2f
+    val diamond = Path().apply {
+        moveTo(cx, y)
+        lineTo(x + w - 1f, cy - 1f)
+        lineTo(cx - 1f, y + h - 1f)
+        lineTo(x, cy)
+        close()
+    }
+    drawPath(diamond, LINK_TOOL_FIRST_TARGET_COLOR, style = Stroke(2.5f))
 }
 
 /**
@@ -531,7 +581,9 @@ internal fun DrawScope.drawRelationshipDiamond(
     showName: Boolean,
     textMeasurer: TextMeasurer,
     labelStyle: LabelStyle = LabelStyle(),
+    contentAlpha: Float = 1f,
 ) {
+    val a = contentAlpha.coerceIn(0f, 1f)
     val x = p.x.toFloat()
     val y = p.y.toFloat()
     val w = p.width.toFloat()
@@ -547,14 +599,22 @@ internal fun DrawScope.drawRelationshipDiamond(
         lineTo(x, cy)
         close()
     }
-    drawPath(diamond, Color.White, style = Fill)
-    drawPath(diamond, Color.Black, style = Stroke(1f))
+    drawPath(diamond, Color.White.copy(alpha = a), style = Fill)
+    drawPath(diamond, Color.Black.copy(alpha = a), style = Stroke(1f))
 
     // Shadow segment (bottom-right, matching Pascal $B3B3B3 two-pixel segment)
-    drawLine(SHADOW_LIGHT, Offset(x + w, cy), Offset(cx, y + h))
+    drawLine(SHADOW_LIGHT.copy(alpha = SHADOW_LIGHT.alpha * a), Offset(x + w, cy), Offset(cx, y + h))
 
-    if (showName) {
-        drawCenteredLabel(name, p, textMeasurer, labelStyle)
+    if (showName && name.isNotBlank()) {
+        val maxW = (w - 4f).toInt().coerceAtLeast(1)
+        val style = labelStyle.mergeOntoCanvasTextStyle(CANVAS_TEXT_STYLE).copy(
+            textAlign = TextAlign.Center,
+            color = Color.Black.copy(alpha = a),
+        )
+        val layout = textMeasurer.measure(name, style = style, constraints = Constraints(maxWidth = maxW))
+        val textX = x + (w - layout.size.width) / 2f
+        val textY = y + (h - layout.size.height) / 2f
+        drawText(layout, topLeft = Offset(textX, textY))
     }
 }
 
