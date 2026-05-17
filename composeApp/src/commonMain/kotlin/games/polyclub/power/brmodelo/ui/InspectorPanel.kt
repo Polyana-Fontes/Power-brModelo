@@ -96,6 +96,8 @@ import androidx.compose.ui.zIndex
 import games.polyclub.power.brmodelo.domain.BulkDeleteCategoryCounts
 import games.polyclub.power.brmodelo.domain.bulkDeleteCategoryCounts
 import games.polyclub.power.brmodelo.domain.bulkDeleteCategoryCountsForCanvasSelection
+import games.polyclub.power.brmodelo.domain.AttributeLabelSide
+import games.polyclub.power.brmodelo.domain.effectiveAttributeLabelSide
 import games.polyclub.power.brmodelo.domain.AnnotationBackgroundColorPresets
 import games.polyclub.power.brmodelo.domain.AnnotationType
 import games.polyclub.power.brmodelo.domain.ArrowDirection
@@ -1113,19 +1115,22 @@ private fun AttributeFields(
     }
 
     val ownerPos = schema.elements[element.ownerId]?.position
-    val attrPos  = element.position
-    val side = if (ownerPos != null) {
-        val ownerCx = ownerPos.x + ownerPos.width / 2
-        val attrCx  = attrPos.x  + attrPos.width  / 2
-        if (attrCx >= ownerCx) "Direito" else "Esquerdo"
-    } else "Esquerdo"
-    ReadOnlyRow(
-        "Lado",
-        side,
-        "ATRIB_LADO",
-        focusedKey,
-        onFocusChange
-    )
+    val ladoSelected =
+        effectiveAttributeLabelSide(ownerPos, element.position, element.labelSide) ==
+            AttributeLabelSide.BULLET_RIGHT
+    DropdownRow(
+        label = "Lado",
+        selected = if (ladoSelected) "Direito" else "Esquerdo",
+        options = listOf("Direito", "Esquerdo"),
+        key = "ATRIB_LADO",
+        focusedKey = focusedKey,
+        onFocusChange = onFocusChange,
+    ) { v ->
+        val next = element.copy(
+            labelSide = if (v == "Direito") AttributeLabelSide.BULLET_RIGHT else AttributeLabelSide.BULLET_LEFT,
+        )
+        commitAttributeElement(schema, next, textMeasurer, layoutDirection, onSchemaCommit)
+    }
 
     DropdownRow(
         label = "Identificador",

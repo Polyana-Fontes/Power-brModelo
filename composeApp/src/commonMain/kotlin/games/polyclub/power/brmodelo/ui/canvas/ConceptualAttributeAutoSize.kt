@@ -24,10 +24,11 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
+import games.polyclub.power.brmodelo.domain.AttributeLabelSide
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.domain.ElementPosition
 import games.polyclub.power.brmodelo.domain.SchemaElement
-import games.polyclub.power.brmodelo.domain.conceptualAttributeAttachPonto
+import games.polyclub.power.brmodelo.domain.effectiveAttributeLabelSide
 import kotlin.math.max
 
 /** Same font as attribute labels in [SchemaRenderer] (`mer.pas` canvas text). */
@@ -49,8 +50,8 @@ fun attributeCanvasLabelText(attr: SchemaElement.Attribute): String = buildStrin
  * Recomputes [SchemaElement.Attribute.position] when [SchemaElement.Attribute.autoSize] is true,
  * following [TAtributo.SetTamAuto] in `mer.pas` (height vs `TextHeight('H')`, width from name + multivalued suffix).
  *
- * When the attribute sits on the **left** of its owner (Pascal [OrientacaoD]), width growth shifts [ElementPosition.x]
- * so the outer edge stays aligned, matching `aLeft := Left - (aWidth - Width)`.
+ * When the attribute sits on the **right** of its owner (Pascal [OrientacaoD] after [TAtributo.Paint]),
+ * width growth shifts [ElementPosition.x] so the outer edge stays aligned, matching `aLeft := Left - (aWidth - Width)`.
  */
 fun autoSizedAttributePosition(
     attr: SchemaElement.Attribute,
@@ -94,10 +95,11 @@ fun autoSizedAttributePosition(
     }
 
     val owner = schema.elements[attr.ownerId]
-    val orientD = owner != null && conceptualAttributeAttachPonto(owner.position, attr.position) == 1
+    val effective = effectiveAttributeLabelSide(owner?.position, attr.position, attr.labelSide)
+    val widenShiftsLeft = effective == AttributeLabelSide.BULLET_RIGHT
 
     val old = attr.position
-    val newX = if (orientD) old.x - (aWidth - old.width) else old.x
+    val newX = if (widenShiftsLeft) old.x - (aWidth - old.width) else old.x
     return ElementPosition(newX, old.y, width = aWidth, height = aHeight)
 }
 

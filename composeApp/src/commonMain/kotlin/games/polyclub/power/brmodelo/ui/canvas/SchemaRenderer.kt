@@ -43,6 +43,8 @@ import games.polyclub.power.brmodelo.domain.ArrowDirection
 import games.polyclub.power.brmodelo.domain.CanvasSelection
 import games.polyclub.power.brmodelo.domain.Connection
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
+import games.polyclub.power.brmodelo.domain.attributeEllipseOnLeft
+import games.polyclub.power.brmodelo.domain.compositeChildBarConnectionX
 import games.polyclub.power.brmodelo.domain.conceptualAttributeAttachPonto
 import games.polyclub.power.brmodelo.domain.ElementPosition
 import games.polyclub.power.brmodelo.domain.SchemaElement
@@ -717,11 +719,8 @@ private fun attributeActiveEdgeConnectorY(pos: ElementPosition): Float =
  *
  * Reproduces [TAtributo.Paint] from mer.pas.
  *
- * Orientation (which side the ellipse is on) is inferred from the attribute position
- * relative to its owner element, since [games.polyclub.power.brmodelo.domain.SchemaElement.Attribute] stores coordinates
- * but not the VCL [Orientacao] enum value (computed dynamically in the original).
- *
- * Uses [games.polyclub.power.brmodelo.domain.conceptualAttributeAttachPonto] (same rules as legacy `attrPontoByPosition`).
+ * Layout uses [attributeEllipseOnLeft] (stored [SchemaElement.Attribute.labelSide], with Pascal’s
+ * left/right attach override when the owner connection is on edge ponto 1 or 3).
  *
  * - Identifier attributes: ellipse filled with [games.polyclub.power.brmodelo.ui.canvas.IDENTIFIER_FILL] (#963636).
  * - Multi-valued: cardinality string appended to label.
@@ -746,13 +745,8 @@ private fun DrawScope.drawAttribute(
     val diameter = attributeEllipseDiameterPx(p.height)
     val meio = attributeStubCenterlineOffsetY(p.height)
 
-    // Orientation follows TBase.OrganizeAtributos from mer.pas:
-    //   P=1 (owner LEFT side) → OrientacaoD → ellipse on RIGHT
-    //   P≠1 (TOP/RIGHT/BOTTOM) → OrientacaoE → ellipse on LEFT
     val owner = schema.elements[attr.ownerId]
-    val ellipseOnLeft = if (owner != null) {
-        conceptualAttributeAttachPonto(owner.position, p) != 1
-    } else false  // default: ellipse on right
+    val ellipseOnLeft = attributeEllipseOnLeft(owner?.position, p, attr.labelSide)
 
     val textLabel = buildString {
         append(attr.name)
@@ -824,7 +818,7 @@ private fun DrawScope.drawAttribute(
             drawLine(Color.Black, Offset(barX, barTop), Offset(barX, barTop + barH))
         }
     } else {
-        // Ellipse on right side (OrientacaoD): stub goes right, text to the left
+        // Ellipse on the right ([AttributeLabelSide.BULLET_RIGHT] / OrientacaoD): stub to the right, text left of ellipse
         val ellipseLeft = x + w - 5f - diameter
         drawLine(stubColor, Offset(x + w - 5f, y + meio), Offset(x + w, y + meio), strokeWidth = stubStrokeWidth)
 
@@ -832,24 +826,27 @@ private fun DrawScope.drawAttribute(
         drawOval(ellipseFill, topLeft = ellipseTopLeft, size = Size(diameter, diameter))
         drawOval(Color.Black, topLeft = ellipseTopLeft, size = Size(diameter, diameter), style = ellipseStroke)
 
-        // Composite marker: 4x4 outline rectangle at left edge (same Pascal logic, OrientacaoD side).
+        // Composite marker: 4×4 outline at left edge (same Pascal logic, bullet-right branch)
         if (attr.isComposite) {
             val markerTop = (h - 4f) / 2f + y
             if (attr.isIdentifier) drawRect(IDENTIFIER_FILL, topLeft = Offset(x, markerTop), size = Size(4f, 4f))
             drawRect(Color.Black, topLeft = Offset(x, markerTop), size = Size(4f, 4f), style = Stroke(1f))
         }
 
-        // Text to the left of the ellipse — single line (same Pascal single-line-height rect logic).
-        val textMaxW = (w - diameter - 10f).toInt().coerceAtLeast(1)
-        if (textLabel.isNotBlank() && textMaxW > 0) {
+        // Text to the left of the ellipse — single line. Pascal uses DrawText(..., DT_RIGHT): text is
+        // aligned to the inner rect’s **right** edge (next to the ellipse), not to the attribute’s left.
+        val textMaxW = (w - diameter - 10f).coerceAtLeast(1f)
+        val textMaxWi = textMaxW.toInt().coerceAtLeast(1)
+        if (textLabel.isNotBlank() && textMaxWi > 0) {
             val layout = textMeasurer.measure(
                 textLabel,
-                style = attrTextStyle.copy(textAlign = TextAlign.Right),
-                constraints = Constraints(maxWidth = textMaxW),
+                style = attrTextStyle.copy(textAlign = TextAlign.End),
+                constraints = Constraints(maxWidth = textMaxWi),
                 softWrap = false,
             )
             val textY = y + (h - layout.size.height) / 2f - 1f
-            drawText(layout, topLeft = Offset(x, textY))
+            val textLeft = x + textMaxW - layout.size.width
+            drawText(layout, topLeft = Offset(textLeft, textY))
         }
 
         // Composite asterisk at top-right
@@ -859,7 +856,7 @@ private fun DrawScope.drawAttribute(
             drawText(asterisk, topLeft = Offset(asteriskX, y))
         }
 
-        // TBarraDeAtributos: vertical bar at the left edge (OrientacaoD)
+        // Composite bar: vertical line at left edge (bullet-right branch)
         if (attr.isComposite && attr.childAttributeIds.size >= 2) {
             val childCount = attr.childAttributeIds.size
             val barH = (h * childCount + childCount * 2 - h).coerceAtLeast(2f)
@@ -1656,7 +1653,7 @@ private fun compositeAttributeBarGeometry(
     if (n == 0) return null
     val h = p.height
     val barH = if (n >= 2) (h * n + n * 2 - h).coerceAtLeast(2) else h.coerceAtLeast(2)
-    val ellipseOnLeft = conceptualAttributeAttachPonto(ownerPos, p) != 1
+    val ellipseOnLeft = attributeEllipseOnLeft(ownerPos, p, attr.labelSide)
     val barLeft = if (ellipseOnLeft) p.x + p.width - 5 else p.x - 2
     val barTop = p.y + h / 2 - barH / 2
     val barCenterX = (barLeft + 3).toFloat()
@@ -1694,7 +1691,8 @@ private fun drawConnectionRoutingBounds(
  *
  * Differences from a plain 4-edge array:
  * - **Attribute (normal)**: all four slots collapse to the "active" side —
- *   left for OrientacaoE (attribute to the right of owner), right for OrientacaoD.
+ *   left when the effective layout is [AttributeLabelSide.BULLET_LEFT] (`OrientacaoE`), right when
+ *   [AttributeLabelSide.BULLET_RIGHT] (`OrientacaoD`).
  *   Matches [TAtributo.AtualizaEncaixes] from mer.pas.
  * - **Composite attribute (bar side)**: when [otherElem] is a child attribute of
  *   [elem], the four slots collapse to the opposite (bar) side instead.
@@ -1721,11 +1719,7 @@ private fun connectionEncaixes(
 
     if (elem is SchemaElement.Attribute) {
         val ownerPos = schema.elements[elem.ownerId]?.position
-        // P≠1 → OrientacaoE → ellipse on LEFT (active left edge connects to owner)
-        val ellipseOnLeft = ownerPos?.let { conceptualAttributeAttachPonto(
-            it,
-            p
-        ) != 1 } ?: false
+        val ellipseOnLeft = attributeEllipseOnLeft(ownerPos, p, elem.labelSide)
 
         return if (otherElem is SchemaElement.Attribute && otherElem.ownerId == elem.id) {
             // Child connection: encaixe on the composite bar (`TBarraDeAtributos`), not bbox edge.
@@ -1735,11 +1729,30 @@ private fun connectionEncaixes(
             val bar = if (geom != null) {
                 Offset(geom.barCenterX, geom.snapYForChild(childIdx, fallbackCy))
             } else {
-                val ellipseOnLeftFallback = ownerPos?.let { conceptualAttributeAttachPonto(it, p) != 1 } ?: false
+                val ellipseOnLeftFallback = attributeEllipseOnLeft(ownerPos, p, elem.labelSide)
                 val barLeft = if (ellipseOnLeftFallback) p.x + p.width - 5 else p.x - 2
                 Offset((barLeft + 3).toFloat(), fallbackCy)
             }
             arrayOf(Offset.Zero, bar, bar, bar, bar)
+        } else if (
+            otherElem is SchemaElement.Attribute &&
+            otherElem.isComposite &&
+            elem.ownerId == otherElem.id
+        ) {
+            // Composite child ↔ parent bar: X on the child edge that faces the bar (same as Divida / Pascal).
+            val attachY = attributeActiveEdgeConnectorY(elem.position)
+            val parentOwnerPos = schema.elements[otherElem.ownerId]?.position
+            val parentEllipseOnLeft = attributeEllipseOnLeft(
+                parentOwnerPos,
+                otherElem.position,
+                otherElem.labelSide,
+            )
+            val cx = compositeChildBarConnectionX(
+                elem.position,
+                parentEllipseOnLeft,
+            )
+            val c = Offset(cx, attachY)
+            arrayOf(Offset.Zero, c, c, c, c)
         } else {
             // Normal attribute connection toward its owner — Y matches rendered stub (not bbox centre).
             val attachY = attributeActiveEdgeConnectorY(elem.position)
@@ -2034,9 +2047,10 @@ private fun pointToEdgeIndex(pt: Offset, pos: ElementPosition): Int {
  * [elem] uses to connect to [otherElem].
  *
  * Unlike [games.polyclub.power.brmodelo.ui.canvas.nearestEncaixeIndex], this function handles collapsed attribute
- * encaixes correctly: for normal attributes ponto = 1 (OrientacaoE) or 3
- * (OrientacaoD); for composite → child connections the bar side is used
- * (opposite of the normal connection side).
+ * encaixes correctly: for normal attributes ponto = 1 (left / [AttributeLabelSide.BULLET_LEFT]) or 3
+ * (right / [AttributeLabelSide.BULLET_RIGHT]), derived like Pascal from [attributeEllipseOnLeft]; for composite → child
+ * connections the bar side is used (opposite of the ellipse side). For a **child** attribute connecting to its
+ * composite parent, the ponto matches [compositeChildBarConnectionX] (edge facing the bar, not the entity stub).
  *
  * For non-attribute elements, delegates to [games.polyclub.power.brmodelo.ui.canvas.computeNonAttrPonto] which
  * faithfully mirrors the [TLigacao.Ative] case selection from mer.pas.
@@ -2049,15 +2063,24 @@ private fun connectionPonto(
 ): Int {
     if (elem is SchemaElement.Attribute) {
         val ownerPos = schema.elements[elem.ownerId]?.position
-        // P≠1 → OrientacaoE → ellipse on LEFT (active left edge connects to owner)
-        val ellipseOnLeft = ownerPos?.let { conceptualAttributeAttachPonto(
-            it,
-            elem.position
-        ) != 1 } ?: false
-        return if (otherElem is SchemaElement.Attribute && otherElem.ownerId == elem.id) {
-            if (ellipseOnLeft) 3 else 1  // bar side (right for OrientacaoE)
-        } else {
-            if (ellipseOnLeft) 1 else 3  // normal side (left for OrientacaoE)
+        val ellipseOnLeft = attributeEllipseOnLeft(ownerPos, elem.position, elem.labelSide)
+        return when {
+            otherElem is SchemaElement.Attribute && otherElem.ownerId == elem.id ->
+                if (ellipseOnLeft) 3 else 1 // bar on opposite side of ellipse (Pascal `TBarraDeAtributos`)
+            otherElem is SchemaElement.Attribute &&
+                otherElem.isComposite &&
+                elem.ownerId == otherElem.id -> {
+                // Child → composite: attach on the edge facing the bar (not the entity-stub side).
+                val parentOwnerPos = schema.elements[otherElem.ownerId]?.position
+                val parentEllipseOnLeft = attributeEllipseOnLeft(
+                    parentOwnerPos,
+                    otherElem.position,
+                    otherElem.labelSide,
+                )
+                if (parentEllipseOnLeft) 1 else 3 // left vs right; collapsed enc matches [compositeChildBarConnectionX]
+            }
+            else ->
+                if (ellipseOnLeft) 1 else 3 // owner stub on ellipse side
         }
     }
     // For a non-attribute element connecting TO an attribute, use the full `TLigacao.Ative`
@@ -2276,17 +2299,19 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                     // The composite (otherElem) connects to its entity owner via some ponto;
                     // its bar is on the OPPOSITE side. Children hang off the bar.
                     val compositeOwnerPos = schema.elements[otherElem.ownerId]?.position
-                    val compPonto = if (compositeOwnerPos != null)
-                        conceptualAttributeAttachPonto(
-                            compositeOwnerPos,
-                            otherElem.position
-                        ) else 3
-                    // Bar side: RIGHT (3) for OrientacaoE (compPonto≠1), LEFT (1) for OrientacaoD
-                    val barIsOnRight = compPonto != 1
-                    // Child connects FROM the bar side: if bar on right → child is to the right → child LEFT
+                    val ellipseOnLeft = attributeEllipseOnLeft(
+                        compositeOwnerPos,
+                        otherElem.position,
+                        otherElem.labelSide,
+                    )
+                    // Bar sits on the composite's physical right iff [ellipseOnLeft] (see [drawAttribute] /
+                    // [compositeAttributeBarGeometry]); child attaches on the edge facing the bar.
                     val p = elem.position
-                    val childActiveX = if (barIsOnRight) p.x.toFloat() else (p.x + p.width).toFloat()
-                    elemResult[conn.id] = Offset(childActiveX, p.y + p.height / 2f)
+                    val childActiveX = compositeChildBarConnectionX(p, ellipseOnLeft)
+                    elemResult[conn.id] = Offset(
+                        childActiveX,
+                        attributeActiveEdgeConnectorY(p),
+                    )
                 } else if (elem is SchemaElement.Attribute && otherElem.ownerId == elem.id) {
                     // Composite parent → child: bar centre X + slot Y (`TBarraDeAtributos.PrepareToAtive`,
                     // mer.pas ~9749). Children never participate in Divida — bypass the byPonto queue.
@@ -2300,14 +2325,13 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                         )
                     } else {
                         val parentOwnerPos = schema.elements[elem.ownerId]?.position
-                        val compPonto = if (parentOwnerPos != null)
-                            conceptualAttributeAttachPonto(
-                                parentOwnerPos,
-                                elem.position
-                            ) else 3
-                        val barIsOnRight = compPonto != 1
+                        val ellipseOnLeft = attributeEllipseOnLeft(
+                            parentOwnerPos,
+                            elem.position,
+                            elem.labelSide,
+                        )
                         val ep = elem.position
-                        val barLeft = if (barIsOnRight) ep.x + ep.width - 5 else ep.x - 2
+                        val barLeft = if (ellipseOnLeft) ep.x + ep.width - 5 else ep.x - 2
                         elemResult[conn.id] = Offset((barLeft + 3).toFloat(), fallbackCy)
                     }
                 } else {
@@ -2385,11 +2409,9 @@ private fun computeDividedPoints(schema: ConceptualSchema): Map<Int, Map<Int, Of
                     }
                 }
             } else if (elem is SchemaElement.Attribute) {
-                // This IS an attribute connecting to a non-attribute owner.
-                // OrganizeAtributos rule:
-                //   owner P=1 → OrientacaoD → attr RIGHT active edge
-                //   owner P≠1 → OrientacaoE → attr LEFT  active edge
-                // Reuse the same `Ative`-driven `Mapa` selection so the orientation
+                // Attribute→owner: Pascal [TAtributo.Paint] keys off [TLigacao.MePonto](attribute), dual to the
+                // owner sector from [conceptualAttributeAttachPonto]: owner-west (1) ⇒ stub on attribute RIGHT
+                // (Paint ponto 3) ⇒ active X on the attribute’s right edge; owner-east (3) ⇒ stub LEFT (ponto 1).
                 // matches the entity-side computation above (avoids inconsistent ponto
                 // pairs that would mis-route the connection).
                 val entityPonto = connectionPonto(

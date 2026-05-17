@@ -337,6 +337,22 @@ class ConceptualSchemaXmlTest {
     }
 
     @Test
+    fun `parse pousada - attribute Lado matches XML Orientacao`() {
+        // Arrange & Act
+        val schema = parseResource("MER-PousadaSolDaManha.xml")
+
+        // Assert — Pascal inspector **Lado**: Direito = OrientacaoD (2), Esquerdo = OrientacaoE (3); see `uApp.pas`
+        val uf = schema.elements[39] as SchemaElement.Attribute
+        val carteiraTrab = schema.elements[75] as SchemaElement.Attribute
+        assertEquals(AttributeLabelSide.BULLET_RIGHT, uf.labelSide, "uf has <Orientacao Valor=\"2\"/>")
+        assertEquals(
+            AttributeLabelSide.BULLET_LEFT,
+            carteiraTrab.labelSide,
+            "carteiraTrab has <Orientacao Valor=\"3\"/>",
+        )
+    }
+
+    @Test
     fun `parse pousada - dataFim attribute of Trabalhar is optional`() {
         // Arrange
         val schema = parseResource("MER-PousadaSolDaManha.xml")

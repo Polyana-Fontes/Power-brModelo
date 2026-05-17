@@ -21,6 +21,7 @@ package games.polyclub.power.brmodelo.domain.serialization
 import games.polyclub.power.brmodelo.domain.AnnotationType
 import games.polyclub.power.brmodelo.domain.ArrowDirection
 import games.polyclub.power.brmodelo.domain.AttributeCardinality
+import games.polyclub.power.brmodelo.domain.AttributeLabelSide
 import games.polyclub.power.brmodelo.domain.Cardinality
 import games.polyclub.power.brmodelo.domain.ConceptualSchema
 import games.polyclub.power.brmodelo.domain.Connection
@@ -338,6 +339,9 @@ object ConceptualSchemaBrmParser {
             complement = node.strProp("Complemento"),
             autoSize = node.boolProp("TamAuto", true),
             deviationAngle = node.intProp("Desvio", 10),
+            labelSide = AttributeLabelSide.fromPascalXmlCode(
+                node.intProp("Orientacao", AttributeLabelSide.BULLET_LEFT.pascalXmlCode),
+            ),
         )
     }
 

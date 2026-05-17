@@ -257,6 +257,9 @@ object ConceptualSchemaXmlParser {
         val valueType = node.strValor("Tipo")
         val autoSize = node.boolValor("TamAuto")
         val deviationAngle = node.intValor("Desvio", default = 10)
+        val labelSide = AttributeLabelSide.fromPascalXmlCode(
+            node.intValor("Orientacao", default = AttributeLabelSide.BULLET_LEFT.pascalXmlCode),
+        )
 
         // Parse composite children from <BarraDeAtributos>
         val childIds = mutableListOf<Int>()
@@ -299,6 +302,7 @@ object ConceptualSchemaXmlParser {
             valueType = valueType,
             autoSize = autoSize,
             deviationAngle = deviationAngle,
+            labelSide = labelSide,
             childAttributeIds = childIds,
             compostoPersisted = compostoFromXml && childIds.isEmpty(),
         )

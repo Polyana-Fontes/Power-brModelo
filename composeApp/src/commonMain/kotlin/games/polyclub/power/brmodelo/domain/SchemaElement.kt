@@ -267,6 +267,10 @@ sealed class SchemaElement {
      *                         Corresponds to `TAtributo.TamAuto`.
      * @param deviationAngle   Layout hint: deviation angle from the owner for line routing.
      *                         Corresponds to `TAtributo.Desvio`.
+     * @param labelSide        Which side the ellipse and label use ([AttributeLabelSide]); corresponds to
+     *                         Pascal `TAtributo.ForcaOrientacao` and MER `<Orientacao Valor="2|3"/>`.
+     *                         When the attribute attaches to the owner’s left or right edge, [mer.pas]
+     *                         `TAtributo.Paint` overrides this from geometry; for top/bottom this stored value applies.
      * @param childAttributeIds IDs of child [Attribute] elements for composite attributes.
      *                          Non-empty means composite on the canvas (bar children).
      * @param compostoPersisted When true, the attribute stays composite in the model even with no
@@ -297,6 +301,7 @@ sealed class SchemaElement {
         val complement: String = "",
         val autoSize: Boolean = true,
         val deviationAngle: Int = 0,
+        val labelSide: AttributeLabelSide = AttributeLabelSide.BULLET_LEFT,
         val childAttributeIds: List<Int> = emptyList(),
         val compostoPersisted: Boolean = false,
     ) : SchemaElement() {

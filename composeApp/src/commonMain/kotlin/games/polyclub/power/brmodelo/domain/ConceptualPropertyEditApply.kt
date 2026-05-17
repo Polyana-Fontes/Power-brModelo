@@ -225,6 +225,7 @@ private fun attributeExtraKeys(): Set<String> =
         "cardinalityMax",
         "valueType",
         "complement",
+        "labelSideCode",
     )
 
 private fun specializationExtraKeys(): Set<String> = setOf("isPartial")
@@ -362,6 +363,11 @@ fun applyEditCanvasElement(
             }
             if (containsKey(patch, "complement")) {
                 el = el.copy(complement = parseTrimmedString(patch["complement"]) ?: "")
+            }
+            if (containsKey(patch, "labelSideCode")) {
+                val raw = parseInt(patch["labelSideCode"])
+                    ?: return ConceptualPropertyEditResult.Err("invalid_label_side_code")
+                el = el.copy(labelSide = AttributeLabelSide.fromPascalXmlCode(raw))
             }
         }
         is SchemaElement.Specialization -> {

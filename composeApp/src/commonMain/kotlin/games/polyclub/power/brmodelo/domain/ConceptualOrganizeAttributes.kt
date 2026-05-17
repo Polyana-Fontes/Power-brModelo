@@ -112,7 +112,7 @@ private fun connectionPontoForOrganize(
 ): Int {
     if (elem is SchemaElement.Attribute) {
         val ownerPos = schema.elements[elem.ownerId]?.position
-        val ellipseOnLeft = ownerPos?.let { conceptualAttributeAttachPonto(it, elem.position) != 1 } ?: false
+        val ellipseOnLeft = attributeEllipseOnLeft(ownerPos, elem.position, elem.labelSide)
         return if (otherElem is SchemaElement.Attribute && otherElem.ownerId == elem.id) {
             if (ellipseOnLeft) 3 else 1
         } else {
