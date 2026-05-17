@@ -42,7 +42,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import games.polyclub.power.brmodelo.ui.RibbonTab
-import games.polyclub.power.brmodelo.ui.components.AppColors
+import games.polyclub.power.brmodelo.ui.theme.LocalAppColorPalette
+import games.polyclub.power.brmodelo.ui.theme.RibbonHoverShape
 import games.polyclub.power.brmodelo.ui.components.CHROMIUM_TAB_STRIP_HEIGHT
 import games.polyclub.power.brmodelo.ui.components.ChromiumTab
 import games.polyclub.power.brmodelo.ui.components.ChromiumTabShape
@@ -58,6 +59,7 @@ internal fun RibbonTopBar(
     onMainMenuClick: () -> Unit,
     onTabSelect: (RibbonTab) -> Unit,
 ) {
+    val app = LocalAppColorPalette.current
     val density = LocalDensity.current
     val topCornerPx   = with(density) { 5.dp.toPx() }
     val bottomCurvePx = with(density) { 4.dp.toPx() }
@@ -74,12 +76,12 @@ internal fun RibbonTopBar(
         modifier = Modifier
             .fillMaxWidth()
             .height(CHROMIUM_TAB_STRIP_HEIGHT)
-            .background(AppColors.ribbonBg),
+            .background(app.ribbonBackground),
     ) {
         // Strip separator — active tab (zIndex 2f) renders on top of it, making the
         // active tab appear to rise seamlessly into the ribbon content below.
         HorizontalDivider(
-            color = AppColors.ribbonBorder,
+            color = app.ribbonBorder,
             thickness = 1.dp,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -96,7 +98,7 @@ internal fun RibbonTopBar(
             Box(
                 modifier = Modifier
                     .size(width = 26.dp, height = 22.dp)
-                    .background(Color(0xFF3E5A7E), RoundedCornerShape(3.dp))
+                    .background(app.ribbonHamburgerBackground, RoundedCornerShape(3.dp))
                     .clickable(onClick = onMainMenuClick)
                     .align(Alignment.CenterVertically),
                 contentAlignment = Alignment.Center,
@@ -110,7 +112,7 @@ internal fun RibbonTopBar(
                             modifier = Modifier
                                 .width(14.dp)
                                 .height(2.dp)
-                                .background(Color.White, RoundedCornerShape(1.dp))
+                                .background(app.ribbonHamburgerBar, RoundedCornerShape(1.dp))
                         )
                     }
                 }
@@ -122,9 +124,9 @@ internal fun RibbonTopBar(
                 label = "Esquema Conceitual",
                 selected = selectedTab == RibbonTab.EsquemaConceitual,
                 tabShape = tabShape,
-                activeTabBg = AppColors.ribbonBg,
-                inactiveTabBg = AppColors.ribbonTabInactive,
-                borderColor = AppColors.ribbonBorder,
+                activeTabBg = app.ribbonBackground,
+                inactiveTabBg = app.ribbonTabInactive,
+                borderColor = app.ribbonBorder,
                 modifier = Modifier
                     .height(
                         if (selectedTab == RibbonTab.EsquemaConceitual)
@@ -140,9 +142,9 @@ internal fun RibbonTopBar(
                 label = "Opções",
                 selected = selectedTab == RibbonTab.Opcoes,
                 tabShape = tabShape,
-                activeTabBg = AppColors.ribbonBg,
-                inactiveTabBg = AppColors.ribbonTabInactive,
-                borderColor = AppColors.ribbonBorder,
+                activeTabBg = app.ribbonBackground,
+                inactiveTabBg = app.ribbonTabInactive,
+                borderColor = app.ribbonBorder,
                 modifier = Modifier
                     .height(
                         if (selectedTab == RibbonTab.Opcoes)

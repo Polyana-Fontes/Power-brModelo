@@ -49,7 +49,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import games.polyclub.power.brmodelo.ui.DropdownEntry
-import games.polyclub.power.brmodelo.ui.components.AppColors
+import games.polyclub.power.brmodelo.ui.theme.LocalAppColorPalette
+import games.polyclub.power.brmodelo.ui.theme.RibbonHoverShape
 import org.jetbrains.compose.resources.painterResource
 
 private val STRIPE_W = 26.dp
@@ -70,10 +71,11 @@ internal fun RibbonDropdownMenu(
     onDismiss: () -> Unit,
     onItemSelected: (DropdownEntry) -> Unit = {},
 ) {
+    val app = LocalAppColorPalette.current
     DropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismiss,
-        containerColor = Color.White,
+        containerColor = LocalAppColorPalette.current.ribbonDropdownSurface,
         shadowElevation = 4.dp
     ) {
         Column(
@@ -81,7 +83,7 @@ internal fun RibbonDropdownMenu(
                 .width(IntrinsicSize.Max)
                 .drawBehind {
                     drawRect(
-                        color = AppColors.dropdownIconStripe,
+                        color = app.ribbonDropdownIconStripe,
                         topLeft = Offset(x = 0f, y = -MENU_VPAD_DP.dp.toPx()),
                         size = Size(
                             width = STRIPE_W.toPx(),
@@ -92,7 +94,7 @@ internal fun RibbonDropdownMenu(
         ) {
             items.forEach { item ->
                 if (item.isSeparatorAbove) {
-                    HorizontalDivider(color = Color(0xFFDDE4EE), thickness = 1.dp)
+                    HorizontalDivider(color = app.ribbonDropdownDivider, thickness = 1.dp)
                 }
                 RibbonDropdownItem(
                     item = item,
@@ -121,7 +123,7 @@ internal fun RibbonDropdownItem(item: DropdownEntry, onClick: () -> Unit) {
             .fillMaxWidth()
             .height(22.dp)
             .hoverable(interactionSource)
-            .background(if (isHovered && item.enabled) AppColors.dropdownHover else Color.Transparent)
+            .background(if (isHovered && item.enabled) LocalAppColorPalette.current.ribbonDropdownHover else Color.Transparent)
             .clickable(
                 enabled = item.enabled,
                 interactionSource = interactionSource,

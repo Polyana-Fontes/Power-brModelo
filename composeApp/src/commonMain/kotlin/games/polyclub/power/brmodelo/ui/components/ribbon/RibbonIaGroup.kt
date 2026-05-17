@@ -50,7 +50,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import games.polyclub.power.brmodelo.ui.RibbonMcpUi
-import games.polyclub.power.brmodelo.ui.components.AppColors
+import games.polyclub.power.brmodelo.ui.theme.LocalAppColorPalette
+import games.polyclub.power.brmodelo.ui.theme.RibbonHoverShape
 import games.polyclub.power.brmodelo.ui.isDesktopTarget
 
 private val IA_LARGE_BUTTON_W = 72.dp
@@ -73,11 +74,12 @@ internal fun RibbonGroupIa(
             onRibbonUserMessage(iaRibbonMcpSettingsBannerText(isDesktopTarget))
         }
     }
+    val app = LocalAppColorPalette.current
     Column(
         modifier = Modifier
             .fillMaxHeight()
-            .drawBehind { drawRect(AppColors.ribbonBorder, style = Stroke(width = 1.dp.toPx())) }
-            .background(AppColors.ribbonGroupBg)
+            .drawBehind { drawRect(app.ribbonBorder, style = Stroke(width = 1.dp.toPx())) }
+            .background(app.ribbonGroupBackground)
             .padding(horizontal = 4.dp, vertical = 2.dp),
         verticalArrangement = Arrangement.SpaceBetween,
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -140,8 +142,8 @@ private fun IaLargeMcpButton(
                 indication = null,
                 onClick = onClick,
             )
-            .background(if (isActive) AppColors.hoverBg else Color.Transparent, AppColors.hoverShape)
-            .border(1.dp, if (isActive) AppColors.hoverBorder else Color.Transparent, AppColors.hoverShape)
+            .background(if (isActive) LocalAppColorPalette.current.ribbonHoverBackground else Color.Transparent, RibbonHoverShape)
+            .border(1.dp, if (isActive) LocalAppColorPalette.current.ribbonHoverBorder else Color.Transparent, RibbonHoverShape)
             .padding(horizontal = 3.dp, vertical = 3.dp),
     ) {
         RibbonMcpHubIcon(
@@ -188,8 +190,8 @@ private fun IaSmallGlyphButton(
                     Modifier
                 },
             )
-            .background(if (isActive) AppColors.hoverBg else Color.Transparent, AppColors.hoverShape)
-            .border(1.dp, if (isActive) AppColors.hoverBorder else Color.Transparent, AppColors.hoverShape)
+            .background(if (isActive) LocalAppColorPalette.current.ribbonHoverBackground else Color.Transparent, RibbonHoverShape)
+            .border(1.dp, if (isActive) LocalAppColorPalette.current.ribbonHoverBorder else Color.Transparent, RibbonHoverShape)
             .padding(horizontal = 2.dp),
     ) {
         icon(Modifier.size(16.dp), enabled)
@@ -231,8 +233,8 @@ private fun IaSmallTextOnlyButton(
                     Modifier
                 },
             )
-            .background(if (isActive) AppColors.hoverBg else Color.Transparent, AppColors.hoverShape)
-            .border(1.dp, if (isActive) AppColors.hoverBorder else Color.Transparent, AppColors.hoverShape)
+            .background(if (isActive) LocalAppColorPalette.current.ribbonHoverBackground else Color.Transparent, RibbonHoverShape)
+            .border(1.dp, if (isActive) LocalAppColorPalette.current.ribbonHoverBorder else Color.Transparent, RibbonHoverShape)
             .padding(horizontal = 4.dp),
     ) {
         Text(

@@ -39,7 +39,8 @@ import games.polyclub.power.brmodelo.ui.SelectFontRibbonBinding
 import games.polyclub.power.brmodelo.ui.RibbonMcpUi
 import games.polyclub.power.brmodelo.ui.RibbonTab
 import games.polyclub.power.brmodelo.ui.SpecializationToolRibbonBinding
-import games.polyclub.power.brmodelo.ui.components.AppColors
+import games.polyclub.power.brmodelo.ui.theme.LocalAppColorPalette
+import games.polyclub.power.brmodelo.ui.theme.RibbonHoverShape
 
 @Composable
 internal fun HeaderRibbon(
@@ -60,12 +61,13 @@ internal fun HeaderRibbon(
     onMainMenuClick: () -> Unit,
     onTabSelect: (RibbonTab) -> Unit,
 ) {
+    val app = LocalAppColorPalette.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(AppColors.ribbonBg)
+            .background(app.ribbonBackground)
             .drawBehind {
-                drawRect(color = AppColors.ribbonBorder, style = Stroke(width = 1.dp.toPx()))
+                drawRect(color = app.ribbonBorder, style = Stroke(width = 1.dp.toPx()))
             }
     ) {
         RibbonTopBar(

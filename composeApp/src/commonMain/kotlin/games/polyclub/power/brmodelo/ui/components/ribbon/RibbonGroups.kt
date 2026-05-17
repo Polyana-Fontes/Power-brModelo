@@ -50,7 +50,8 @@ import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.OperationsMenuRibbonBinding
 import games.polyclub.power.brmodelo.ui.SpecializationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.ConceptualRibbonOperation
-import games.polyclub.power.brmodelo.ui.components.AppColors
+import games.polyclub.power.brmodelo.ui.theme.LocalAppColorPalette
+import games.polyclub.power.brmodelo.ui.theme.RibbonHoverShape
 import games.polyclub.power.brmodelo.generated.resources.Res
 import games.polyclub.power.brmodelo.generated.resources.gerar_logico_l
 import games.polyclub.power.brmodelo.generated.resources.operacoes_l
@@ -64,11 +65,12 @@ internal fun RibbonGroup(
     title: String,
     items: List<MenuEntry>,
 ) {
+    val app = LocalAppColorPalette.current
     Column(
         modifier = Modifier
             .fillMaxHeight()
-            .drawBehind { drawRect(AppColors.ribbonBorder, style = Stroke(width = 1.dp.toPx())) }
-            .background(AppColors.ribbonGroupBg)
+            .drawBehind { drawRect(app.ribbonBorder, style = Stroke(width = 1.dp.toPx())) }
+            .background(LocalAppColorPalette.current.ribbonGroupBackground)
             .padding(horizontal = 4.dp, vertical = 2.dp),
         verticalArrangement = Arrangement.SpaceBetween,
         horizontalAlignment = Alignment.CenterHorizontally
@@ -91,11 +93,12 @@ internal fun RibbonGroup(
 internal fun RibbonOperacoesGroup(
     operationsMenuBinding: OperationsMenuRibbonBinding?,
 ) {
+    val app = LocalAppColorPalette.current
     Column(
         modifier = Modifier
             .fillMaxHeight()
-            .drawBehind { drawRect(AppColors.ribbonBorder, style = Stroke(width = 1.dp.toPx())) }
-            .background(AppColors.ribbonGroupBg)
+            .drawBehind { drawRect(app.ribbonBorder, style = Stroke(width = 1.dp.toPx())) }
+            .background(LocalAppColorPalette.current.ribbonGroupBackground)
             .padding(horizontal = 4.dp, vertical = 2.dp),
         verticalArrangement = Arrangement.SpaceBetween,
         horizontalAlignment = Alignment.CenterHorizontally
@@ -200,11 +203,12 @@ internal fun RibbonGroupWithSeparators(
     bulkDeleteObjectsToolBinding: BulkDeleteObjectsToolRibbonBinding? = null,
     rectangleSelectionToolBinding: RectangleSelectionToolRibbonBinding? = null,
 ) {
+    val app = LocalAppColorPalette.current
     Column(
         modifier = Modifier
             .fillMaxHeight()
-            .drawBehind { drawRect(AppColors.ribbonBorder, style = Stroke(width = 1.dp.toPx())) }
-            .background(AppColors.ribbonGroupBg)
+            .drawBehind { drawRect(app.ribbonBorder, style = Stroke(width = 1.dp.toPx())) }
+            .background(LocalAppColorPalette.current.ribbonGroupBackground)
             .padding(horizontal = 4.dp, vertical = 2.dp),
         verticalArrangement = Arrangement.SpaceBetween,
         horizontalAlignment = Alignment.CenterHorizontally
@@ -246,11 +250,12 @@ internal fun RibbonGroupMixed(
     largeEntry: MenuEntry,
     smallEntries: List<MenuEntry>
 ) {
+    val app = LocalAppColorPalette.current
     Column(
         modifier = Modifier
             .fillMaxHeight()
-            .drawBehind { drawRect(AppColors.ribbonBorder, style = Stroke(width = 1.dp.toPx())) }
-            .background(AppColors.ribbonGroupBg)
+            .drawBehind { drawRect(app.ribbonBorder, style = Stroke(width = 1.dp.toPx())) }
+            .background(LocalAppColorPalette.current.ribbonGroupBackground)
             .padding(horizontal = 4.dp, vertical = 2.dp),
         verticalArrangement = Arrangement.SpaceBetween,
         horizontalAlignment = Alignment.CenterHorizontally
@@ -286,7 +291,7 @@ internal fun RibbonGroupTitle(title: String, maxLines: Int = 1) {
         text = title,
         fontSize = 9.sp,
         lineHeight = line,
-        color = AppColors.ribbonGroupTitle,
+        color = LocalAppColorPalette.current.ribbonGroupTitle,
         textAlign = TextAlign.Center,
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
@@ -301,7 +306,7 @@ internal fun RibbonGroupSeparator() {
         modifier = Modifier
             .width(1.dp)
             .fillMaxHeight()
-            .background(AppColors.ribbonSeparator)
+            .background(LocalAppColorPalette.current.ribbonSeparator)
     )
     Spacer(modifier = Modifier.width(4.dp))
 }

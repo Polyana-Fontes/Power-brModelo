@@ -35,7 +35,8 @@ import games.polyclub.power.brmodelo.ui.SelectFontRibbonBinding
 import games.polyclub.power.brmodelo.ui.BulkDeleteObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.RectangleSelectionToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.AutoSelfRelationshipToolRibbonBinding
-import games.polyclub.power.brmodelo.ui.components.AppColors
+import games.polyclub.power.brmodelo.ui.theme.LocalAppColorPalette
+import games.polyclub.power.brmodelo.ui.theme.RibbonHoverShape
 import games.polyclub.power.brmodelo.ui.EntityToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.MenuEntry
@@ -80,7 +81,7 @@ internal fun RibbonEsquemaConceitual(
         modifier = Modifier
             .fillMaxWidth()
             .height(RIBBON_HEIGHT)
-            .background(AppColors.ribbonBg)
+            .background(LocalAppColorPalette.current.ribbonBackground)
             .padding(start = 6.dp, end = 6.dp, top = 2.dp, bottom = 0.dp),
         verticalAlignment = Alignment.Top
     ) {
@@ -150,7 +151,7 @@ internal fun RibbonOpcoes(
         modifier = Modifier
             .fillMaxWidth()
             .height(RIBBON_HEIGHT)
-            .background(AppColors.ribbonBg)
+            .background(LocalAppColorPalette.current.ribbonBackground)
             .padding(start = 6.dp, end = 6.dp, top = 2.dp, bottom = 0.dp),
         verticalAlignment = Alignment.Top
     ) {

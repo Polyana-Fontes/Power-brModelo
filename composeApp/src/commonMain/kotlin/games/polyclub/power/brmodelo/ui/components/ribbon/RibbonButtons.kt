@@ -69,7 +69,8 @@ import games.polyclub.power.brmodelo.ui.LinkObjectsToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.MenuEntry
 import games.polyclub.power.brmodelo.ui.ObservationToolRibbonBinding
 import games.polyclub.power.brmodelo.ui.SpecializationToolRibbonBinding
-import games.polyclub.power.brmodelo.ui.components.AppColors
+import games.polyclub.power.brmodelo.ui.theme.LocalAppColorPalette
+import games.polyclub.power.brmodelo.ui.theme.RibbonHoverShape
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
@@ -111,13 +112,13 @@ internal fun RibbonSplitDropdownButton(
         isOuterHovered || isMainHovered || isArrowHovered || showDropdown
 
     val outerBg = when {
-        isControlActive -> AppColors.hoverBg
-        isPrimaryToolArmed -> AppColors.ribbonToolArmedIdleFill
+        isControlActive -> LocalAppColorPalette.current.ribbonHoverBackground
+        isPrimaryToolArmed -> LocalAppColorPalette.current.ribbonToolArmedIdleFill
         else -> Color.Transparent
     }
     val outerBorder = when {
-        isControlActive -> AppColors.hoverBorder
-        isPrimaryToolArmed -> AppColors.ribbonToolArmedBorder
+        isControlActive -> LocalAppColorPalette.current.ribbonHoverBorder
+        isPrimaryToolArmed -> LocalAppColorPalette.current.ribbonToolArmedBorder
         else -> Color.Transparent
     }
 
@@ -131,8 +132,8 @@ internal fun RibbonSplitDropdownButton(
                 .width(IntrinsicSize.Max)
                 .fillMaxHeight()
                 .hoverable(outerInteraction)
-                .background(outerBg, AppColors.hoverShape)
-                .border(1.dp, outerBorder, AppColors.hoverShape)
+                .background(outerBg, RibbonHoverShape)
+                .border(1.dp, outerBorder, RibbonHoverShape)
                 .padding(horizontal = 3.dp, vertical = 3.dp),
         ) {
             Column(
@@ -142,12 +143,12 @@ internal fun RibbonSplitDropdownButton(
                     .weight(1f)
                     .fillMaxWidth()
                     .background(
-                        color = if (isMainHovered) AppColors.ribbonSplitMainSegmentHover else Color.Transparent,
+                        color = if (isMainHovered) LocalAppColorPalette.current.ribbonSplitMainSegmentHover else Color.Transparent,
                         shape = SPLIT_INNER_SEGMENT_SHAPE,
                     )
                     .border(
                         width = 1.dp,
-                        color = if (isMainHovered) AppColors.hoverBorder.copy(alpha = 0.45f) else Color.Transparent,
+                        color = if (isMainHovered) LocalAppColorPalette.current.ribbonHoverBorder.copy(alpha = 0.45f) else Color.Transparent,
                         shape = SPLIT_INNER_SEGMENT_SHAPE,
                     )
                     .clickable(
@@ -183,7 +184,7 @@ internal fun RibbonSplitDropdownButton(
             HorizontalDivider(
                 modifier = Modifier.padding(top = 2.dp),
                 thickness = 1.dp,
-                color = if (isControlActive) AppColors.ribbonSplitDividerActive else Color.Transparent,
+                color = if (isControlActive) LocalAppColorPalette.current.ribbonSplitDividerActive else Color.Transparent,
             )
 
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -194,12 +195,12 @@ internal fun RibbonSplitDropdownButton(
                         .fillMaxWidth()
                         .height(SPLIT_ARROW_STRIP_H)
                         .background(
-                            color = if (isArrowHovered) AppColors.ribbonSplitArrowSegmentHover else Color.Transparent,
+                            color = if (isArrowHovered) LocalAppColorPalette.current.ribbonSplitArrowSegmentHover else Color.Transparent,
                             shape = SPLIT_INNER_SEGMENT_SHAPE,
                         )
                         .border(
                             width = 1.dp,
-                            color = if (isArrowHovered) AppColors.hoverBorder.copy(alpha = 0.45f) else Color.Transparent,
+                            color = if (isArrowHovered) LocalAppColorPalette.current.ribbonHoverBorder.copy(alpha = 0.45f) else Color.Transparent,
                             shape = SPLIT_INNER_SEGMENT_SHAPE,
                         )
                         .clickable(
@@ -245,13 +246,13 @@ internal fun RibbonArmedToolButton(
     val isHovered by interactionSource.collectIsHoveredAsState()
     val isActive = isHovered
     val bg = when {
-        isActive -> AppColors.hoverBg
-        isArmed -> AppColors.ribbonToolArmedIdleFill
+        isActive -> LocalAppColorPalette.current.ribbonHoverBackground
+        isArmed -> LocalAppColorPalette.current.ribbonToolArmedIdleFill
         else -> Color.Transparent
     }
     val border = when {
-        isActive -> AppColors.hoverBorder
-        isArmed -> AppColors.ribbonToolArmedBorder
+        isActive -> LocalAppColorPalette.current.ribbonHoverBorder
+        isArmed -> LocalAppColorPalette.current.ribbonToolArmedBorder
         else -> Color.Transparent
     }
     Column(
@@ -261,8 +262,8 @@ internal fun RibbonArmedToolButton(
             .wrapContentWidth()
             .fillMaxHeight()
             .hoverable(interactionSource)
-            .background(bg, AppColors.hoverShape)
-            .border(1.dp, border, AppColors.hoverShape)
+            .background(bg, RibbonHoverShape)
+            .border(1.dp, border, RibbonHoverShape)
             .padding(horizontal = 3.dp, vertical = 3.dp)
             .clickable(
                 interactionSource = interactionSource,
@@ -403,8 +404,8 @@ internal fun RibbonButton(
                 .wrapContentWidth()
                 .fillMaxHeight()
                 .then(if (enabled && (hasDropdown || entry.onClick != null)) Modifier.hoverable(interactionSource) else Modifier)
-                .background(if (isActive) AppColors.hoverBg else Color.Transparent, AppColors.hoverShape)
-                .border(1.dp, if (isActive) AppColors.hoverBorder else Color.Transparent, AppColors.hoverShape)
+                .background(if (isActive) LocalAppColorPalette.current.ribbonHoverBackground else Color.Transparent, RibbonHoverShape)
+                .border(1.dp, if (isActive) LocalAppColorPalette.current.ribbonHoverBorder else Color.Transparent, RibbonHoverShape)
                 .padding(horizontal = 3.dp, vertical = 3.dp)
                 .then(
                     when {
@@ -493,8 +494,8 @@ internal fun LargeRibbonButton(entry: MenuEntry, buttonWidth: Dp) {
                     Modifier
                 },
             )
-            .background(if (isActive) AppColors.hoverBg else Color.Transparent, AppColors.hoverShape)
-            .border(1.dp, if (isActive) AppColors.hoverBorder else Color.Transparent, AppColors.hoverShape)
+            .background(if (isActive) LocalAppColorPalette.current.ribbonHoverBackground else Color.Transparent, RibbonHoverShape)
+            .border(1.dp, if (isActive) LocalAppColorPalette.current.ribbonHoverBorder else Color.Transparent, RibbonHoverShape)
             .padding(horizontal = 3.dp, vertical = 3.dp)
     ) {
         Image(
@@ -542,8 +543,8 @@ internal fun SmallRibbonButton(entry: MenuEntry) {
                     Modifier
                 },
             )
-            .background(if (isActive) AppColors.hoverBg else Color.Transparent, AppColors.hoverShape)
-            .border(1.dp, if (isActive) AppColors.hoverBorder else Color.Transparent, AppColors.hoverShape)
+            .background(if (isActive) LocalAppColorPalette.current.ribbonHoverBackground else Color.Transparent, RibbonHoverShape)
+            .border(1.dp, if (isActive) LocalAppColorPalette.current.ribbonHoverBorder else Color.Transparent, RibbonHoverShape)
             .padding(horizontal = 2.dp)
     ) {
         Image(
@@ -578,8 +579,8 @@ internal fun RibbonLargeGlyphHistoryButton(
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
     val isActive = enabled && isHovered
-    val bg = if (isActive) AppColors.hoverBg else Color.Transparent
-    val border = if (isActive) AppColors.hoverBorder else Color.Transparent
+    val bg = if (isActive) LocalAppColorPalette.current.ribbonHoverBackground else Color.Transparent
+    val border = if (isActive) LocalAppColorPalette.current.ribbonHoverBorder else Color.Transparent
     val labelColor = if (enabled) Color(0xFF2C3E50) else Color(0xFF8A8A8A)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -600,8 +601,8 @@ internal fun RibbonLargeGlyphHistoryButton(
                     Modifier
                 },
             )
-            .background(bg, AppColors.hoverShape)
-            .border(1.dp, border, AppColors.hoverShape)
+            .background(bg, RibbonHoverShape)
+            .border(1.dp, border, RibbonHoverShape)
             .padding(horizontal = 3.dp, vertical = 3.dp),
     ) {
         Image(

@@ -69,31 +69,17 @@ import games.polyclub.power.brmodelo.ui.canvas.drawRelationshipDiamond
 import games.polyclub.power.brmodelo.ui.canvas.drawSpecialization
 import kotlin.math.abs
 
-// ── Colors translated from the original Pascal source ─────────────────────────
-// Pen.Color := TColor(-5) → COLORREF $FFFFFFFB → R=251, G=255, B=255 (near-white outline)
-private val BORDER_NEAR_WHITE = Color(0xFFFBFFFF)
-// $00707070 → RGB(112,112,112)
-private val SHADOW_DARK = Color(0xFF707070)
-// $00B3B3B3 → RGB(179,179,179)
-private val SHADOW_LIGHT = Color(0xFFB3B3B3)
-// $00963636 → RGB(150,54,54)  — identifier attribute fill
-private val IDENTIFIER_FILL = Color(0xFF963636)
-// Font.Color = 32896 = 0x8080 (COLORREF BGR) → R=0, G=0x80, B=0x80 → teal
-private val SPEC_LABEL_COLOR = Color(0xFF008080)
-// $00363636 → dark gray for text box border
-private val TEXT_BOX_DARK = Color(0xFF363636)
+import games.polyclub.power.brmodelo.ui.theme.ConceptualModelColorPalette
 
-private val CANVAS_TEXT_STYLE = TextStyle(fontSize = 11.sp, color = Color.Black)
+private fun ConceptualModelColorPalette.connectionCardinalityTextStyle(conn: Connection): TextStyle =
+    conn.cardinalityLabelStyle.mergeOntoCanvasTextStyle(canvasLabelBaseTextStyle())
 
-private fun connectionCardinalityTextStyle(conn: Connection): TextStyle =
-    conn.cardinalityLabelStyle.mergeOntoCanvasTextStyle(CANVAS_TEXT_STYLE)
 
-private val SELECTION_COLOR = Color(0xFF0060C0)
-/** Connection polyline when a linked pick is active — matches [SELECTION_COLOR] (2px stroke distinguishes from normal lines). */
-private val SELECTION_CONNECTION_LINE_COLOR = SELECTION_COLOR
+/** Active palette for the current [drawSchema] invocation (also used by cardinality geometry helpers). */
+private var schemaDrawPalette: ConceptualModelColorPalette = ConceptualModelColorPalette.light()
 
 /**
- * Connection ids whose link lines should use [SELECTION_CONNECTION_LINE_COLOR]: cardinality picks,
+ * Connection ids whose link lines should use the same blue stroke as the selection outline: cardinality picks,
  * every link touching a selected [SchemaElement.Attribute], and every link touching a selected
  * [SchemaElement.Specialization].
  */
@@ -131,7 +117,7 @@ private fun connectionIdsForSelectionLinkedLineHighlight(
     }
 }
 
-/** Attribute ids whose owner→ellipse stub is drawn in [SELECTION_CONNECTION_LINE_COLOR] (stub is not part of [drawConnectionLine]). */
+/** Attribute ids whose owner→ellipse stub is drawn in the selection highlight colour (stub is not part of [drawConnectionLine]). */
 private fun attributeIdsForSelectionStubHighlight(selection: CanvasSelection, schema: ConceptualSchema): Set<Int> =
     when (selection) {
         is CanvasSelection.Element -> {
@@ -151,7 +137,7 @@ private fun attributeIdsForSelectionStubHighlight(selection: CanvasSelection, sc
  * 1. Non-assoc connection lines — behind all elements (selected cardinality / attribute / specialization
  *     links use the same blue stroke as the selection outline).
  * 2. All elements (entities, relationships, attributes, AssociativeEntity outer+inner).
- *    Attribute ellipse→edge stubs use [SELECTION_CONNECTION_LINE_COLOR] when that attribute is
+ *    Attribute ellipse→edge stubs use the same blue stroke as the selection outline when that attribute is
  *    selected with link highlight (stubs are not part of step 1 polylines).
  * 3. AssociativeEntity connection lines — redrawn on top of outer rect white fill,
  *    faithfully replicating the VCL behaviour where [TLinha] components have a
@@ -195,7 +181,11 @@ fun DrawScope.drawSchema(
     bulkDeleteHighlightIds: Set<Int> = emptySet(),
     selectionBandHighlightIds: Set<Int> = emptySet(),
     selectionBandHighlightCardinalityConnectionIds: Set<Int> = emptySet(),
+    modelPalette: ConceptualModelColorPalette = ConceptualModelColorPalette.light(),
 ) {
+    val savedPalette = schemaDrawPalette
+    schemaDrawPalette = modelPalette
+    try {
     val dividedPoints = computeDividedPoints(schema)
     val selectionLinkedConnectionIds = connectionIdsForSelectionLinkedLineHighlight(selection, schema)
     val selectionStubHighlightAttributeIds = attributeIdsForSelectionStubHighlight(selection, schema)
@@ -206,8 +196,8 @@ fun DrawScope.drawSchema(
         val b = schema.elements[conn.elementIdB]
         if (a !is SchemaElement.AssociativeEntity && b !is SchemaElement.AssociativeEntity) {
             val lineColor =
-                if (conn.id in selectionLinkedConnectionIds) SELECTION_CONNECTION_LINE_COLOR else null
-            drawConnectionLine(conn, schema, dividedPoints, lineHighlightColor = lineColor)
+                if (conn.id in selectionLinkedConnectionIds) schemaDrawPalette.selectionConnectionHighlight else null
+            drawConnectionLine( conn, schema, dividedPoints, lineHighlightColor = lineColor)
         }
     }
     // 2. All elements (including AssociativeEntity outer rect + inner diamond)
@@ -229,8 +219,8 @@ fun DrawScope.drawSchema(
         val b = schema.elements[conn.elementIdB]
         if (a is SchemaElement.AssociativeEntity || b is SchemaElement.AssociativeEntity) {
             val lineColor =
-                if (conn.id in selectionLinkedConnectionIds) SELECTION_CONNECTION_LINE_COLOR else null
-            drawConnectionLine(conn, schema, dividedPoints, lineHighlightColor = lineColor)
+                if (conn.id in selectionLinkedConnectionIds) schemaDrawPalette.selectionConnectionHighlight else null
+            drawConnectionLine( conn, schema, dividedPoints, lineHighlightColor = lineColor)
         }
     }
     // 4. Re-draw the inner diamonds on top of the connection lines so that the diamond
@@ -255,7 +245,7 @@ fun DrawScope.drawSchema(
             val ih = innerPos.height.toFloat().coerceAtLeast(1f)
             // Mute inner relationship chrome (diamond + direction arrow drawn in step 2) so the outer frame reads as the target.
             drawRect(
-                color = Color.White.copy(alpha = 0.78f),
+                color = schemaDrawPalette.diagramAssociativeInnerMuteScrim,
                 topLeft = Offset(ix, iy),
                 size = Size(iw, ih),
             )
@@ -271,21 +261,21 @@ fun DrawScope.drawSchema(
         // Bulk-delete tint was drawn on the outer rect in step 2; the inner diamond is redrawn here
         // with opaque fill on top of those lines, so it must be tinted again (same idea as step 4b).
         if (assoc.id in bulkDeleteHighlightIds) {
-            drawBulkDeleteThreatHighlight(innerPos)
+            drawBulkDeleteThreatHighlight( innerPos)
         } else if (assoc.id in selectionBandHighlightIds) {
-            drawSelectionBandHighlight(innerPos)
+            drawSelectionBandHighlight( innerPos)
         }
         if (innerRegionHover) {
-            drawLinkToolHoverDiamondHighlight(innerPos)
+            drawLinkToolHoverDiamondHighlight( innerPos)
         }
     }
     // 4b. Self-relationship diamonds on top of lines (outline + fill), like VCL z-order.
     schema.elements.values.filterIsInstance<SchemaElement.SelfRelationship>().forEach { selfRel ->
         drawRelationshipDiamond(selfRel.position, selfRel.name, showName = true, textMeasurer, selfRel.labelStyle)
         if (selfRel.id in bulkDeleteHighlightIds) {
-            drawBulkDeleteThreatHighlight(selfRel.position)
+            drawBulkDeleteThreatHighlight( selfRel.position)
         } else if (selfRel.id in selectionBandHighlightIds) {
-            drawSelectionBandHighlight(selfRel.position)
+            drawSelectionBandHighlight( selfRel.position)
         }
     }
     // 5. Cardinality labels on top
@@ -295,7 +285,7 @@ fun DrawScope.drawSchema(
     for (conn in schema.connections) {
         if (conn.id !in selectionBandHighlightCardinalityConnectionIds) continue
         cardinalityLabelHighlightElementPosition(schema, conn, textMeasurer)?.let { pos ->
-            drawSelectionBandHighlight(pos)
+            drawSelectionBandHighlight( pos)
         }
     }
     // 5b. Link-tool hover (rectangular targets; associative inner-diamond hover is drawn in step 4)
@@ -303,33 +293,33 @@ fun DrawScope.drawSchema(
         val el = schema.elements[pick.elementId] ?: return@let
         when {
             el is SchemaElement.AssociativeEntity && !pick.isAssociativeOuterEntitySide -> Unit
-            else -> drawLinkToolFirstTargetHighlight(el.position)
+            else -> drawLinkToolFirstTargetHighlight( el.position)
         }
     }
     // 5c. Attribute-tool hover — always a rectangular outline on the attribute owner bounds (associative miolo:
     //     outer rect only; inner diamond highlight is intentionally omitted, inner is muted in step 4).
     attributeToolHoverPick?.let { pick ->
         schema.elements[pick.elementId]?.let { el ->
-            drawLinkToolFirstTargetHighlight(el.position)
+            drawLinkToolFirstTargetHighlight( el.position)
         }
     }
     // 5d. Specialization-tool hover — plain entity only ([hitTestPlainEntityId])
     specializationToolHoverPlainEntityId?.let { eid ->
         val el = schema.elements[eid] as? SchemaElement.Entity ?: return@let
-        drawLinkToolFirstTargetHighlight(el.position)
+        drawLinkToolFirstTargetHighlight( el.position)
     }
     // 5e. Auto-self-relationship tool hover — same outline as link-tool outer targets (associative miolo maps to outer pick).
     selfRelationshipToolHoverPick?.let { pick ->
         val el = schema.elements[pick.elementId] ?: return@let
         when {
             el is SchemaElement.AssociativeEntity && !pick.isAssociativeOuterEntitySide -> Unit
-            else -> drawLinkToolFirstTargetHighlight(el.position)
+            else -> drawLinkToolFirstTargetHighlight( el.position)
         }
     }
     // 6. Link-tool first-target highlight (no corner handles)
     linkToolHighlightElementId?.let { hid ->
         schema.elements[hid]?.let { el ->
-            drawLinkToolFirstTargetHighlight(el.position)
+            drawLinkToolFirstTargetHighlight( el.position)
         }
     }
     // 7. Selection handles — drawn last so they are always on top of diagram content
@@ -337,16 +327,16 @@ fun DrawScope.drawSchema(
         is CanvasSelection.Element -> {
             schema.elements[selection.id]?.let { el ->
                 val showResizeHandles = el !is SchemaElement.Attribute || !el.autoSize
-                drawElementSelectionHandles(el.position, showResizeHandles = showResizeHandles)
+                drawElementSelectionHandles( el.position, showResizeHandles = showResizeHandles)
             }
         }
         is CanvasSelection.Cardinality -> {
             val conn = schema.connections.firstOrNull { it.id == selection.connectionId }
             if (conn != null && conn.showCardinality && conn.cardinality != null) {
                 cardinalityLabelHighlightElementPosition(schema, conn, textMeasurer)?.let { pos ->
-                    drawCardinalitySelectionHighlight(pos)
+                    drawCardinalitySelectionHighlight( pos)
                     if (!conn.cardinalityAutoSize) {
-                        drawElementSelectionHandles(pos)
+                        drawElementSelectionHandles( pos)
                     }
                 }
             }
@@ -355,16 +345,16 @@ fun DrawScope.drawSchema(
             for (id in selection.elementIds) {
                 schema.elements[id]?.let { el ->
                     val showResizeHandles = el !is SchemaElement.Attribute || !el.autoSize
-                    drawElementSelectionHandles(el.position, showResizeHandles = showResizeHandles)
+                    drawElementSelectionHandles( el.position, showResizeHandles = showResizeHandles)
                 }
             }
             for (cid in selection.cardinalityConnectionIds) {
                 val conn = schema.connections.firstOrNull { it.id == cid }
                 if (conn != null && conn.showCardinality && conn.cardinality != null) {
                     cardinalityLabelHighlightElementPosition(schema, conn, textMeasurer)?.let { pos ->
-                        drawCardinalitySelectionHighlight(pos)
+                        drawCardinalitySelectionHighlight( pos)
                         if (!conn.cardinalityAutoSize) {
-                            drawElementSelectionHandles(pos)
+                            drawElementSelectionHandles( pos)
                         }
                     }
                 }
@@ -372,12 +362,13 @@ fun DrawScope.drawSchema(
         }
         CanvasSelection.None -> Unit
     }
+    } finally {
+        schemaDrawPalette = savedPalette
+    }
 }
 
 // ── Selection handles ─────────────────────────────────────────────────────────
 
-private val HANDLE_FILL     = SELECTION_COLOR
-private val HANDLE_SIZE     = HANDLE_SIZE_PX
 
 /**
  * Draws a blue selection border around [position] and, when [showResizeHandles] is true,
@@ -398,7 +389,7 @@ private fun DrawScope.drawElementSelectionHandles(
 
     // Selection border
     drawRect(
-        color    = SELECTION_COLOR,
+        color    = schemaDrawPalette.diagramSelectionAccent,
         topLeft  = Offset(x - 1f, y - 1f),
         size     = Size(w + 2f, h + 2f),
         style    = Stroke(1.5f),
@@ -407,7 +398,7 @@ private fun DrawScope.drawElementSelectionHandles(
     if (!showResizeHandles) return
 
     // Corner handles
-    val half = HANDLE_SIZE / 2f
+    val half = HANDLE_SIZE_PX / 2f
     listOf(
         Offset(x,     y),      // top-left
         Offset(x + w, y),      // top-right
@@ -415,18 +406,15 @@ private fun DrawScope.drawElementSelectionHandles(
         Offset(x + w, y + h),  // bottom-right
     ).forEach { center ->
         drawRect(
-            color   = HANDLE_FILL,
+            color   = schemaDrawPalette.diagramSelectionAccent,
             topLeft = Offset(center.x - half, center.y - half),
             size    = Size(
-                HANDLE_SIZE,
-                HANDLE_SIZE
+                HANDLE_SIZE_PX,
+                HANDLE_SIZE_PX
             ),
         )
     }
 }
-
-/** Highlight colour for the first endpoint while using "Ligar objetos" (distinct from selection blue). */
-private val LINK_TOOL_FIRST_TARGET_COLOR = Color(0xFFFF6600)
 
 /**
  * Draws a thick border around [position] without resize handles — used during the link tool's second click phase.
@@ -437,7 +425,7 @@ private fun DrawScope.drawLinkToolFirstTargetHighlight(position: ElementPosition
     val w = position.width.toFloat()
     val h = position.height.toFloat()
     drawRect(
-        color = LINK_TOOL_FIRST_TARGET_COLOR,
+        color = schemaDrawPalette.diagramToolTargetOrange,
         topLeft = Offset(x - 2f, y - 2f),
         size = Size(w + 4f, h + 4f),
         style = Stroke(2.5f),
@@ -459,7 +447,7 @@ private fun DrawScope.drawLinkToolHoverDiamondHighlight(p: ElementPosition) {
         lineTo(x, cy)
         close()
     }
-    drawPath(diamond, LINK_TOOL_FIRST_TARGET_COLOR, style = Stroke(2.5f))
+    drawPath(diamond, schemaDrawPalette.diagramToolTargetOrange, style = Stroke(2.5f))
 }
 
 /**
@@ -467,16 +455,12 @@ private fun DrawScope.drawLinkToolHoverDiamondHighlight(p: ElementPosition) {
  */
 private fun DrawScope.drawCardinalitySelectionHighlight(position: ElementPosition) {
     drawRect(
-        color   = SELECTION_COLOR,
+        color   = schemaDrawPalette.diagramSelectionAccent,
         topLeft = Offset(position.x.toFloat() - 1f, position.y.toFloat() - 1f),
         size    = Size(position.width + 2f, position.height + 2f),
         style   = Stroke(1.5f),
     )
 }
-
-/** Strong red overlay for elements marked for bulk deletion (preview). */
-private val BULK_DELETE_FILL = Color(0x66FF2D2D)
-private val BULK_DELETE_STROKE = Color(0xFFAA0000)
 
 private fun DrawScope.drawBulkDeleteThreatHighlight(position: ElementPosition) {
     val x = position.x.toFloat()
@@ -484,21 +468,17 @@ private fun DrawScope.drawBulkDeleteThreatHighlight(position: ElementPosition) {
     val w = position.width.toFloat().coerceAtLeast(1f)
     val h = position.height.toFloat().coerceAtLeast(1f)
     drawRect(
-        color = BULK_DELETE_FILL,
+        color = schemaDrawPalette.diagramElementBulkDeleteThreatFill,
         topLeft = Offset(x, y),
         size = Size(w, h),
     )
     drawRect(
-        color = BULK_DELETE_STROKE,
+        color = schemaDrawPalette.diagramElementBulkDeleteThreatStroke,
         topLeft = Offset(x, y),
         size = Size(w, h),
         style = Stroke(width = 2.5f),
     )
 }
-
-/** Blue overlay for elements inside the rectangle multi-select preview. */
-private val SELECTION_BAND_FILL = Color(0x662E7DFF)
-private val SELECTION_BAND_STROKE = Color(0xFF0060C0)
 
 private fun DrawScope.drawSelectionBandHighlight(position: ElementPosition) {
     val x = position.x.toFloat()
@@ -506,12 +486,12 @@ private fun DrawScope.drawSelectionBandHighlight(position: ElementPosition) {
     val w = position.width.toFloat().coerceAtLeast(1f)
     val h = position.height.toFloat().coerceAtLeast(1f)
     drawRect(
-        color = SELECTION_BAND_FILL,
+        color = schemaDrawPalette.diagramElementSelectionBandFill,
         topLeft = Offset(x, y),
         size = Size(w, h),
     )
     drawRect(
-        color = SELECTION_BAND_STROKE,
+        color = schemaDrawPalette.diagramElementSelectionBandStroke,
         topLeft = Offset(x, y),
         size = Size(w, h),
         style = Stroke(width = 2.5f),
@@ -581,26 +561,26 @@ internal fun DrawScope.drawEntityRectangle(p: ElementPosition, isWeak: Boolean =
     val h = p.height.toFloat()
 
     // White background fill
-    drawRect(Color.White, topLeft = Offset(x, y), size = Size(w, h))
+    drawRect(schemaDrawPalette.diagramEntityFill, topLeft = Offset(x, y), size = Size(w, h))
 
     // Main border: black rectangle inset by 3px on right/bottom for relief effect
     val stroke1 = Stroke(1f)
     val rectInner = Rect(x, y, x + w - 3f, y + h - 3f)
-    drawRect(Color.Black, topLeft = rectInner.topLeft, size = rectInner.size, style = stroke1)
+    drawRect(schemaDrawPalette.diagramPrimaryInk, topLeft = rectInner.topLeft, size = rectInner.size, style = stroke1)
 
     // Double border for weak entity (inner rect inset 3px more)
     if (isWeak) {
         val inner2 = Rect(x + 3f, y + 3f, x + w - 6f, y + h - 6f)
-        drawRect(Color.Black, topLeft = inner2.topLeft, size = inner2.size, style = stroke1)
+        drawRect(schemaDrawPalette.diagramPrimaryInk, topLeft = inner2.topLeft, size = inner2.size, style = stroke1)
     }
 
     // Shadow at -2 (right and bottom edges only)
-    drawLine(SHADOW_DARK, Offset(x + w - 2f, y), Offset(x + w - 2f, y + h - 2f))
-    drawLine(SHADOW_DARK, Offset(x, y + h - 2f), Offset(x + w - 2f, y + h - 2f))
+    drawLine(schemaDrawPalette.diagramEntityShadowDark, Offset(x + w - 2f, y), Offset(x + w - 2f, y + h - 2f))
+    drawLine(schemaDrawPalette.diagramEntityShadowDark, Offset(x, y + h - 2f), Offset(x + w - 2f, y + h - 2f))
 
     // Shadow at -1
-    drawLine(SHADOW_LIGHT, Offset(x + w - 1f, y), Offset(x + w - 1f, y + h - 1f))
-    drawLine(SHADOW_LIGHT, Offset(x, y + h - 1f), Offset(x + w - 1f, y + h - 1f))
+    drawLine(schemaDrawPalette.diagramEntityShadowLight, Offset(x + w - 1f, y), Offset(x + w - 1f, y + h - 1f))
+    drawLine(schemaDrawPalette.diagramEntityShadowLight, Offset(x, y + h - 1f), Offset(x + w - 1f, y + h - 1f))
 }
 
 // ── Relationship (diamond) ────────────────────────────────────────────────────
@@ -643,17 +623,17 @@ internal fun DrawScope.drawRelationshipDiamond(
         lineTo(x, cy)
         close()
     }
-    drawPath(diamond, Color.White.copy(alpha = a), style = Fill)
-    drawPath(diamond, Color.Black.copy(alpha = a), style = Stroke(1f))
+    drawPath(diamond, schemaDrawPalette.diagramEntityFill.copy(alpha = a), style = Fill)
+    drawPath(diamond, schemaDrawPalette.diagramPrimaryInk.copy(alpha = a), style = Stroke(1f))
 
     // Shadow segment (bottom-right, matching Pascal $B3B3B3 two-pixel segment)
-    drawLine(SHADOW_LIGHT.copy(alpha = SHADOW_LIGHT.alpha * a), Offset(x + w, cy), Offset(cx, y + h))
+    drawLine(schemaDrawPalette.diagramEntityShadowLight.copy(alpha = schemaDrawPalette.diagramEntityShadowLight.alpha * a), Offset(x + w, cy), Offset(cx, y + h))
 
     if (showName && name.isNotBlank()) {
         val maxW = (w - 4f).toInt().coerceAtLeast(1)
-        val style = labelStyle.mergeOntoCanvasTextStyle(CANVAS_TEXT_STYLE).copy(
+        val style = labelStyle.mergeOntoCanvasTextStyle(schemaDrawPalette.canvasLabelBaseTextStyle()).copy(
             textAlign = TextAlign.Center,
-            color = Color.Black.copy(alpha = a),
+            color = schemaDrawPalette.diagramPrimaryInk.copy(alpha = a),
         )
         val layout = textMeasurer.measure(name, style = style, constraints = Constraints(maxWidth = maxW))
         val textX = x + (w - layout.size.width) / 2f
@@ -693,18 +673,18 @@ private fun DrawScope.drawDirectionArrow(direction: ArrowDirection, pos: Element
     //
     // posicao 1,6: (W,1)→(1,L)→(L,L-2)→(Largura,L)→(W,1)  — UP arrowhead
     fun arrowUp(lx: Float, cl: Float, y: Float) {
-        drawLine(Color.Black, Offset(lx,        y + 1f), Offset(cl + 1f,    y + L))
-        drawLine(Color.Black, Offset(cl + 1f,   y + L),  Offset(lx,         y + L - 2f))
-        drawLine(Color.Black, Offset(lx,        y + L - 2f), Offset(cl + STRIP, y + L))
-        drawLine(Color.Black, Offset(cl + STRIP, y + L), Offset(lx,          y + 1f))
+        drawLine(schemaDrawPalette.diagramPrimaryInk, Offset(lx,        y + 1f), Offset(cl + 1f,    y + L))
+        drawLine(schemaDrawPalette.diagramPrimaryInk, Offset(cl + 1f,   y + L),  Offset(lx,         y + L - 2f))
+        drawLine(schemaDrawPalette.diagramPrimaryInk, Offset(lx,        y + L - 2f), Offset(cl + STRIP, y + L))
+        drawLine(schemaDrawPalette.diagramPrimaryInk, Offset(cl + STRIP, y + L), Offset(lx,          y + 1f))
     }
     // posicao 2,5: (W,H-1)→(1,H-L)→(L,H-L+3)→(Largura,H-L)→(W,H-1)  — DOWN arrowhead
     // H = diamond height h; H-L = h-5; H-L+3 = h-2.
     fun arrowDown(lx: Float, cl: Float, y: Float, h: Float) {
-        drawLine(Color.Black, Offset(lx,        y + h - 1f), Offset(cl + 1f,    y + h - L))
-        drawLine(Color.Black, Offset(cl + 1f,   y + h - L),  Offset(lx,         y + h - L + 3f))
-        drawLine(Color.Black, Offset(lx,        y + h - L + 3f), Offset(cl + STRIP, y + h - L))
-        drawLine(Color.Black, Offset(cl + STRIP, y + h - L), Offset(lx,           y + h - 1f))
+        drawLine(schemaDrawPalette.diagramPrimaryInk, Offset(lx,        y + h - 1f), Offset(cl + 1f,    y + h - L))
+        drawLine(schemaDrawPalette.diagramPrimaryInk, Offset(cl + 1f,   y + h - L),  Offset(lx,         y + h - L + 3f))
+        drawLine(schemaDrawPalette.diagramPrimaryInk, Offset(lx,        y + h - L + 3f), Offset(cl + STRIP, y + h - L))
+        drawLine(schemaDrawPalette.diagramPrimaryInk, Offset(cl + STRIP, y + h - L), Offset(lx,           y + h - 1f))
     }
     // posicao 3,8: (W-1,H)→(W-L,1)→(W-L+3,H)→(W-L,Height)→(W-1,H)  — RIGHT arrowhead
     // For horizontal strips W = diamond width, Height = STRIP = 9; H = 5.
@@ -712,20 +692,20 @@ private fun DrawScope.drawDirectionArrow(direction: ArrowDirection, pos: Element
         val tipX  = x + w - 1f        // Width-1
         val baseX = x + w - L         // Width-L = w-5
         val notchX = x + w - L + 3f  // Width-L+3 = w-2
-        drawLine(Color.Black, Offset(tipX,   ly), Offset(baseX, ct + 1f))
-        drawLine(Color.Black, Offset(baseX,  ct + 1f), Offset(notchX, ly))
-        drawLine(Color.Black, Offset(notchX, ly), Offset(baseX, ct + STRIP))
-        drawLine(Color.Black, Offset(baseX,  ct + STRIP), Offset(tipX, ly))
+        drawLine(schemaDrawPalette.diagramPrimaryInk, Offset(tipX,   ly), Offset(baseX, ct + 1f))
+        drawLine(schemaDrawPalette.diagramPrimaryInk, Offset(baseX,  ct + 1f), Offset(notchX, ly))
+        drawLine(schemaDrawPalette.diagramPrimaryInk, Offset(notchX, ly), Offset(baseX, ct + STRIP))
+        drawLine(schemaDrawPalette.diagramPrimaryInk, Offset(baseX,  ct + STRIP), Offset(tipX, ly))
     }
     // posicao 4,7: (1,H)→(L,1)→(L-2,H)→(L,Height)→(1,H)  — LEFT arrowhead
     fun arrowLeft(x: Float, ct: Float, ly: Float) {
         val tipX   = x + 1f       // 1
         val baseX  = x + L        // L=5
         val notchX = x + L - 2f  // L-2=3
-        drawLine(Color.Black, Offset(tipX,   ly), Offset(baseX, ct + 1f))
-        drawLine(Color.Black, Offset(baseX,  ct + 1f), Offset(notchX, ly))
-        drawLine(Color.Black, Offset(notchX, ly), Offset(baseX, ct + STRIP))
-        drawLine(Color.Black, Offset(baseX,  ct + STRIP), Offset(tipX, ly))
+        drawLine(schemaDrawPalette.diagramPrimaryInk, Offset(tipX,   ly), Offset(baseX, ct + 1f))
+        drawLine(schemaDrawPalette.diagramPrimaryInk, Offset(baseX,  ct + 1f), Offset(notchX, ly))
+        drawLine(schemaDrawPalette.diagramPrimaryInk, Offset(notchX, ly), Offset(baseX, ct + STRIP))
+        drawLine(schemaDrawPalette.diagramPrimaryInk, Offset(baseX,  ct + STRIP), Offset(tipX, ly))
     }
 
     when (direction) {
@@ -733,7 +713,7 @@ private fun DrawScope.drawDirectionArrow(direction: ArrowDirection, pos: Element
         ArrowDirection.LEFT_UP, ArrowDirection.LEFT_DOWN -> {
             val cl = x - GAP - STRIP    // component left edge
             val lx = cl + L             // guide line X  (W = Largura div 2 + 1 = 5)
-            drawLine(Color.Black, Offset(lx, y + 1f), Offset(lx, y + h - 1f))
+            drawLine(schemaDrawPalette.diagramPrimaryInk, Offset(lx, y + 1f), Offset(lx, y + h - 1f))
             if (direction == ArrowDirection.LEFT_UP) arrowUp(lx, cl, y)
             else                                     arrowDown(lx, cl, y, h)
         }
@@ -741,7 +721,7 @@ private fun DrawScope.drawDirectionArrow(direction: ArrowDirection, pos: Element
         ArrowDirection.TOP_RIGHT, ArrowDirection.TOP_LEFT -> {
             val ct = y - GAP - STRIP    // component top edge
             val ly = ct + L             // guide line Y
-            drawLine(Color.Black, Offset(x + 1f, ly), Offset(x + w - 1f, ly))
+            drawLine(schemaDrawPalette.diagramPrimaryInk, Offset(x + 1f, ly), Offset(x + w - 1f, ly))
             if (direction == ArrowDirection.TOP_RIGHT) arrowRight(x, ct, w, ly)
             else                                       arrowLeft(x, ct, ly)
         }
@@ -749,7 +729,7 @@ private fun DrawScope.drawDirectionArrow(direction: ArrowDirection, pos: Element
         ArrowDirection.RIGHT_DOWN, ArrowDirection.RIGHT_UP -> {
             val cl = x + w + GAP        // component left edge (right of diamond)
             val lx = cl + L
-            drawLine(Color.Black, Offset(lx, y + 1f), Offset(lx, y + h - 1f))
+            drawLine(schemaDrawPalette.diagramPrimaryInk, Offset(lx, y + 1f), Offset(lx, y + h - 1f))
             if (direction == ArrowDirection.RIGHT_UP) arrowUp(lx, cl, y)
             else                                      arrowDown(lx, cl, y, h)
         }
@@ -757,7 +737,7 @@ private fun DrawScope.drawDirectionArrow(direction: ArrowDirection, pos: Element
         ArrowDirection.BOTTOM_LEFT, ArrowDirection.BOTTOM_RIGHT -> {
             val ct = y + h + GAP        // component top edge (below diamond)
             val ly = ct + L
-            drawLine(Color.Black, Offset(x + 1f, ly), Offset(x + w - 1f, ly))
+            drawLine(schemaDrawPalette.diagramPrimaryInk, Offset(x + 1f, ly), Offset(x + w - 1f, ly))
             if (direction == ArrowDirection.BOTTOM_RIGHT) arrowRight(x, ct, w, ly)
             else                                          arrowLeft(x, ct, ly)
         }
@@ -792,7 +772,7 @@ private fun DrawScope.drawAssociativeEntity(assoc: SchemaElement.AssociativeEnti
         val maxW = (p.width - 8).coerceAtLeast(1)
         val layout = textMeasurer.measure(
             assoc.name,
-            style = assoc.labelStyle.mergeOntoCanvasTextStyle(CANVAS_TEXT_STYLE).copy(textAlign = TextAlign.Right),
+            style = assoc.labelStyle.mergeOntoCanvasTextStyle(schemaDrawPalette.canvasLabelBaseTextStyle()).copy(textAlign = TextAlign.Right),
             constraints = Constraints(maxWidth = maxW),
         )
         drawText(layout, topLeft = Offset(p.x + p.width - 4f - layout.size.width, p.y + 2f))
@@ -826,10 +806,10 @@ private fun attributeActiveEdgeConnectorY(pos: ElementPosition): Float =
  * Layout uses [attributeEllipseOnLeft] (stored [SchemaElement.Attribute.labelSide], with Pascal’s
  * left/right attach override when the owner connection is on edge ponto 1 or 3).
  *
- * - Identifier attributes: ellipse filled with [games.polyclub.power.brmodelo.ui.canvas.IDENTIFIER_FILL] (#963636).
+ * - Identifier attributes: ellipse filled with [games.polyclub.power.brmodelo.ui.canvas.schemaDrawPalette.diagramIdentifierAttributeFill] (#963636).
  * - Multi-valued: cardinality string appended to label.
  * - Optional attributes: ellipse outline drawn with a dashed stroke.
- * @param stubHighlight When true, draws the owner→ellipse connector stub with [SELECTION_CONNECTION_LINE_COLOR]
+ * @param stubHighlight When true, draws the owner→ellipse connector stub with [schemaDrawPalette.selectionConnectionHighlight]
  *   (same as highlighted connection polylines); the stub is not included in [drawConnectionLine].
  */
 private fun DrawScope.drawAttribute(
@@ -844,7 +824,7 @@ private fun DrawScope.drawAttribute(
     val w = p.width.toFloat()
     val h = p.height.toFloat()
 
-    val attrTextStyle = attr.labelStyle.mergeOntoCanvasTextStyle(CANVAS_TEXT_STYLE)
+    val attrTextStyle = attr.labelStyle.mergeOntoCanvasTextStyle(schemaDrawPalette.canvasLabelBaseTextStyle())
 
     val diameter = attributeEllipseDiameterPx(p.height)
     val meio = attributeStubCenterlineOffsetY(p.height)
@@ -861,7 +841,7 @@ private fun DrawScope.drawAttribute(
         }
     }
 
-    val ellipseFill = if (attr.isIdentifier) IDENTIFIER_FILL else Color.White
+    val ellipseFill = if (attr.isIdentifier) schemaDrawPalette.diagramIdentifierAttributeFill else Color.White
     val ellipseStroke = if (attr.isOptional) {
         Stroke(
             width = 1f,
@@ -871,7 +851,7 @@ private fun DrawScope.drawAttribute(
         Stroke(1f)
     }
 
-    val stubColor = if (stubHighlight) SELECTION_CONNECTION_LINE_COLOR else Color.Black
+    val stubColor = if (stubHighlight) schemaDrawPalette.selectionConnectionHighlight else schemaDrawPalette.diagramPrimaryInk
     val stubStrokeWidth = if (stubHighlight) 2f else 1f
 
     if (ellipseOnLeft) {
@@ -881,14 +861,14 @@ private fun DrawScope.drawAttribute(
         // Ellipse at (x+5, y, x+5+diameter, y+diameter)
         val ellipseTopLeft = Offset(x + 5f, y)
         drawOval(ellipseFill, topLeft = ellipseTopLeft, size = Size(diameter, diameter))
-        drawOval(Color.Black, topLeft = ellipseTopLeft, size = Size(diameter, diameter), style = ellipseStroke)
+        drawOval(schemaDrawPalette.diagramPrimaryInk, topLeft = ellipseTopLeft, size = Size(diameter, diameter), style = ellipseStroke)
 
         // Composite marker: 4x4 outline rectangle at right edge, matching Pascal's
         // Rectangle(Width-4, (Height-4)/2, Width, (Height+4)/2) with bsClear brush.
         if (attr.isComposite) {
             val markerTop = (h - 4f) / 2f + y
-            if (attr.isIdentifier) drawRect(IDENTIFIER_FILL, topLeft = Offset(x + w - 4f, markerTop), size = Size(4f, 4f))
-            drawRect(Color.Black, topLeft = Offset(x + w - 4f, markerTop), size = Size(4f, 4f), style = Stroke(1f))
+            if (attr.isIdentifier) drawRect(schemaDrawPalette.diagramIdentifierAttributeFill, topLeft = Offset(x + w - 4f, markerTop), size = Size(4f, 4f))
+            drawRect(schemaDrawPalette.diagramPrimaryInk, topLeft = Offset(x + w - 4f, markerTop), size = Size(4f, 4f), style = Stroke(1f))
         }
 
         // Text to the right of the ellipse — single line, matching Pascal's single-line-height
@@ -908,7 +888,7 @@ private fun DrawScope.drawAttribute(
 
         // Composite asterisk at top-left (clBlue in original)
         if (attr.isComposite) {
-            val asterisk = textMeasurer.measure("*", style = attrTextStyle.copy(color = Color.Blue))
+            val asterisk = textMeasurer.measure("*", style = attrTextStyle.copy(color = schemaDrawPalette.diagramCompositeIndicatorInk))
             drawText(asterisk, topLeft = Offset(x, y))
         }
 
@@ -918,7 +898,7 @@ private fun DrawScope.drawAttribute(
             val barH = (h * childCount + childCount * 2 - h).coerceAtLeast(2f)
             val barTop = y + h / 2f - barH / 2f
             val barX = x + w - 2f  // bar centre X = attr.right - 2
-            drawLine(Color.Black, Offset(barX, barTop), Offset(barX, barTop + barH))
+            drawLine(schemaDrawPalette.diagramPrimaryInk, Offset(barX, barTop), Offset(barX, barTop + barH))
         }
     } else {
         // Ellipse on the right ([AttributeLabelSide.BULLET_RIGHT] / OrientacaoD): stub to the right, text left of ellipse
@@ -927,13 +907,13 @@ private fun DrawScope.drawAttribute(
 
         val ellipseTopLeft = Offset(ellipseLeft, y)
         drawOval(ellipseFill, topLeft = ellipseTopLeft, size = Size(diameter, diameter))
-        drawOval(Color.Black, topLeft = ellipseTopLeft, size = Size(diameter, diameter), style = ellipseStroke)
+        drawOval(schemaDrawPalette.diagramPrimaryInk, topLeft = ellipseTopLeft, size = Size(diameter, diameter), style = ellipseStroke)
 
         // Composite marker: 4×4 outline at left edge (same Pascal logic, bullet-right branch)
         if (attr.isComposite) {
             val markerTop = (h - 4f) / 2f + y
-            if (attr.isIdentifier) drawRect(IDENTIFIER_FILL, topLeft = Offset(x, markerTop), size = Size(4f, 4f))
-            drawRect(Color.Black, topLeft = Offset(x, markerTop), size = Size(4f, 4f), style = Stroke(1f))
+            if (attr.isIdentifier) drawRect(schemaDrawPalette.diagramIdentifierAttributeFill, topLeft = Offset(x, markerTop), size = Size(4f, 4f))
+            drawRect(schemaDrawPalette.diagramPrimaryInk, topLeft = Offset(x, markerTop), size = Size(4f, 4f), style = Stroke(1f))
         }
 
         // Text to the left of the ellipse — single line. Pascal uses DrawText(..., DT_RIGHT): text is
@@ -954,7 +934,7 @@ private fun DrawScope.drawAttribute(
 
         // Composite asterisk at top-right
         if (attr.isComposite) {
-            val asterisk = textMeasurer.measure("*", style = attrTextStyle.copy(color = Color.Blue))
+            val asterisk = textMeasurer.measure("*", style = attrTextStyle.copy(color = schemaDrawPalette.diagramCompositeIndicatorInk))
             val asteriskX = x + w - asterisk.size.width
             drawText(asterisk, topLeft = Offset(asteriskX, y))
         }
@@ -965,7 +945,7 @@ private fun DrawScope.drawAttribute(
             val barH = (h * childCount + childCount * 2 - h).coerceAtLeast(2f)
             val barTop = y + h / 2f - barH / 2f
             val barX = x + 2f  // bar centre X = attr.left + 2
-            drawLine(Color.Black, Offset(barX, barTop), Offset(barX, barTop + barH))
+            drawLine(schemaDrawPalette.diagramPrimaryInk, Offset(barX, barTop), Offset(barX, barTop + barH))
         }
     }
 }
@@ -977,7 +957,7 @@ private fun DrawScope.drawAttribute(
  *
  * Reproduces [TEspecializacao.Paint] from mer.pas:
  * - Filled triangle using 3 MoveTo/LineTo segments, Pen.Width=2
- * - 'p' label inside (italic+bold, colour [games.polyclub.power.brmodelo.ui.canvas.SPEC_LABEL_COLOR]) when [isPartial]
+ * - 'p' label inside (italic+bold, colour [games.polyclub.power.brmodelo.ui.canvas.schemaDrawPalette.diagramSpecializationPartialInk]) when [isPartial]
  *
  * In the original, [FalsasBases] stores the 3 computed vertices, derived from the
  * specialisation's position and width/height. We reconstruct them here from the
@@ -1021,15 +1001,15 @@ private fun DrawScope.drawSpecialization(
         }
         close()
     }
-    drawPath(path, Color.White, style = Fill)
-    drawPath(path, Color.Black, style = Stroke(2f))
+    drawPath(path, schemaDrawPalette.diagramEntityFill, style = Fill)
+    drawPath(path, schemaDrawPalette.diagramPrimaryInk, style = Stroke(2f))
 
     // 'p' label for partial specialization (italic+bold, teal colour, Font.Color = 32896)
     if (spec.isPartial) {
-        val pStyle = spec.labelStyle.mergeOntoCanvasTextStyle(CANVAS_TEXT_STYLE).copy(
+        val pStyle = spec.labelStyle.mergeOntoCanvasTextStyle(schemaDrawPalette.canvasLabelBaseTextStyle()).copy(
             fontStyle = FontStyle.Italic,
             fontWeight = FontWeight.Bold,
-            color = SPEC_LABEL_COLOR,
+            color = schemaDrawPalette.diagramSpecializationPartialInk,
         )
         val pLayout = textMeasurer.measure("p", style = pStyle)
         val pX = x + w - pLayout.size.width - 7f
@@ -1066,15 +1046,15 @@ private fun DrawScope.drawAnnotation(ann: SchemaElement.Annotation, textMeasurer
         AnnotationType.BOX -> {
             // Pascal: Rectangle(2,2, W-1,H-1) shadow then Rectangle(0,0, W-3,H-3) body.
             // Both rectangles are W-3 × H-3; shadow is offset (+2, +2).
-            drawRect(SHADOW_LIGHT, topLeft = Offset(x + 2f, y + 2f), size = Size(w - 3f, h - 3f))
+            drawRect(schemaDrawPalette.diagramEntityShadowLight, topLeft = Offset(x + 2f, y + 2f), size = Size(w - 3f, h - 3f))
             drawRect(bgColor, topLeft = Offset(x, y), size = Size(w - 3f, h - 3f))
-            drawRect(TEXT_BOX_DARK, topLeft = Offset(x, y), size = Size(w - 3f, h - 3f), style = Stroke(1f))
+            drawRect(schemaDrawPalette.diagramAnnotationFrameInk, topLeft = Offset(x, y), size = Size(w - 3f, h - 3f), style = Stroke(1f))
         }
         AnnotationType.HINT -> {
             // Pascal: RoundRect(0,0, W-1,H-1, F-5,F-5) shadow then RoundRect(0,0, W-3,H-3, …) body.
-            drawRoundRect(SHADOW_LIGHT, topLeft = Offset(x, y), size = Size(w - 1f, h - 1f), cornerRadius = hintCorner)
+            drawRoundRect(schemaDrawPalette.diagramEntityShadowLight, topLeft = Offset(x, y), size = Size(w - 1f, h - 1f), cornerRadius = hintCorner)
             drawRoundRect(bgColor, topLeft = Offset(x, y), size = Size(w - 3f, h - 3f), cornerRadius = hintCorner)
-            drawRoundRect(TEXT_BOX_DARK, topLeft = Offset(x, y), size = Size(w - 3f, h - 3f), cornerRadius = hintCorner, style = Stroke(1f))
+            drawRoundRect(schemaDrawPalette.diagramAnnotationFrameInk, topLeft = Offset(x, y), size = Size(w - 3f, h - 3f), cornerRadius = hintCorner, style = Stroke(1f))
         }
         AnnotationType.PLAIN -> {
             // No background drawn (brush.bsClear in original)
@@ -1101,7 +1081,7 @@ private fun DrawScope.drawAnnotation(ann: SchemaElement.Annotation, textMeasurer
         val lineHeightSp = (bodySpInt * 13f / 8f).sp
         val layout = textMeasurer.measure(
             displayText,
-            style = ann.labelStyle.mergeOntoCanvasTextStyle(CANVAS_TEXT_STYLE).copy(textAlign = align, lineHeight = lineHeightSp),
+            style = ann.labelStyle.mergeOntoCanvasTextStyle(schemaDrawPalette.canvasLabelBaseTextStyle()).copy(textAlign = align, lineHeight = lineHeightSp),
             constraints = Constraints(maxWidth = textArea.width.toInt().coerceAtLeast(1)),
         )
         drawText(layout, topLeft = Offset(textArea.left, textArea.top))
@@ -1151,7 +1131,7 @@ private fun DrawScope.drawConnectionLine(
     )
     if (waypoints.size < 2) return
 
-    val strokeColor = lineHighlightColor ?: Color.Black
+    val strokeColor = lineHighlightColor ?: schemaDrawPalette.diagramPrimaryInk
     for (i in 0 until waypoints.size - 1) {
         val from = waypoints[i]
         val to   = waypoints[i + 1]
@@ -1221,7 +1201,7 @@ private fun floatingCardinalityLabelTextTopLeftMeasured(
     val elemA = schema.elements[conn.elementIdA] ?: return null
     val elemB = schema.elements[conn.elementIdB] ?: return null
     val cardStr = cardinalityLabelDisplayString(conn, schema, labelLeftForRoleInversion) ?: return null
-    val layout = textMeasurer.measure(cardStr, style = connectionCardinalityTextStyle(conn))
+    val layout = textMeasurer.measure(cardStr, style = schemaDrawPalette.connectionCardinalityTextStyle(conn))
     val entityElem = when {
         elemB is SchemaElement.Entity || elemB is SchemaElement.AssociativeEntity -> elemB
         elemA is SchemaElement.Entity || elemA is SchemaElement.AssociativeEntity -> elemA
@@ -1292,7 +1272,7 @@ private fun DrawScope.drawCardinalityLabel(
     val cardStr =
         cardinalityLabelDisplayString(conn, schema, labelLeftForRoleInversion) ?: return
 
-    val layout = textMeasurer.measure(cardStr, style = connectionCardinalityTextStyle(conn))
+    val layout = textMeasurer.measure(cardStr, style = schemaDrawPalette.connectionCardinalityTextStyle(conn))
 
     // Use stored position when available; apply X correction for font-width difference.
     // The stored position was calibrated for the cardinality-only string (e.g. "(1,1)"),
@@ -1300,7 +1280,7 @@ private fun DrawScope.drawCardinalityLabel(
     // label that may include a role name ("Responsável"), which would over-shift it.
     if (conn.cardinalityPosition != null) {
         val lp = conn.cardinalityPosition
-        val cardOnlyLayout = textMeasurer.measure(baseLabel, style = connectionCardinalityTextStyle(conn))
+        val cardOnlyLayout = textMeasurer.measure(baseLabel, style = schemaDrawPalette.connectionCardinalityTextStyle(conn))
         val xAdjustment = cardOnlyLayout.size.width / 4f
         val topLeft = Offset(lp.x.toFloat() + xAdjustment, lp.y.toFloat())
         if (!conn.cardinalityAutoSize && lp.width > 0 && lp.height > 0) {
@@ -1365,8 +1345,8 @@ private fun cardinalityLabelBoundsRectUnpadded(
             )
         }
         val cardStr = cardinalityLabelDisplayString(conn, schema, lp.x) ?: return null
-        val layout = textMeasurer.measure(cardStr, style = connectionCardinalityTextStyle(conn))
-        val cardOnlyLayout = textMeasurer.measure(baseLabel, style = connectionCardinalityTextStyle(conn))
+        val layout = textMeasurer.measure(cardStr, style = schemaDrawPalette.connectionCardinalityTextStyle(conn))
+        val cardOnlyLayout = textMeasurer.measure(baseLabel, style = schemaDrawPalette.connectionCardinalityTextStyle(conn))
         val xAdjust = cardOnlyLayout.size.width / 4f
         val labelWidth = layout.size.width.toFloat()
         val labelHeight = layout.size.height.toFloat().coerceAtLeast(CARDINALITY_LABEL_HIT_HEIGHT_PX)
@@ -1388,7 +1368,7 @@ private fun cardinalityLabelBoundsRectUnpadded(
     ) ?: return null
     val cardStr = cardinalityLabelDisplayString(conn, schema, CARDINALITY_AUTO_LAYOUT_LABEL_LEFT_FOR_ROLE)
         ?: return null
-    val layout = textMeasurer.measure(cardStr, style = connectionCardinalityTextStyle(conn))
+    val layout = textMeasurer.measure(cardStr, style = schemaDrawPalette.connectionCardinalityTextStyle(conn))
     val lw = layout.size.width.toFloat()
     val lh = layout.size.height.toFloat().coerceAtLeast(CARDINALITY_LABEL_HIT_HEIGHT_PX)
     return Rect(
@@ -1441,7 +1421,7 @@ internal fun materializeCardinalityPositionForFixed(
         textMeasurer,
         CARDINALITY_AUTO_LAYOUT_LABEL_LEFT_FOR_ROLE,
     ) ?: return null
-    val cardOnlyLayout = textMeasurer.measure(baseLabel, style = connectionCardinalityTextStyle(conn))
+    val cardOnlyLayout = textMeasurer.measure(baseLabel, style = schemaDrawPalette.connectionCardinalityTextStyle(conn))
     val xAdjustment = cardOnlyLayout.size.width / 4f
     return ElementPosition(
         x = (topLeft.x - xAdjustment).toInt(),
@@ -2894,7 +2874,7 @@ private fun DrawScope.drawCenteredLabel(
     val w = bounds.width.toFloat()
     val h = bounds.height.toFloat()
 
-    val style = labelStyle.mergeOntoCanvasTextStyle(CANVAS_TEXT_STYLE).copy(textAlign = TextAlign.Center)
+    val style = labelStyle.mergeOntoCanvasTextStyle(schemaDrawPalette.canvasLabelBaseTextStyle()).copy(textAlign = TextAlign.Center)
     val maxW = (w - 4f).toInt().coerceAtLeast(1)
     val layout = textMeasurer.measure(text, style = style, constraints = Constraints(maxWidth = maxW))
     val textX = x + (w - layout.size.width) / 2f

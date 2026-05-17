@@ -54,6 +54,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import games.polyclub.power.brmodelo.ui.theme.AppColorPalette
+import games.polyclub.power.brmodelo.ui.theme.LocalAppColorPalette
 
 // ── Dimensions ────────────────────────────────────────────────────────────────
 
@@ -129,8 +131,9 @@ internal fun ChromiumTab(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
+    val app = LocalAppColorPalette.current
     val bgColor    = if (selected) activeTabBg else inactiveTabBg
-    val textColor  = if (selected) Color(0xFF1B2B3B) else Color(0xFF55667A)
+    val textColor  = if (selected) app.chromiumTabSelectedText else app.chromiumTabUnselectedText
     val fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
 
     Box(
@@ -203,6 +206,7 @@ internal fun ChromiumTab(
         // Close button — shown only when onClose is provided.
         if (onClose != null) {
             TabCloseButton(
+                app = app,
                 color = textColor,
                 onClick = onClose,
                 modifier = Modifier
@@ -217,6 +221,7 @@ internal fun ChromiumTab(
 
 @Composable
 private fun TabCloseButton(
+    app: AppColorPalette,
     color: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -227,7 +232,7 @@ private fun TabCloseButton(
         modifier = modifier
             .size(16.dp)
             .clip(CircleShape)
-            .background(if (hovered) Color(0x30000000) else Color.Transparent)
+            .background(if (hovered) app.chromiumTabCloseHoverScrim else Color.Transparent)
             .pointerInput(Unit) {
                 awaitPointerEventScope {
                     while (true) {
