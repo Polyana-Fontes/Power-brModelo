@@ -74,13 +74,22 @@ import games.polyclub.power.brmodelo.domain.LabelStyle
 import games.polyclub.power.brmodelo.domain.VclTColorTable
 
 /**
- * Opens the conceptual label font dialog for [elementId] on tab [editorTabId].
+ * Target of the conceptual font dialog: element canvas label or a connection's cardinality label.
+ */
+internal sealed interface ConceptualFontChooserTarget {
+    data class Element(val elementId: Int) : ConceptualFontChooserTarget
+    data class Cardinality(val connectionId: Int) : ConceptualFontChooserTarget
+}
+
+/**
+ * Opens the font dialog for a canvas element label ([ConceptualFontChooserTarget.Element]) or
+ * a connection's cardinality label ([ConceptualFontChooserTarget.Cardinality]) on tab [editorTabId].
  *
  * [openNonce] must change on every open so dialog fields re-initialise from [initial] (Compose [remember] keys).
  */
 internal data class ConceptualLabelFontChooserRequest(
     val editorTabId: Long,
-    val elementId: Int,
+    val target: ConceptualFontChooserTarget,
     val initial: LabelStyle,
     val openNonce: Long,
 )
@@ -156,7 +165,7 @@ private fun fontColorMenuLabelForRef(colorRef: Int?): String =
 internal fun ConceptualLabelFontChooserDialog(
     request: ConceptualLabelFontChooserRequest,
     onDismiss: () -> Unit,
-    /** Reset element label style to [games.polyclub.power.brmodelo.domain.ConceptualPlacementDefaults.labelStyle] and close. */
+    /** Reset label style to [games.polyclub.power.brmodelo.domain.ConceptualPlacementDefaults.labelStyle] and close. */
     onResetToDefault: () -> Unit,
     /** **OK**: commit and close. */
     onConfirm: (LabelStyle) -> Unit,

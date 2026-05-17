@@ -185,6 +185,7 @@ import games.polyclub.power.brmodelo.ui.PickedFile
 import games.polyclub.power.brmodelo.ui.QuitApplicationUnsavedDialog
 import games.polyclub.power.brmodelo.ui.RibbonMcpUi
 import games.polyclub.power.brmodelo.ui.ConceptualLabelFontChooserDialog
+import games.polyclub.power.brmodelo.ui.ConceptualFontChooserTarget
 import games.polyclub.power.brmodelo.ui.ConceptualLabelFontChooserRequest
 import games.polyclub.power.brmodelo.ui.SelectFontRibbonBinding
 import games.polyclub.power.brmodelo.ui.RibbonTab
@@ -653,7 +654,7 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
             conceptualLabelFontChooserNonce += 1L
             conceptualLabelFontRequest = ConceptualLabelFontChooserRequest(
                 editorTabId = tab.id,
-                elementId = eid,
+                target = ConceptualFontChooserTarget.Element(eid),
                 initial = el.labelStyle,
                 openNonce = conceptualLabelFontChooserNonce,
             )
@@ -1701,6 +1702,21 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                         mutateSelectedTab { it.copy(hiddenAttributeRevealPath = p) }
                     },
                     onRevealHiddenAttributeInModel = onRevealHiddenAttribute,
+                    onRequestCardinalityLabelFont = { connectionId ->
+                        val idx = selectedTabIndex
+                        val tab = tabSessions.getOrNull(idx)
+                        val conn = tab?.schema?.connections?.firstOrNull { it.id == connectionId }
+                        if (tab != null && conn != null) {
+                            conceptualCanvasTool = ConceptualCanvasTool.None
+                            conceptualLabelFontChooserNonce += 1L
+                            conceptualLabelFontRequest = ConceptualLabelFontChooserRequest(
+                                editorTabId = tab.id,
+                                target = ConceptualFontChooserTarget.Cardinality(connectionId),
+                                initial = conn.cardinalityLabelStyle,
+                                openNonce = conceptualLabelFontChooserNonce,
+                            )
+                        }
+                    },
                     clipboardRibbonBinding = clipboardRibbonBinding,
                     selectFontRibbonBinding = selectFontRibbonBinding,
                     onCanvasViewStateChange = { schemaCanvasViewState = it },
@@ -1757,10 +1773,22 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
                         val tabIdx = tabSessions.indexOfFirst { it.id == fontReq.editorTabId }
                         if (tabIdx < 0) return
                         val tab = tabSessions[tabIdx]
-                        if (tab.schema.elements[fontReq.elementId] == null) return
-                        val normalized = tab.schema
-                            .withElementLabelStyle(fontReq.elementId, chosen)
-                            .withNormalizedAttributeMultiValuedCounts()
+                        val normalized = when (val t = fontReq.target) {
+                            is ConceptualFontChooserTarget.Element -> {
+                                if (tab.schema.elements[t.elementId] == null) return
+                                tab.schema
+                                    .withElementLabelStyle(t.elementId, chosen)
+                                    .withNormalizedAttributeMultiValuedCounts()
+                            }
+                            is ConceptualFontChooserTarget.Cardinality -> {
+                                if (tab.schema.connections.none { it.id == t.connectionId }) return
+                                tab.schema.copy(
+                                    connections = tab.schema.connections.map { c ->
+                                        if (c.id == t.connectionId) c.copy(cardinalityLabelStyle = chosen) else c
+                                    },
+                                ).withNormalizedAttributeMultiValuedCounts()
+                            }
+                        }
                         tab.history.push(normalized)
                         val committed = tab.history.current ?: return
                         replaceTabAt(

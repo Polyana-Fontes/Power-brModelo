@@ -83,6 +83,43 @@ class ConceptualSchemaXmlTest {
     }
 
     @Test
+    fun `parse cardinalidade-fonte-personalizada preserves cardinality label font`() {
+        // Arrange
+        val bytes = loadResource("cardinalidade-fonte-personalizada.xml")
+
+        // Act
+        val schema = ConceptualSchemaXmlParser.parse(bytes)
+
+        // Assert
+        val conn = schema.connections.first { it.id == 3 }
+        assertTrue(conn.showCardinality)
+        val st = conn.cardinalityLabelStyle
+        assertEquals("Verdana", st.fontFamilyName)
+        assertEquals(72, st.fontSizePoints)
+        assertTrue(st.bold)
+        assertTrue(st.italic)
+        assertTrue(st.underline)
+        assertTrue(st.strikeThrough)
+        assertEquals(8388736, st.color)
+    }
+
+    @Test
+    fun `round trip cardinalidade-fonte-personalizada cardinality font`() {
+        // Arrange
+        val schema0 = parseResource("cardinalidade-fonte-personalizada.xml")
+
+        // Act
+        val xml = ConceptualSchemaXmlSerializer.serialize(schema0)
+        val schema1 = ConceptualSchemaXmlParser.parse(xml.toByteArray(Charsets.UTF_8))
+
+        // Assert
+        val st = schema1.connections.first { it.id == 3 }.cardinalityLabelStyle
+        assertEquals("Verdana", st.fontFamilyName)
+        assertEquals(72, st.fontSizePoints)
+        assertTrue(st.bold)
+    }
+
+    @Test
     fun `parse simples - Entidade1 properties`() {
         // Arrange
         val schema = parseResource("exemplo-simples.xml")

@@ -454,6 +454,8 @@ object ConceptualSchemaXmlParser {
         val cardAutoSize = cardNode?.boolValor("TamAuto") ?: true
         val cardDict = cardNode?.textChild("Dicionario") ?: ""
         val cardObs = cardNode?.textChild("Observacao") ?: ""
+        val cardLabelStyle =
+            if (showCardinality) cardNode?.let { parseFont(it) } ?: LabelStyle() else LabelStyle()
 
         connections.add(
             Connection(
@@ -472,6 +474,7 @@ object ConceptualSchemaXmlParser {
                 cardinalityAutoSize = cardAutoSize,
                 useAssociativeOuterForEndA = useOuterA,
                 useAssociativeOuterForEndB = useOuterB,
+                cardinalityLabelStyle = cardLabelStyle,
             )
         )
     }

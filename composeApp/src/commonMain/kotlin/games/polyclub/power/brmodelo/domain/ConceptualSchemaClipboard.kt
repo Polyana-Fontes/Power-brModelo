@@ -293,6 +293,7 @@ internal fun mergeTranslatedFragment(target: ConceptualSchema, fragment: Concept
             cardinalityAutoSize = c.cardinalityAutoSize,
             useAssociativeOuterForEndA = c.useAssociativeOuterForEndA,
             useAssociativeOuterForEndB = c.useAssociativeOuterForEndB,
+            cardinalityLabelStyle = c.cardinalityLabelStyle,
         )
         work = work.withConnection(nc)
     }

@@ -80,6 +80,8 @@ enum class LineOrientation(val code: Int) {
  *                                   was chosen on the outer rectangle of an associative entity.
  * @param cardinalityObservations Free text on the cardinality label (Pascal `TCardinalidade.Observacao`).
  * @param cardinalityDictionary Free text on the cardinality label (XML `<Dicionario>` under `<Cardinalidade>`).
+ * @param cardinalityLabelStyle Font, size, colour, and emphasis for the cardinality label text (`TCardinalidade`
+ *                                `<Fonte>` in MER XML / DFM font properties on `TCardinalidade` in `.brM`).
  */
 data class Connection(
     val id: Int,
@@ -98,6 +100,7 @@ data class Connection(
     val cardinalityAutoSize: Boolean = true,
     val useAssociativeOuterForEndA: Boolean = false,
     val useAssociativeOuterForEndB: Boolean = false,
+    val cardinalityLabelStyle: LabelStyle = LabelStyle(),
 ) {
     companion object {
         /**

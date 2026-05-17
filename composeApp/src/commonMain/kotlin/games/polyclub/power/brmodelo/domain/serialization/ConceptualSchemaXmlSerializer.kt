@@ -468,7 +468,8 @@ object ConceptualSchemaXmlSerializer {
                         conn.cardinalityRole,
                         conn.cardinalityDictionary,
                         conn.cardinalityObservations,
-                        conn.cardinalityAutoSize
+                        conn.cardinalityAutoSize,
+                        conn.cardinalityLabelStyle,
                     )
                 )
             }
@@ -483,6 +484,7 @@ object ConceptualSchemaXmlSerializer {
         dictionary: String = "",
         observations: String = "",
         autoSize: Boolean = true,
+        labelStyle: LabelStyle = LabelStyle(),
     ): XmlNode {
         val cardCode = when (cardinality) {
             Cardinality.ONE_TO_ONE   -> 1
@@ -500,7 +502,7 @@ object ConceptualSchemaXmlSerializer {
             valor("Top", position.y)
             valor("Width", position.width)
             valor("Height", position.height)
-            add(buildDefaultFont())
+            add(buildFont(labelStyle))
             add(xmlNode("Atributos"))
             add(xmlNode("AtributosOcultos"))
             textNode("Dicionario", dictionary)

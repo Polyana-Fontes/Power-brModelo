@@ -44,6 +44,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -256,6 +257,7 @@ internal fun InspectorPanel(
     hiddenAttributeRevealPath: List<Int>? = null,
     onHiddenAttributeRevealPathChange: (List<Int>?) -> Unit = {},
     onRevealHiddenAttributeInModel: () -> Unit = {},
+    onRequestCardinalityLabelFont: (connectionId: Int) -> Unit = {},
     requestedInspectorTab: InspectorTab? = null,
     onInspectorTabRequestConsumed: () -> Unit = {},
     requestedSelectionFieldFocus: InspectorSelectionFieldFocusRequest? = null,
@@ -305,6 +307,7 @@ internal fun InspectorPanel(
                 onFocusChange = { focusedKey = it },
                 onSchemaPreview = onSchemaPreview,
                 onSchemaCommit = onSchemaCommit,
+                onRequestCardinalityLabelFont = onRequestCardinalityLabelFont,
                 modifier = Modifier.weight(1f),
             )
             InspectorTab.AtrOcultos -> HiddenAttributesTab(
@@ -480,6 +483,7 @@ private fun SelectionTab(
     onFocusChange: (String?) -> Unit,
     onSchemaPreview: (ConceptualSchema) -> Unit,
     onSchemaCommit: (ConceptualSchema) -> Unit,
+    onRequestCardinalityLabelFont: (connectionId: Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val textMeasurer = rememberTextMeasurer()
@@ -553,6 +557,7 @@ private fun SelectionTab(
                                 onFocusChange = onFocusChange,
                                 onSchemaPreview = onSchemaPreview,
                                 onSchemaCommit = onSchemaCommit,
+                                onRequestCardinalityLabelFont = onRequestCardinalityLabelFont,
                             )
                         }
                     }
@@ -589,6 +594,7 @@ private fun SelectionTab(
                                             onFocusChange = onFocusChange,
                                             onSchemaPreview = onSchemaPreview,
                                             onSchemaCommit = onSchemaCommit,
+                                            onRequestCardinalityLabelFont = onRequestCardinalityLabelFont,
                                         )
                                     }
                                 }
@@ -1358,6 +1364,7 @@ private fun CardinalityContent(
     onFocusChange: (String?) -> Unit,
     onSchemaPreview: (ConceptualSchema) -> Unit,
     onSchemaCommit: (ConceptualSchema) -> Unit,
+    onRequestCardinalityLabelFont: (connectionId: Int) -> Unit,
 ) {
     val textMeasurer = rememberTextMeasurer()
 
@@ -1370,6 +1377,15 @@ private fun CardinalityContent(
     val box = connectionCardinalityBoxForModel(schema, conn, textMeasurer)
 
     SectionTitle("Edição: Cardinalidade")
+
+    OutlinedButton(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+        onClick = { onRequestCardinalityLabelFont(conn.id) },
+    ) {
+        Text("Fonte da cardinalidade…", fontSize = 10.sp)
+    }
 
     val papelCommitted =
         committedSchema?.connections?.firstOrNull { it.id == conn.id }?.cardinalityRole ?: conn.cardinalityRole

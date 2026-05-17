@@ -58,6 +58,37 @@ class ConceptualPropertyEditApplyTest {
     }
 
     @Test
+    fun `applyEditConnection updates cardinality label style`() {
+        // Arrange
+        val c = Connection(
+            id = 1,
+            elementIdA = 10,
+            elementIdB = 20,
+            cardinality = Cardinality.ZERO_TO_ONE,
+            showCardinality = true,
+        )
+        val schema = ConceptualSchema(connections = listOf(c), nextId = 30)
+
+        // Act
+        val r = applyEditConnection(
+            schema,
+            1,
+            mapOf(
+                "labelFontFamilyName" to "Arial",
+                "labelFontSizePoints" to 14,
+                "labelBold" to true,
+            ),
+        )
+
+        // Assert
+        val ok = assertIs<ConceptualPropertyEditResult.Ok>(r)
+        val st = ok.schema.connections.single().cardinalityLabelStyle
+        assertEquals("Arial", st.fontFamilyName)
+        assertEquals(14, st.fontSizePoints)
+        assertEquals(true, st.bold)
+    }
+
+    @Test
     fun `applyEditConceptualModel rejects unknown patch keys`() {
         // Arrange
         val schema = ConceptualSchema()

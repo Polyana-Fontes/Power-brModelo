@@ -83,7 +83,9 @@ private val SPEC_LABEL_COLOR = Color(0xFF008080)
 private val TEXT_BOX_DARK = Color(0xFF363636)
 
 private val CANVAS_TEXT_STYLE = TextStyle(fontSize = 11.sp, color = Color.Black)
-private val MULTIVALUE_CARD_STYLE = TextStyle(fontSize = 11.sp, color = Color.Black)
+
+private fun connectionCardinalityTextStyle(conn: Connection): TextStyle =
+    conn.cardinalityLabelStyle.mergeOntoCanvasTextStyle(CANVAS_TEXT_STYLE)
 
 private val SELECTION_COLOR = Color(0xFF0060C0)
 /** Connection polyline when a linked pick is active — matches [SELECTION_COLOR] (2px stroke distinguishes from normal lines). */
@@ -1217,7 +1219,7 @@ private fun floatingCardinalityLabelTextTopLeftMeasured(
     val elemA = schema.elements[conn.elementIdA] ?: return null
     val elemB = schema.elements[conn.elementIdB] ?: return null
     val cardStr = cardinalityLabelDisplayString(conn, schema, labelLeftForRoleInversion) ?: return null
-    val layout = textMeasurer.measure(cardStr, style = MULTIVALUE_CARD_STYLE)
+    val layout = textMeasurer.measure(cardStr, style = connectionCardinalityTextStyle(conn))
     val entityElem = when {
         elemB is SchemaElement.Entity || elemB is SchemaElement.AssociativeEntity -> elemB
         elemA is SchemaElement.Entity || elemA is SchemaElement.AssociativeEntity -> elemA
@@ -1288,10 +1290,7 @@ private fun DrawScope.drawCardinalityLabel(
     val cardStr =
         cardinalityLabelDisplayString(conn, schema, labelLeftForRoleInversion) ?: return
 
-    val elemA = schema.elements[conn.elementIdA] ?: return
-    val elemB = schema.elements[conn.elementIdB] ?: return
-
-    val layout = textMeasurer.measure(cardStr, style = MULTIVALUE_CARD_STYLE)
+    val layout = textMeasurer.measure(cardStr, style = connectionCardinalityTextStyle(conn))
 
     // Use stored position when available; apply X correction for font-width difference.
     // The stored position was calibrated for the cardinality-only string (e.g. "(1,1)"),
@@ -1299,7 +1298,7 @@ private fun DrawScope.drawCardinalityLabel(
     // label that may include a role name ("Responsável"), which would over-shift it.
     if (conn.cardinalityPosition != null) {
         val lp = conn.cardinalityPosition
-        val cardOnlyLayout = textMeasurer.measure(baseLabel, style = MULTIVALUE_CARD_STYLE)
+        val cardOnlyLayout = textMeasurer.measure(baseLabel, style = connectionCardinalityTextStyle(conn))
         val xAdjustment = cardOnlyLayout.size.width / 4f
         val topLeft = Offset(lp.x.toFloat() + xAdjustment, lp.y.toFloat())
         if (!conn.cardinalityAutoSize && lp.width > 0 && lp.height > 0) {
@@ -1364,8 +1363,8 @@ private fun cardinalityLabelBoundsRectUnpadded(
             )
         }
         val cardStr = cardinalityLabelDisplayString(conn, schema, lp.x) ?: return null
-        val layout = textMeasurer.measure(cardStr, style = MULTIVALUE_CARD_STYLE)
-        val cardOnlyLayout = textMeasurer.measure(baseLabel, style = MULTIVALUE_CARD_STYLE)
+        val layout = textMeasurer.measure(cardStr, style = connectionCardinalityTextStyle(conn))
+        val cardOnlyLayout = textMeasurer.measure(baseLabel, style = connectionCardinalityTextStyle(conn))
         val xAdjust = cardOnlyLayout.size.width / 4f
         val labelWidth = layout.size.width.toFloat()
         val labelHeight = layout.size.height.toFloat().coerceAtLeast(CARDINALITY_LABEL_HIT_HEIGHT_PX)
@@ -1387,7 +1386,7 @@ private fun cardinalityLabelBoundsRectUnpadded(
     ) ?: return null
     val cardStr = cardinalityLabelDisplayString(conn, schema, CARDINALITY_AUTO_LAYOUT_LABEL_LEFT_FOR_ROLE)
         ?: return null
-    val layout = textMeasurer.measure(cardStr, style = MULTIVALUE_CARD_STYLE)
+    val layout = textMeasurer.measure(cardStr, style = connectionCardinalityTextStyle(conn))
     val lw = layout.size.width.toFloat()
     val lh = layout.size.height.toFloat().coerceAtLeast(CARDINALITY_LABEL_HIT_HEIGHT_PX)
     return Rect(
@@ -1440,7 +1439,7 @@ internal fun materializeCardinalityPositionForFixed(
         textMeasurer,
         CARDINALITY_AUTO_LAYOUT_LABEL_LEFT_FOR_ROLE,
     ) ?: return null
-    val cardOnlyLayout = textMeasurer.measure(baseLabel, style = MULTIVALUE_CARD_STYLE)
+    val cardOnlyLayout = textMeasurer.measure(baseLabel, style = connectionCardinalityTextStyle(conn))
     val xAdjustment = cardOnlyLayout.size.width / 4f
     return ElementPosition(
         x = (topLeft.x - xAdjustment).toInt(),

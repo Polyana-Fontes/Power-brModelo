@@ -491,6 +491,7 @@ object ConceptualSchemaBrmParser {
             cardinalityDictionary = node.strProp("Dicionario"),
             cardinalityPosition = labelPos,
             cardinalityAutoSize = node.boolProp("TamAuto", true),
+            cardinalityLabelStyle = parseLabelStyle(node),
         )
     }
 

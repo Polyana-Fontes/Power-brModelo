@@ -429,6 +429,14 @@ private val connectionPatchKeys = setOf(
     "cardinalityPosition",
     "useAssociativeOuterForEndA",
     "useAssociativeOuterForEndB",
+    "labelColorArgb",
+    "labelBold",
+    "labelItalic",
+    "labelUnderline",
+    "labelStrikeThrough",
+    "labelFontFamilyName",
+    "labelFontSizePoints",
+    "labelFontScript",
 )
 
 /**
@@ -515,6 +523,13 @@ fun applyEditConnection(
         val v = parseBoolean(patch["useAssociativeOuterForEndB"])
             ?: return ConceptualPropertyEditResult.Err("invalid_boolean:useAssociativeOuterForEndB")
         c = c.copy(useAssociativeOuterForEndB = v)
+    }
+    if (containsKey(patch, "labelColorArgb") || containsKey(patch, "labelBold") || containsKey(patch, "labelItalic") ||
+        containsKey(patch, "labelUnderline") || containsKey(patch, "labelStrikeThrough") ||
+        containsKey(patch, "labelFontFamilyName") || containsKey(patch, "labelFontSizePoints") ||
+        containsKey(patch, "labelFontScript")
+    ) {
+        c = c.copy(cardinalityLabelStyle = mergeLabelStyle(c.cardinalityLabelStyle, patch))
     }
     val nextConnections = schema.connections.toMutableList()
     nextConnections[idx] = c
