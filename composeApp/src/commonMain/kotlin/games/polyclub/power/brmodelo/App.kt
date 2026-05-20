@@ -410,14 +410,15 @@ fun App(onApplicationTitleChange: (String) -> Unit = {}) {
     val clipboardPreviewDensity = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
 
-    suspend fun saveTabAt(index: Int, saveAs: Boolean): Boolean {
+    suspend fun saveTabAt(index: Int, saveAs: Boolean, explicitPath: String? = null): Boolean {
         val tab = tabSessions.getOrNull(index) ?: return true
         val s = tab.schema
-        val pickLocation = saveAs || s.filePath.isBlank() || s.openedFromBrm
+        val pickLocation = explicitPath == null && (saveAs || s.filePath.isBlank() || s.openedFromBrm)
         val updated = saveConceptualSchemaXml(
             schema = s,
             suggestedBaseName = s.name.ifBlank { "modelo" },
             pickLocation = pickLocation,
+            explicitPath = explicitPath,
         ) ?: return false
         tab.history.syncCurrent(updated)
         replaceTabAt(

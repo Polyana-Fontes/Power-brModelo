@@ -759,27 +759,35 @@ internal actual class McpRuntime {
                 jsonMapper,
                 name = McpTabToolNames.SAVE,
                 title = "Save tab",
-                description = "Runs the same save path as the editor for the tab identified by `resourceUri` (any live tab URI from tabs__list_open). " +
-                    "Optional Save-As when saveAs is true. " +
+                description = "Writes the tab MER XML to disk without opening a save dialog. " +
+                    "Optional `path` is an absolute filesystem path (`.xml` appended when missing). " +
+                    "When `path` is omitted, the tab must already have a known `filePath` from a prior open/save; otherwise returns `path_required`. " +
+                    "`saveAs` without `path` also returns `path_required`. Invalid or non-absolute `path` values return `invalid_path`. " +
                     McpServerInstructions.MER_XML_REFERENCE_SEE_INSTRUCTIONS,
-                schema = """{"type":"object","properties":{$TAB_TOOL_RESOURCE_URI_SCHEMA_PROP,"saveAs":{"type":"boolean"}},"required":["resourceUri"],"additionalProperties":false}""",
+                schema = """{"type":"object","properties":{$TAB_TOOL_RESOURCE_URI_SCHEMA_PROP,"path":{"type":"string","minLength":1,"description":"Absolute path for the XML file (optional when the tab already has filePath)"},"saveAs":{"type":"boolean"}},"required":["resourceUri"],"additionalProperties":false}""",
             ) { _, req ->
                 val idx = tabIndexFromResourceUriArg(req) ?: return@syncTool err("resource_uri_required")
-                val savedUri = runOnEdt {
-                    val b = bindingsRef.get() ?: return@runOnEdt null
-                    val snap = b.current()
-                    val tab = snap.sessions.getOrNull(idx) ?: return@runOnEdt null
-                    modelResourceUriForSession(tab.id)
-                } ?: return@syncTool err("invalid_tab_index")
+                val bindings = bindingsRef.get() ?: return@syncTool err("bindings_unavailable")
+                val snap = bindings.current()
+                val tab = snap.sessions.getOrNull(idx) ?: return@syncTool err("invalid_tab_index")
+                val schema = snap.schemaForTab(idx) ?: return@syncTool err("no_model_for_tab")
+                val savedUri = modelResourceUriForSession(tab.id)
                 val saveAs = boolArg(req, "saveAs") == true
-                val ok = runOnEdt {
-                    val b = bindingsRef.get() ?: return@runOnEdt false
-                    b.onSaveTab(idx, saveAs)
+                val pathArg = stringArg(req, "path")
+                val explicitPath = when {
+                    pathArg != null -> normalizeAbsoluteXmlSavePath(pathArg)
+                        ?: return@syncTool err("invalid_path")
+                    saveAs -> return@syncTool err("path_required")
+                    else -> knownConceptualSchemaDiskPath(schema)
+                        ?: return@syncTool err("path_required")
                 }
+                val ok = bindings.onSaveTab(idx, saveAs, explicitPath)
                 if (!ok) {
-                    return@syncTool err("save_cancelled_or_failed")
+                    return@syncTool err("save_failed")
                 }
-                okText("""{"ok":true,"savedResourceUri":${jsonString(savedUri)},"saveAs":$saveAs}""")
+                okText(
+                    """{"ok":true,"savedResourceUri":${jsonString(savedUri)},"savedPath":${jsonString(explicitPath)},"saveAs":$saveAs}""",
+                )
             },
             syncTool(
                 jsonMapper,

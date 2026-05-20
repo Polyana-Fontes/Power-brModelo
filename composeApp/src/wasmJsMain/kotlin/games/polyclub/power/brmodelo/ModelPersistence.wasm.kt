@@ -25,7 +25,9 @@ internal actual suspend fun saveConceptualSchemaXml(
     schema: ConceptualSchema,
     suggestedBaseName: String,
     pickLocation: Boolean,
+    explicitPath: String?,
 ): ConceptualSchema? {
+    if (explicitPath != null) return null
     val fileStem = sanitizeBaseName(
         when {
             pickLocation -> suggestedBaseName

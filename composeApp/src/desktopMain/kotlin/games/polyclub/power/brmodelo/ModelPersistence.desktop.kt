@@ -31,16 +31,20 @@ internal actual suspend fun saveConceptualSchemaXml(
     schema: ConceptualSchema,
     suggestedBaseName: String,
     pickLocation: Boolean,
+    explicitPath: String?,
 ): ConceptualSchema? = withContext(Dispatchers.IO) {
-    val targetPath = if (pickLocation) {
-        pickXmlSavePath(schema, sanitizeBaseName(suggestedBaseName)) ?: return@withContext null
-    } else {
-        val p = schema.filePath
-        require(p.isNotBlank()) { "save path must be set when pickLocation is false" }
-        p
+    val targetPath = when {
+        explicitPath != null -> explicitPath
+        pickLocation -> pickXmlSavePath(schema, sanitizeBaseName(suggestedBaseName)) ?: return@withContext null
+        else -> {
+            val p = schema.filePath
+            require(p.isNotBlank()) { "save path must be set when pickLocation is false" }
+            p
+        }
     }
 
-    val updatedSchema = if (pickLocation) {
+    val pathChosenByUserOrAgent = explicitPath != null || pickLocation
+    val updatedSchema = if (pathChosenByUserOrAgent) {
         schema.copy(
             name = File(targetPath).nameWithoutExtension,
             filePath = targetPath,
@@ -54,7 +58,9 @@ internal actual suspend fun saveConceptualSchemaXml(
     }
 
     val xml = ConceptualSchemaXmlSerializer.serialize(updatedSchema)
-    File(targetPath).writeText(xml, StandardCharsets.UTF_8)
+    val outFile = File(targetPath)
+    outFile.parentFile?.mkdirs()
+    outFile.writeText(xml, StandardCharsets.UTF_8)
 
     ModelWorkingDirectories.rememberDirectoryOfFile(targetPath)
 

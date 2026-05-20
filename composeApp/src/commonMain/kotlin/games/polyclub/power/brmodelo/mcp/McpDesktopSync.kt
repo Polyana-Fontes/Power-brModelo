@@ -56,7 +56,7 @@ internal expect object McpDesktopSync {
         onAddBlankTab: () -> Long,
         onForceCloseTab: (Int) -> Unit,
         onRequestCloseTab: (Int) -> Unit,
-        saveTabAt: suspend (Int, Boolean) -> Boolean,
+        saveTabAt: suspend (Int, Boolean, String?) -> Boolean,
         onOpenModelFileAtPath: (String) -> String?,
         onOpenXmlAsUnsavedTab: (String, String) -> String?,
         onReplaceModelXmlAtTab: (Int, String) -> String?,

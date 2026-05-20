@@ -58,7 +58,8 @@ internal class McpUiBindings(
     val onAddBlankTab: () -> Long,
     val onForceCloseTab: (Int) -> Unit,
     val onRequestCloseTab: (Int) -> Unit,
-    val onSaveTab: (Int, Boolean) -> Boolean,
+    /** [explicitPath] when non-null writes to that absolute path without a save dialog. */
+    val onSaveTab: (Int, Boolean, String?) -> Boolean,
     /** Loads a model from an absolute file path; returns null on success or a short error code/message. */
     val onOpenModelFileAtPath: (String) -> String?,
     /**

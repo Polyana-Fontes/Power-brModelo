@@ -39,6 +39,7 @@ import games.polyclub.power.brmodelo.domain.CanvasSelectionRectangleMergeMode
 import games.polyclub.power.brmodelo.ui.EditorTabSession
 import games.polyclub.power.brmodelo.ui.ConceptualSubsetRasterEncodeResult
 import games.polyclub.power.brmodelo.ui.ConceptualSubsetRasterFormat
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -55,7 +56,7 @@ internal actual object McpDesktopSync {
         onAddBlankTab: () -> Long,
         onForceCloseTab: (Int) -> Unit,
         onRequestCloseTab: (Int) -> Unit,
-        saveTabAt: suspend (Int, Boolean) -> Boolean,
+        saveTabAt: suspend (Int, Boolean, String?) -> Boolean,
         onOpenModelFileAtPath: (String) -> String?,
         onOpenXmlAsUnsavedTab: (String, String) -> String?,
         onReplaceModelXmlAtTab: (Int, String) -> String?,
@@ -145,7 +146,15 @@ internal actual object McpDesktopSync {
                 onAddBlankTab = onAddBlankTab,
                 onForceCloseTab = onForceCloseTab,
                 onRequestCloseTab = onRequestCloseTab,
-                onSaveTab = { idx, saveAs -> runBlocking { saveTabAt(idx, saveAs) } },
+                onSaveTab = { idx, saveAs, explicitPath ->
+                    runBlocking {
+                        val done = CompletableDeferred<Boolean>()
+                        scope.launch {
+                            done.complete(saveTabAt(idx, saveAs, explicitPath))
+                        }
+                        done.await()
+                    }
+                },
                 onOpenModelFileAtPath = onOpenModelFileAtPath,
                 onOpenXmlAsUnsavedTab = onOpenXmlAsUnsavedTab,
                 onReplaceModelXmlAtTab = onReplaceModelXmlAtTab,

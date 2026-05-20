@@ -25,6 +25,7 @@ import games.polyclub.power.brmodelo.domain.ConceptualSchema
  *
  * @param suggestedBaseName Filename stem suggested when a save dialog is shown.
  * @param pickLocation When true, always asks for a path (Save As / XML migration).
+ * @param explicitPath When set, writes to this absolute path without a save dialog (desktop).
  * @return Schema updated with [games.polyclub.power.brmodelo.domain.ConceptualSchema.filePath] and [games.polyclub.power.brmodelo.domain.ConceptualSchema.openedFromBrm] cleared,
  *         or null if cancelled / unsupported (e.g. WASM).
  */
@@ -32,4 +33,5 @@ internal expect suspend fun saveConceptualSchemaXml(
     schema: ConceptualSchema,
     suggestedBaseName: String,
     pickLocation: Boolean,
+    explicitPath: String? = null,
 ): ConceptualSchema?

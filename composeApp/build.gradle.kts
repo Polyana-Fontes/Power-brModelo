@@ -102,6 +102,7 @@ kotlin {
 
         val desktopMain by getting {
             dependencies {
+                implementation(libs.kotlinx.coroutines.swing)
                 implementation(compose.desktop.currentOs)
                 implementation(libs.apache.pdfbox)
                 implementation(libs.flatlaf)
